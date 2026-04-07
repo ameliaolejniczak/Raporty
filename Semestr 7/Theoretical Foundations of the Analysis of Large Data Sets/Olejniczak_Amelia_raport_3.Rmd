@@ -1,0 +1,223 @@
+---
+title: "Tests based on empirical CDF"
+author: "Amelia Olejniczak"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include = FALSE}
+setwd("C:\\Users\\ameli\\Documents\\R\\theoretical foundations of large data sets")
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+library(sde)
+library(dplyr)
+```
+
+# Introduction
+
+This report focuses on goodness-of-fit tests, which determine whether the difference between a sample and a given distribution is statistically significant. These tests (at least the ones we are going to analyse further in the text) rely on the empirical CDF. 
+
+We are going to focus on three such tests (and one modified version). First we are going to look at the $HC$ and $HC_{mod}$ statistics, calculating their estimated critical values and, for the latter, estimating the probability of type I error. The power of the other two - AD and KS tests - will be compared to the tests above, as well as some other methods of testing: Bonferroni's method, Fisher's Combination Test and chi-squared test. Last part will focus on the relationship between KS statistic and Brownian bridge.
+
+# Tests based on the empirical CDF - theoretical basis
+
+Let $p_1, ... , p_n$ be a random sample from the distribution $F$. We assume that this random sample is the set of p-values corresponding to the given hypotheses. We test the following hypothesis: $$\mathbf{H_0}: F = U[0, 1] \qquad vs \qquad \mathbf{H_1}: F \ne U[0, 1]$$
+
+In order to verify this we analyse how close the empirical CDF is to the CDF of the uniform distribution: $$F(t) =
+\begin{cases}
+0, & t < 0, \\
+t, & 0 \le t < 1, \\
+1, & t \ge 1.
+\end{cases}$$
+
+We define the empirical CDF for some calculated p-values as $$\hat{F}_n(t) = \frac{1}{n} \#\{ i: p_i \leq t \}$$
+
+# $HC$ and $HC_{mod}$ statistics
+
+The first statistics based on the empirical CDF are Higher-Criticism and modified Higher-Criticism statistics. We define the first of the statistics as $$HC = \max_{1/n < t < 1/2} \sqrt{n} \frac{\hat{F}_n(t) - t}{\sqrt{t(1 - t)}}$$ and the modified version is $$HC_{mod} = \max_{0 < t < 1} \sqrt{n} \frac{\hat{F}_n(t) - t}{\sqrt{t(1 - t) q(t)}}, \quad q(t) = \log\log\frac{1}{t(1 - t)}$$ Where $\hat{F}_n(t)$ is the empirical CDF calculated as explained before.
+
+To calculate both of those statistics we need to estimate the CDF function for p-values of a specific sample. That is going to be our $\hat{F_n}(t)$ function. The function under maximum is going to be calculated using generated sequence of $t$ values from the interval specified in the definition of the maximum. Below we can see the plot of a function under maximum in $HC$ and $HC_{mod}$ statistics for a generated sample of p-values size $n = 5000$. The function for $HC$ is going to be between $\frac{1}{n}$ and $\frac{1}{2}$, while the function for $HC_{mod}$ - between 0 and 1.
+
+```{r, echo = FALSE}
+set.seed(411)
+n <- 5000
+X <- runif(n)
+Fn <- ecdf(X)
+t_vals <- seq(1e-10, 1 - 1e-10, length.out = 10000)
+
+Fn_vals <- Fn(t_vals)
+hc_vals <- sqrt(n) * (Fn_vals - t_vals) / sqrt(t_vals * (1 - t_vals))
+q_t <- log(log(1 / (t_vals * (1 - t_vals))))
+hc_mod_vals <- hc_vals / q_t
+
+df <- data.frame(
+  t = rep(t_vals, 2),
+  value = c(hc_vals, hc_mod_vals),
+  type = rep(c("HC", "HC_mod"), each = length(t_vals))
+)
+
+df_HC <- subset(df, type == "HC" & t > 1/n & t < 0.5)
+df_HCmod <- subset(df, type == "HC_mod")
+
+df_all <- rbind(df_HC, df_HCmod)
+
+ggplot(df_all, aes(x = t, y = value, color = type)) +
+  geom_line() +
+  theme_bw() +
+  labs(title = "Functions under maximum for HC and HC_mod",
+       x = "t", y = "Function value")
+```
+
+We can see that the values for the function under maximum for $HC$ are much more similar to each other, while the line for $HC_{mod}$ is much more sharp. In our simulation we can see, that both of them have values around $0$. At the same time, the values for the modified version of the statistic can get much smaller with time (but we cannot compare it fully to the values of HC function, since it ends at $t = \frac{1}{2}$ and the values can be more extreme for higher $t$).
+
+## Estimated probability of type I error for $HC_{mod}$
+
+Let us now calculate the probability of type I error for the $HC_{mod}$ statistic. In this case, we are going to use the asymptotic critical value $C_{crit} = 4.14$ for $\alpha = 0.05$. The results obtained from calculating $10000$ $HC_{mod}$ statistics for $n = 5000$ and $n = 50000$ are presented below. To avoid very big and very small values of $t$ in $HC_{mod}$ we are going to generate a sequence length $10000$ from $10^{-10}$ to $1 - 10^{-10}$. That way, we will not be dividing by anything close to $0$.
+
+```{r, echo = FALSE}
+type_I_errors <- readRDS("type_I_errors.rds")
+
+type_1_errors_df <- data.frame(
+  n5000 = type_I_errors[[1]],
+  n50000 = type_I_errors[[2]]
+)
+
+colnames(type_1_errors_df) = c("n = 5000", "n = 50000")
+
+kable(t(type_1_errors_df), caption = "Probability of Type I Errors", format= "latex", align = "ccc") %>% kable_styling(latex_options = c("hold_position"))
+```
+
+\newpage
+
+We can see that both of the values are really similar to $0.05$, which is the significance level of the test. We cannot see much difference between the values for smaller and larger sizes.
+
+## Estimated critical value
+
+Now, let us calculate $10000$ values of both $HC$ and $HC_{mod}$ statistics. Then, based on those value we are going to estimate the critical value as the $0.95$ quantile of the sample. Below, we can see the results calculated for $n = 5000$.
+
+```{r, echo = FALSE}
+alpha <- 0.05
+critical_values <- readRDS("critical_values.rds")
+
+critval_hc <- quantile(critical_values[1, ], probs = 1 - alpha)
+critval_hc_mod <- quantile(critical_values[2, ], probs = 1 - alpha)
+
+df_critvals <- data.frame(
+  CV = c(critval_hc, critval_hc_mod)
+)
+
+rownames(df_critvals) <- c("HC", "HC_mod")
+
+kable(t(df_critvals), caption = "Critical Values for n = 5000", format= "latex", align = "ccc") %>% kable_styling(latex_options = c("hold_position"))
+```
+
+In the table above we can see that the critical value for $n = 5000$ is much lower for the $HC$ statistic and higher for $HC_{mod}$. What we should also point out is the fact, that the value for the $HC_{mod}$ statistic is really similar to the critical value used in estimating the probability of type I error for the test with this statistic. The values calculated above will be used in the next section of the report.
+
+# Comparison between different tests
+
+In this part of the report we are going to compare power of different testing methods. Four of them are tests based on the empirical cdf: described above Higher-Criticism and modified Higher-Criticism tests and also Kolmogorov-Smornov and Anderson-Darling tests. We will compare their power to Bonferroni, Fisher and chi-square tests.
+
+## Theoretical introduction
+
+For all the tests explained below, the global hypothesis is: $$\mathbf{H_0}: \mu_i = 0 \text{ for all } \quad vs. \quad \mathbf{H_1}: \exists i \text{ s.t. } \mu_i \neq 0$$ for a sample $X = (X_1, ..., X_n)$, $X \sim N(\mu, I)$ where $\mu = (\mu_1, \mu_2, ..., \mu_n)$. Whenever we are going to use p-values during testing (so all tests except chi-square) we are going to use p-value for two-sided test so $p_i = 2 (1 - \Phi(|X_i|))$.
+
+Let us start from reviewing Bonferroni's method of testing. For $n$ p-values correspodning to individual tests we reject the global null if: $$\min_i p_i \leq \frac{\alpha}{n}$$
+
+Next, for p-values $p_1, ... p_n \sim U[0, 1]$ we define Fisher's Combination Test statistic as: $$T = - \sum_{i = 1}^n 2 \log{p_i}$$ This statistic has chi-square distribution with $2n$ degrees of freedom. We reject the global null if $$T > \chi^2_{2n}(1 - \alpha)$$ where $\chi^2_{2n}(1 - \alpha)$ is the quantile of the level $1 - \alpha$ of the chi-square distribution with $2n$ degrees of freedom.
+
+Last test which is not based on empirical CDF is chi-square test. There, for a sample $X = (X_1, ..., X_n)$, where $X = N(\mu, I)$ the test statistic is $$T = \sum_{i = 1}^n X_i^2 = ||X||^2$$ Since this statistic has chi-square distribution with $n$ degrees of freedom under the null hypothesis, we can reject the global null if $$T > \chi^2_n(1 - \alpha)$$ where $\chi^2_n(1 - \alpha)$ is the quantile of the level $1 - \alpha$ of chi-square distribution with $n$ degrees of freedom, as stated above.
+
+The rest of the statistic are based on the empirical CDF. The Higher-Criticism and modified Higher-Criticism statistics were introduced before. The HC statistic is a combination of KS and AD statistics. It takes the uniform norm for $\hat{F}_n(t)$ as in the KS statistic and it normalizes the difference similarly to AD statistic.
+
+The KS statistic (or the Kolmognorov-Smirnov statistic) is defined as $$KS_n = \sup_{t \in [0, 1]} \left| \hat{F}_n(t) - t \right|$$ and we reject the global null for large numbers of KS. In our case we are going to calculate the p-value using `ks.test` function and check if its lower or equal to $\alpha$. 
+
+Last test is the Anderson-Darling (AD) test, which statistic is calculated as $$AD^2 = n \int_0^1 \frac{\left( \hat{F}_n(t) - t \right)^2}{t (1 - t)}$$ Again, we reject the global null for large values of the statistic. The calculations will be done similarly to the KS statistic, by using `ad.test` function.
+
+## Power comparison
+
+We are going to compare the power of the tests above for three different values of $\mu$ and $n = 5000$. In the first case we have $$\mu_1 = 1.2 \sqrt{2 \log n}, \mu_2 = ... = \mu_n = 0$$ Second case is as follows $$\mu_1 = ... = \mu_{100} = 1.02 \sqrt{2 \log \left(\frac{n}{2000} \right)}, \mu_{101} = ... = \mu_n = 0$$ In last one we have $$\mu_1 = ... = \mu_{1000} = 1.002 \sqrt{2 \log \left( \frac{n}{4000} \right)}, \mu_{1001} = ... = \mu_n = 0$$ Below we can see a table with the values of powers for each $\mu$ (marked as mu_a, mu_b and mu_c in the same order as above) and each test. 
+
+```{r, echo = FALSE}
+test_powers_df <- readRDS("test_powers_df.rds")
+rownames(test_powers_df) <- c("mu_a", "mu_b", "mu_c")
+colnames(test_powers_df) <- c("HC", "HC_mod", "Bonf", "Chi2", "Fisher", "KS", "AD")
+
+kable(test_powers_df, caption = "Test values for n = 5000 and different mu", format= "latex", align = "ccc") %>% kable_styling(latex_options = c("hold_position"))
+```
+
+\newpage
+
+We can see above, that almost all the tests (besides Bonferroni) have highest power for the last value of $\mu$. This can be understood as "many small effects problem" and we know that Bonferroni's method works best when we have "needle in the haystack problem". That is what we can see for this method in the table above. The chi square and the Fisher tests should work the other way around (so best in the "many small effects problem" and worse in "needle in the haystack problem") and this is what we see there. Based on the table we can say, that the rest of the tests (so the ones based on the empirical CDF) work similarly to the chi square and Fisher tests. The highest power for second and third $\mu$ are highest for chi square test and fisher test, but it also works well in the HC test. What is also worth mentioning is that all the tests have generally small power for the second value of $\mu$. 
+
+# Brownian bridge and the KS statistic
+
+Last part of this report is going to focus on the similarities between the KS statistic and the Brownian bridge. In order to do that we are going to, first, simulate 1000 trajectories of the empirical process $$U_n(t) = \sqrt{n} (\hat{F}_n(t) - t), \quad t \in [0, 1]$$ for $n = 5000$ and then the same amount of trajectories of the Brownian bridge. We will plot 5 of each trajectories on a graph and compare, visually, how similar the trajectories are. Then, we are going to compare the $\alpha$ quantiles of the KS statistic to the same quantiles of $T = \sup_{t \in [0, 1]} |B(t)|$, where $\alpha \in \{ 0.8, 0.9, 0.95 \}$.
+
+## Plot of the trajectories
+
+Below, we can see the plot of the trajectories.
+
+```{r, echo = FALSE, fig.height=3.4}
+N <- 1000
+t_seq <- seq(0, 1, length.out = 1000)
+trajectories <- readRDS("trajectories.rds")
+
+idx <- sample(1:N, 5)
+subset_traj <- trajectories[idx]
+
+df_Un <- lapply(1:5, function(i) {
+  data.frame(
+    t = t_seq,
+    value = subset_traj[[i]]$Un,
+    traj = paste0("traj_", i),
+    type = "Un"
+  )
+}) %>% bind_rows()
+
+df_B <- lapply(1:5, function(i) {
+  data.frame(
+    t = t_seq,
+    value = subset_traj[[i]]$B,
+    traj = paste0("traj_", i),
+    type = "B"
+  )
+}) %>% bind_rows()
+
+df_all <- bind_rows(df_Un, df_B)
+
+ggplot(df_all, aes(x = t, y = value, color = traj)) +
+  geom_line() +
+  facet_wrap(~ type, scales = "free_y") +
+  theme_minimal() +
+  labs(title = "Un and Brownian bridge trajectories",
+       x = "t", y = "") +
+  theme(legend.position = "none")
+```
+
+On the plots above we can see that trajectories are similar to each other. Both Brownian bridge and $U_n$ trajectories are concentrated around zero. 
+
+## Quantiles comparison
+
+We explained before, that the KS statistic is of form $$KS_n = \sup_{t \in [0, 1]} \left|\hat{F}_n(t) - t \right|$$ If we look at it, we can see a clear similarity to $U_n$ calculated before since $$\sup_{t \in [0, 1]} |U_n(t)| = \sqrt{n} KS$$ We also know that under the global null $$\sqrt{n} KS_n \overset{D}{\rightarrow} \sup_{t \in [0, 1]} |B(t)|$$ where the right side of that equation is $T$ which is defined at the beginning of that section. Because of similarity, instead of calculating the quantile for KS statistic, we are going to calculate it for $U_n(t)$ and compare it to the same quantiles of $T$. That way, we can expect the calculated quantiles to be really similar to each other. The results are presented in a table below
+
+```{r, echo = FALSE}
+K_S_vals <- sapply(trajectories, function(traj) max(abs(traj$Un)))
+T_vals <- sapply(trajectories, function(traj) max(abs(traj$B)))
+
+alpha_levels <- c(0.8, 0.9, 0.95)
+KS_quantile <- quantile(K_S_vals, probs = alpha_levels)
+T_quantile <- quantile(T_vals, probs = alpha_levels)
+
+df_quantiles <- data.frame(
+  "Un quantiles" = KS_quantile,
+  "T quantiles" = T_quantile
+)
+
+kable(df_quantiles, caption = "Alpha quantiles for Un and T", format= "latex", align = "ccc") %>% kable_styling(latex_options = c("hold_position"))
+```
+
+We can see that, as expected, the results are similar for all $\alpha$. We can see that the quantiles for $T$ are a bit smaller, but the difference seems insignificant. 

@@ -1,0 +1,440 @@
+---
+title: 'Multiple testing problem for mixtrure model with exponential distribution - comparison between testing methods and analysis of the EM Algorithm'
+author: "Amelia Olejniczak"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+setwd("C:\\Users\\ameli\\Documents\\R\\theoretical foundations of large data sets")
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(purrr)
+```
+
+# Introduction
+
+In this report we are going to cover the multiple testing problem for the random variables from exponential distribution. Firstly we are going toanalyse four testing procedures and study their FWER, FDR, Power and expected number of misclassifications. Then, we are going to introduce the EM Algorithm and perform it on $\varepsilon$, $\mu_0$ and $\mu_1$. We will look at how well it performs, comparing the histograms, Bias, MSE and variance for each parameter. At the end, we are going to see, how well the tests based on estimated values of $\varepsilon$ and $\mu$ perform and we are going to compare their FDR, Power and expected cost to the tests we did at the beginning.
+
+# Multiple testing problem for the exponential distribution
+
+Let $X_{ij}, j = 1, ..., m$ be iid random variables from exponential distribution with the expected value $\mu_i = \mathbb{E}(X_{ij})$. We want to test the hypotheses $$H_{0i}: \mu_i = 3 \quad vs \quad H_{Ai}: \mu_i >3$$ In this situation we have $n$ tests for each sample size $m$. For each of the hypotheses, we calculate the test statistic as $T = \sum_{j = 1}^m X_{ij}$ and under the null hypothesis it has gamma distribution with parameters $m$ and $\frac{1}{3}$. Since the test is one-sided the p-value is $p = 1 - F_{\Gamma(m, \frac{1}{3})}$. 
+
+## Mixture model
+
+Next, let us consider a mixture model, where $\mu$ are iid random variables from the two-point distribution $$\mathbb{P}(\mu_i = 3) = 1 - \varepsilon = 1 - \mathbb{P}(\mu_i = 5.5), i = 1, ..., n$$ and for $j = 1, ..., m$, $X_{ij}$ are iid from the exponential distribution. In this situation we have a similar problem as above, except we have a simple alternative there. Therefore, we are going to use the same statistics and p-values to do four multiple testing procedures: 
+
+- Bonferroni's procedure at FWER level $\alpha$. In this method we reject all hypotheses for which: $$p_i \leq \frac{\alpha}{n}$$
+- procedure controlling Bayesian FDR at the level $\alpha$. We understand BFDR as $$BFDR = \mathbb{P}(\mathbf{H_{0i}} \text{ is true } | \ \mathbf{H_{0i}} \text{ is rejected})$$ In this situation, the test controlling the BFDR on level $\alpha$ is one, where we reject all $\mathbf{H_{0i}}$ for which $p_i \leq \tau_{BFDR}$, where the threshold $\tau_{BFDR}$ is of form: $$\tau_{BFDR} = \max \left\{ t_0: \frac{t_0(1 - \varepsilon)}{F_p(t_0)} \leq \alpha \right\}$$ It comes directly from the definition of BFDR, since $$BFDR = \mathbb{P}(\mathbf{H_{0i}} \text{ is true } | \ \mathbf{H_{0i}} \text{ is rejected}) = \frac{\mathbb{P}(\mathbf{H_{0i}} \text{ is rejected } | \ \mathbf{H_{0i}} \text{ is true}) \mathbb{P} (\mathbf{H_{i0}} \text{ is true)}}{\mathbb{P} (\mathbf{H_{0i}} \text{ is rejected})} =$$ $$= \frac{\mathbb{P}(p_i \leq t_0 | \mathbf{H_{0i}})(1 - \varepsilon)}{\mathbb{P}(p_i \leq t_0)}$$
+- classical BH procedure at the FDR level $\alpha$. In this method we put the p-values in increasing order and put corresponding hypotheses the same way. Then, we reject all hypotheses $\mathbf{H_{(1)}}, ..., \mathbf{H_{(i_0)}}$ for $$i_0 = \max \left\{ i: p_{(i)} \leq \frac{i}{n} \alpha \right\}$$
+- optimal Bayesian classifier that minimizes expected number of misclassifications ($c_0 = c_1$). In this case, the set for which we reject the null hypothesis is $$\Gamma_1 = \left\{ x : \frac{f_1(x)}{f_0(x)} \geq \frac{C_0}{C_1} \frac{\mathbb{P}(H_0)}{\mathbb{P}(H_1)} \right\}$$ Then in our case, after some transformations, we choose the threshold as $$\tau_{BCl} = \frac{1}{\frac{1}{\mu_0} - \frac{1}{\mu_1}} \log \left( \frac{1 - \varepsilon}{\varepsilon} \left( \frac{\mu_1}{\mu_0} \right)^m \right)$$ and we reject the null hypothesis when $x \geq \tau_{BCl}$
+
+For those procedures we are going to estimate FWER, FDR, Power and the expected number of misclassifications. The FWER is calculated as the probability of at least one False Discovery so we are going to calculate it by dividing the situations when there were at least one False Discovery by the number of replications (1000 in our case). FDR is estimated by taking the number of false discoveries and dividing it by either number of all discoveries or 1, depending if there were any discoveries. Next, Power is going to be calculated as the number of True Discoveries, divided by the number of false nulls. Last, but not least, the expected number of misclassifications is estimated as: $$\mathbb{E}(MS) = \mathbb{E} \left( \sum_{i = 1}^n [C_0 \cdot \#\text{FD} + C_1 \cdot \#(\text{Type II Error})] \right)$$ We are going to calculate them all for all combinations of parameters $m \in \{ 20, 100 \}, n \in \{ 200, 1000 \}, \varepsilon \in \{ 0.05, 0.1, 0.2 \}, \alpha \in \left\{ 0.1, 0.1 \sqrt{\frac{200}{m}} \right\}$. For Bonferroni's method, the BFDR controlling procedure and the optimal Bayesian classifier we are going to also calculate the true values of Power and expected cost. Let us start from the Bonferroni's procedure: $$\mathbb{P}_{\mathbf{H_1}}\left( p_i \leq \frac{\alpha}{n} \right) = \mathbb{P}_{\mathbf{H_1}}\left( 1 - F_{\Gamma(m,1/\mu_0)}(X_i) \leq \frac{\alpha}{n} \right) = \mathbb{P}_{\mathbf{H_1}}\left( X_i \leq F^{-1}_{\Gamma(m, 1/\mu_0)}\left( 1 - \frac{\alpha}{n} \right) \right)$$ Thus $$\text{Power} = F_{\Gamma(m, 1/\mu_1)}\left( F^{-1}_{\Gamma(m, 1/\mu_0)}\left( 1 - \frac{\alpha}{n} \right) \right)$$ The power in the other procedures is calculated the same way. For the expected cost (again, shown only for Bonferroni), we calculate it as $$\mathbb{E}(C) = C_0 \mathbb{P}_{\mathbf{H_0}} \left(p_i \leq \frac{\alpha}{n} \right)\mathbb{P}(\mathbf{H_0}) + C_1 \mathbb{P}_{\mathbf{H_1}} \left( p_i > \frac{\alpha}{n} \right) \mathbb{P}(\mathbf{H_1})$$ Which at the end gives us $$\mathbb{E}(C) = C_0 \cdot (1 - \varepsilon) \cdot \left(1 - F_{\Gamma(m, 1/\mu_0)}\left(F^{-1}_{\Gamma(m, 1/\mu_0)}\left(1 - \frac{\alpha}{n} \right) \right)\right) + C_1 \cdot \varepsilon \cdot F_{\Gamma(m, 1/\mu_1)} \left( F^{-1}_{\Gamma(m, 1/\mu_0)}\left(1 - \frac{\alpha}{n} \right) \right)$$ Again, the calculations for the other methods are done similarly.
+
+Now, let us look at the plots of FWER, depending on the used method and different parameters $m, n, \varepsilon$ and $\alpha$.
+
+```{r, echo = FALSE, fig.height=3.5}
+df_long <- readRDS("df_long.rds")
+
+df_long <- df_long %>%
+  mutate(
+    alpha_type = case_when(
+      abs(alpha - 0.1) < 1e-8 ~ "fixed",
+      abs(alpha - 0.1 * sqrt(200 / m)) < 1e-8 ~ "scaled"
+    )
+  )
+
+test_levels <- c("BC", "BFDR", "BH", "Bon")
+
+test_colors <- c(
+  BC   = "#1B9E77",
+  BFDR = "#D95F02",
+  BH   = "#7570B3",
+  Bon  = "#E7298A"
+)
+
+plot_metric <- function(metric_name) {
+  ggplot(
+    df_long %>% filter(Metric == metric_name),
+    aes(
+      x = eps,
+      y = Value,
+      color = Test,
+      shape = alpha_type,
+      group = interaction(Test, alpha_type)
+    )
+  ) +
+    geom_line() +
+    geom_point(size = 2) +
+    facet_grid(m ~ n, labeller = label_both) +
+    scale_shape_manual(
+      values = c("fixed" = 16, "scaled" = 17),
+      labels = c(
+        fixed  = expression(alpha == 0.1),
+        scaled = expression(alpha == 0.1 * sqrt(200 / m))
+      )
+    ) +
+    scale_color_manual(
+  limits = test_levels,
+  values = test_colors,
+  drop = FALSE
+) +
+    labs(
+      x = expression(epsilon),
+      y = metric_name,
+      shape = expression(alpha),
+      color = "Procedure",
+      title = paste0("Simulated values of ", metric_name, " for different procedures and parameters")
+    ) +
+    theme_bw() +
+    theme(legend.position = "right")
+}
+
+plot_metric("FWER")
+```
+
+On the first plot we can see, that Bonferroni's method, which is a FWER-controlling procedure, has this value the lowest of all almost all the time, and it is around the value of $\alpha$. For the Benjamini-Hochberg's method, which controls FDR, we can see, that the values are much higher than for Bonferroni. For the procedure that controls BFDR we can see, that FWER values are somewhat similar to the ones we got for the Benjamini-Hochberg method. At last, and the most interesting, when we look at the Bayesian classifier, we can see, that the FWER is pretty high for smaller $m$ and much smaller for $m = 100$. We can also see, that for the methods that do not control FWER (so any excluding Bonferroni's method), the value is increasing for larger $\varepsilon$.
+
+Next, let us look at the plot with the value of FDR.
+
+```{r, echo = FALSE, fig.height=3.5}
+plot_metric("FDR")
+```
+
+In this case, by looking at the numbers on the left, we can see, that the values of FDR are much smaller than the ones we got for FWER. It is not surprising, since (in general) we get much higher FWER than FDR. We can see, that, unsurprisingly, the lowest values are for the Bonferroni procedure. Benjamini-Hochberg's method controlls FDR on level $\alpha$ and that is what we can see on the plot - the values are pretty similar to $\alpha$. BFDR-controlling procedure is, again, very similar to Benjamini-Hochberg. The Bayesian-Classifier has values higher for $m = 20$, and lower for $m = 100$ and this is also the same as on the previous plot. It is also worth noticing, that FWER value was increasing with the $\varepsilon$ and the FDR goes the other way around.
+
+Let us now look at two plots - first presenting the simulated value of Power and the next one - the one we calculated from theoretical values.
+
+```{r, echo = FALSE, fig.height = 3.5}
+plot_metric("Power")
+```
+
+```{r, echo =FALSE, fig.height=3.5}
+df_theor_long <- readRDS("df_theor_long.rds")
+
+df_theor_long <- df_theor_long %>%
+  mutate(
+    alpha_type = case_when(
+      abs(alpha - 0.1) < 1e-8 ~ "fixed",
+      abs(alpha - 0.1 * sqrt(200 / m)) < 1e-8 ~ "scaled"
+    )
+  )
+
+plot_metric_theor <- function(metric_name) {
+  ggplot(
+    df_theor_long %>% filter(Metric == metric_name),
+    aes(
+      x = eps,
+      y = Value,
+      color = Test,
+      shape = alpha_type,
+      group = interaction(Test, alpha_type)
+    )
+  ) +
+    geom_line() +
+    geom_point(size = 2) +
+    facet_grid(m ~ n, labeller = label_both) +
+    scale_shape_manual(
+      values = c("fixed" = 16, "scaled" = 17),
+      labels = c(
+        fixed  = expression(alpha == 0.1),
+        scaled = expression(alpha == 0.1 * sqrt(200 / m))
+      )
+    ) +
+    scale_color_manual(
+  limits = test_levels,
+  values = test_colors,
+  drop = FALSE
+) +
+    labs(
+      x = expression(epsilon),
+      y = paste("Theoretical", metric_name),
+      shape = expression(alpha),
+      color = "Procedure",
+      title = paste0("Theoretical values of ", metric_name, " for different procedures and parameters")
+    ) +
+    theme_bw()
+}
+
+plot_metric_theor("Power")
+```
+
+Firstly, we can see, that the theoretical values and the simulated values are very similar, so we are going to look only at the simulated values. In this case we can see, that for $m = 100$ every test has full power. The situation looks different for the other value of $m = 20$. There we can see, that the lowest power is for the Bonferroni's method, which is the most conservative one, so it is not surprising. Other methods have higher power, increasing with the value of $\varepsilon$, but it does not reach full power in any case. The power is higher for the larger value of $\alpha$. We can also see, that the power decreases for larger $n$.
+
+At last let us look at the expected number of misclassifications. We are going to mark this value as "E" for simplicity. We will compare it to the theoretical expected cost calculated before, but we are going to multiply it by $n$ to be able to compare it.
+
+```{r, echo = FALSE, fig.height=3.5}
+plot_metric("E")
+```
+
+```{r, echo = FALSE, fig.height=3.5}
+plot_metric_theor("E")
+```
+
+We can, again, see that the theoretical values and simulated values are almost identical, so we are going to look only at the simulated values when analysing. Here we can see, that the value is increasing, when the $\varepsilon$ is increasing, but also when $n$ is increasing and $m$ is decreasing (so the highest values are for $\varepsilon = 0.2$, $n = 1000$ and $m = 20$, while the lowest for $n = 200$, $m = 100$ and $\varepsilon = 0.05$). We can also see, that for $m = 20$ the expected value of misclassifications is the highest for the Bonferroni's method, while for $m = 100$ it is the highest for BFDR controlling procedure and Benjamini-Hochberg's procedure. In every scenario the lowest expected value of misclassifications is for the Bayesian-Clasifier. It is not surprising, since it is optimal when $C_0 = C_1 = 1$. 
+
+# Expectation Maximization Algorithm
+
+In this part, we are going to assume, that we do not know the values of $\mu$ and $\varepsilon$. We are going to estimate those parameters using the EM Algorithm. It is an iterative procedure that consists of two steps for each iteration. We are going to calculate $\Theta_k = \left(\mu_0^k, \mu_1^k, \varepsilon^k\right)$ for $k = 500$ iterations, which is the MLE for $\Theta = \left( \mu_0, \mu_1, \varepsilon \right)$, calculated on the $k$-th iteration. Now if we have $\Theta_k = (\mu_0^k, \mu_1^k, \varepsilon^k)$ the $(k + 1)$-iteration in our test is as follows:
+
+- Step 1. Expectation step: Using the previous iteration $\Theta_k$ we can calculate $\pi_i^k$ as: $$\pi_i^k = \mathbb{E}(Z_i|\Theta_k, X) = \frac{f_{\mathbf{H_1^k}}(X_i) \varepsilon^k}{f_{\mathbf{H_1^k}}(X_i)\varepsilon^k + f_{\mathbf{H_0^k}}(X_i) (1 - \varepsilon^k)}$$ where $f_{\mathbf{H_1^k}}(X_i)$ and $f_{\mathbf{H_0^k}}(X_i)$ are the density functions of gamma distributions with parameters $m, \frac{1}{\mu_1^k}$ and $m, \frac{1}{\mu_0^k}$. 
+- Step 2. Maximization step: Let us denote $Q(\Theta | \Theta^k) = \mathbb{E}_{(Z|\Theta_k, X)}\log L(X, Z | \Theta)$. Then, by taking the derivatives with respect to $\varepsilon$, $\mu_0$ and $\mu_1$ we get $\Theta_{k + 1}$ as: $$\varepsilon^{k+1} = \frac{\sum_{i = 1}^n \pi^k_i}{n}, \quad \mu_0^{k+1} = \frac{\sum_{i = 1}^n X_i(1 - \pi_i^k)}{\sum_{i = 1}^n (1 - \pi^k_i)} \quad \mu_1^{k+1} = \frac{\sum_{i = 1}^n X_i \pi_i^k}{\sum_{i = 1}^n \pi_i^k}$$
+
+We stop when we reach $k = 500$ or the sum of the squared difference of the estimators we got on $k$-th and $(k+1)$-th iteration is less or equal to some error we allow. In our case $$D = \left(\mu_0^{(k+1)} - \mu_0^k\right)^2 + \left( \mu_1^{(k+1)} - \mu_1^k \right)^2 + \left( \varepsilon^{(k+1)} - \varepsilon^k \right)^2 \leq 10^{-5}$$ There is only one question left - what  the starting point for this algorithm should be. The safest choice is to get $\varepsilon^k = 0.5$ for $k = 1$, since it is in the middle and the algorithm will be able to correctly estimate the value. For $\mu_1$ and $\mu_0$ starting point a good idea is to start from the mean of the $X$ values that are greater or equal than the median and that are less or equal than median. That way, if we can assume which value is larger, it may be a good starting point. 
+
+The estimators for each parameter on a 1000 replications will be presented in form of a histogram. Let us start from the values of estimated $\varepsilon$.
+
+```{r, echo = FALSE, fig.height=3.5, warning = FALSE}
+hist_df <- readRDS("hist_df.rds")
+
+ggplot(hist_df, aes(x = eps_hat)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "lightblue3", color = "blue") +
+  facet_grid(n + m ~ eps_praw) +
+  labs(
+    title = expression("Histogram of the estimator " * hat(epsilon)),
+    x = expression(hat(epsilon))
+  ) +
+  theme_bw()
+```
+
+We can see, that the value of $\varepsilon$ is pretty well estimated. We can also see, that the histograms are wider for smaller values of $n$ and $m$. It also gets wider, when the real value of $\varepsilon$ is increasing. Overall, we can see that the estimators are pretty okay, and the bars in the histogram are the highest around the real value of $\varepsilon$. Next, let us look at the estimators of $\mu_0$.
+
+```{r, echo = FALSE, fig.height = 3.5, warning = FALSE}
+ggplot(hist_df, aes(x = mu0_hat)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "tomato", color = "red4") +
+  facet_grid(n + m ~ eps_praw) +
+  labs(
+    title = expression("Histogram of the estimator " * hat(mu)[0]),
+    x = expression(hat(mu)[1]),
+  ) +
+  theme_bw()
+```
+
+In there, we can see, that the histograms are wider for smaller values of $m$ and $n$. In this case we do not see any difference while looking at the real values of $\varepsilon$, so we can safely say, that it does not have any influence on this estimator's performance. Again, all the values are around real value of $\mu_0 = 3$, so the estimator works pretty well again. Lastly, let us look at the histograms of the estimator of $\mu_1$.
+
+```{r, echo = FALSE, warning = FALSE, fig.height=3.5}
+ggplot(hist_df, aes(x = mu1_hat)) +
+  geom_histogram(aes(y = ..density..), bins = 30, fill = "lightgreen", color = "darkgreen") +
+  facet_grid(n + m ~ eps_praw) +
+  labs(
+    title = expression("Histogram of the estimator " * hat(mu)[1]),
+    x = expression(hat(mu)[1]),
+  ) +
+  theme_bw()
+```
+
+For this estimator we can see, that, again, the widest histograms are for lower values of $n$ and $m$. We can also see, that the real value of $\varepsilon$ has the influence on the wideness of the histograms (it is the widest for the smallest $\varepsilon$ - the other way around compared to the estimator of the $\varepsilon$). We can also see, that all of the values are similar to real $\mu_1 = 5.5$. 
+
+Now, besides the way how the values of the estimators look at the histogram, we need to see the bias, the variance and the mean squared error to say how accurate are the estimators. We are going to show the values of those parameters on the plots. Let us start from the Bias. We calculate it as the absolute value of the difference between the mean of the estimators we calculated in the replications and its true value. We can see the plots below. 
+
+```{r, echo = FALSE, fig.height=3.5}
+metrics_df <- readRDS("metrics_df.rds")
+
+metrics_long <- metrics_df %>%
+  pivot_longer(
+    cols = -c(n, m, eps_praw),
+    names_to = c("param", "metric"),
+    names_sep = "_",
+    values_to = "value"
+  )
+
+ggplot(
+  metrics_long %>% filter(metric == "bias"),
+  aes(x = n, y = value, color = param)
+) +
+  scale_color_manual(
+  breaks = c("eps", "mu0", "mu1"),
+  values = c(
+    eps = "blue",
+    mu0 = "red",
+    mu1 = "green"
+  ),
+  labels = c(
+    expression(epsilon),
+    expression(mu[0]),
+    expression(mu[1])
+  )
+) +
+  geom_line() +
+  geom_point() +
+  facet_grid(m ~ eps_praw) +
+  labs(
+    title = "Estimator's bias",
+    x = "n",
+    y = "Bias",
+    color = "Parameter"
+  ) +
+  theme_bw()
+```
+
+We can see, that the bias is the largest for the estimator of $\mu_1$. It is small for the larger $m$ value, but it is not always as small as the other two. Overall, the values are between 0 and $0.015$, so they are small in every circumstance. Therefore we can say, that these estimators are pretty good. The largest bias for all of the estimators is for $n = 200$, $\varepsilon = 0.05$ and $m = 20$.
+
+Next, let us look at the  MSE, which is calculated as the mean of the squared difference between the estimator and the true value of the parameter. The plot will be shown below.
+
+```{r, echo = FALSE, fig.height = 3.5, warning = FALSE}
+ggplot(
+  metrics_long %>% filter(metric == "mse"),
+  aes(x = n, y = value, color = param)
+) +
+  scale_color_manual(
+  breaks = c("eps", "mu0", "mu1"),
+  values = c(
+    eps = "blue",
+    mu0 = "red",
+    mu1 = "green"
+  ),
+  labels = c(
+    expression(epsilon),
+    expression(mu[0]),
+    expression(mu[1])
+  )
+) +
+  geom_line() +
+  geom_point() +
+  facet_grid(m ~ eps_praw) +
+  labs(
+    title = "Estimator's MSE",
+    x = "n",
+    y = "MSE",
+    color = "Parameter"
+  ) +
+  theme_bw()
+```
+
+We can see, that (again), the largest value is for the $\mu_1$ estimator. MSE there can be high, especially for the $m = 20$, $n = 200$, $\varepsilon = 0.05$,  where it is more than 0.5. The values for the $\varepsilon$ and $\mu_0$ values are small, both of them at the bottom of the plot. 
+
+Now, let us look at the sample variance calculated as $\text{Var} = \frac{1}{n - 1} \sum_{i = 1}^n (x_i - \bar{x})^2$ It is also presented in a plot.
+
+```{r, echo = FALSE, fig.height=3.5, warning = FALSE}
+ggplot(
+  metrics_long %>% filter(metric == "var"),
+  aes(x = n, y = value, color = param)
+) +
+  scale_color_manual(
+  breaks = c("eps", "mu0", "mu1"),
+  values = c(
+    eps = "blue",
+    mu0 = "red",
+    mu1 = "green"
+  ),
+  labels = c(
+    expression(epsilon),
+    expression(mu[0]),
+    expression(mu[1])
+  )
+) +
+  geom_line() +
+  geom_point() +
+  facet_grid(m ~ eps_praw) +
+  labs(
+    title = "Estimator's Variance",
+    x = "n",
+    y = "Variance",
+    color = "Parameter"
+  ) +
+  theme_bw()
+```
+
+We can see, that the values are really similar to the ones for the MSE. It is because of the way we calculate MSE as a sum between variance and bias squared of the estimator. Since in our case bias is really small, then $\text{Bias}^2(\theta) \rightarrow 0$ and the MSE can be approximated by the value of variance.
+
+# The plug-in for multiple testing procedure in comparison to the direct method
+
+In the last part we will calculate the plug-in versions of three of the procedures we did at the beginning. For all of them we are going to use the estimated values of $\mu_1^k$, $\varepsilon_k$ and $\mu_0^k$ calculated using the EM Algorithm. The methods we are going to do are:
+
+- plug-in Bayesian classifier,
+- plug-in version of the rule controlling BFDR,
+- modified version of BH, where we reject all the hypotheses $H_{(1)}, ..., H_{(i_0)}$ for $i_0$ calculated as $$i_0 = \max \left\{ i: p_{(i)} \leq \frac{i\alpha}{(1 - \varepsilon)n} \right\}$$
+
+For each of this method we are going to, again, calculate the FDR, Power and the expected cost and we are going to present in as a function of $\varepsilon$. On the same graph there are going to be the values for the direct procedures, that we calculated at the beginning.
+
+```{r, echo = FALSE, fig.width = 8, fig.height = 5.5}
+df_zad4_all <- readRDS("df_zad4_all.rds")
+
+df_zad4_all <- df_zad4_all %>%
+  mutate(
+    alpha_type = case_when(
+      abs(a - 0.1) < 1e-8 ~ "fixed",
+      abs(a - 0.1 * sqrt(200 / m)) < 1e-8 ~ "scaled"
+    )
+  )
+
+miara_labels <- c(
+  FDR = "FDR",
+  moc  = "Power",
+  koszt = "E"
+)
+
+
+plot_zad4_facet <- function(df, miara_nazwa, tytul) {
+  
+  ggplot(
+    df %>% filter(miara == miara_nazwa),
+    aes(
+      x = e,
+      y = wartosc,
+      color = typ,
+      shape = alpha_type,
+      group = interaction(typ, alpha_type)
+    )
+  ) +
+    geom_line(linewidth = 0.7) +
+    geom_point(size = 2.5) +
+    facet_grid(
+      n + m ~ metoda,
+      labeller = labeller(
+        n = function(x) paste0("n: ", x),
+        m = function(x) paste0("m: ", x)
+      )
+    ) +
+    scale_shape_manual(
+      values = c(
+        "fixed"  = 16,
+        "scaled" = 17
+      ),
+      labels = c(
+        expression(alpha == 0.1),
+        expression(alpha == 0.1 * sqrt(200/m))
+      )
+    ) +
+    labs(
+      title = tytul,
+      x = expression(epsilon),
+      y = miara_labels[[miara_nazwa]],
+      color = "Estimation method",
+      shape = expression(alpha)
+    ) +
+    theme_bw() +
+    theme(
+      legend.position = "bottom",
+      strip.background = element_rect(fill = "grey90"),
+      strip.text = element_text(face = "bold"),
+      plot.title = element_text(hjust = 0.5)
+    )
+}
+
+plot_zad4_facet(df_zad4_all, "FDR", "Comparison of FDR: direct vs plug-in")
+```
+
+On the plot above we can see, that for Bayesian-Classifier and BFDR controlling method there is not much difference between the two methods of estimation. We can see a difference for the Benjamini-Hochberg's method, where the plug-in procedure has higher FDR, no matter the values od $n$ and $m$. The difference can be a bit more visible for the alternative value of $\alpha$. 
+
+Now let us look at the values of the power for those procedures.
+
+```{r, echo = FALSE, fig.width = 8, fig.height = 5.5}
+plot_zad4_facet(df_zad4_all, "moc", "Comparison of power: direct vs plug-in")
+```
+
+In case of power we can se, that for $m = 100$ the testing procedures for both of the estimation methods have full power. Again, the values for Bayesian-Classifier and BFDR controlling procedure are almost identical no matter the values of the known parameters. For the Benjamini-Hochberg method, the plug-in procedure has power a bit higher. 
+
+Lastly, let us look at the plot of the expected cost (or rather the expected number of misclassifications, so that the comparison between methods will be possible). Similarly as in the beginning, it is going to be marked as "E" for simplicity
+
+```{r, echo = FALSE, fig.width = 8, fig.height = 5.5}
+plot_zad4_facet(df_zad4_all, "koszt", "Comparison of E: direct vs plug-in")
+```
+
+Again, for the Bayesian-Classifier and BFDR controlling procedure the values are almost identical for both estimation methods. Only for the Benjamini-Hochberg procedure the values of the direct expected number of misclassifications is smaller than for the plug-in. 
+
+Overall, based on all the plots, both comparing the methods and the ones showing the variance, mse, bias and histograms of the estimators we can say, that the EM Algorithm offers a good approximation of the unknown parameters.

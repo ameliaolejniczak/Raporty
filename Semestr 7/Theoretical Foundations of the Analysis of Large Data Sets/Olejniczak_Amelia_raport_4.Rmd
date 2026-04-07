@@ -1,0 +1,301 @@
+---
+title: 'Global testing for the sparse mixture model and multiple testing problem'
+author: "Amelia Olejniczak"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include = FALSE, warning = FALSE, message = FALSE}
+library(knitr)
+library(kableExtra)
+library(tidyr)
+library(dplyr)
+library(ggplot2)
+```
+
+# Introduction
+
+This report shows two different testing problems. Firstly, we consider the global testing problem for the sparse mixture model with different parameters. There, we calculate its power and see how it changes depending on the parameter values. The next part will focus on the multiple testing problem. In this part, we present different testing methods, controlling either FWER or FDR (what these values are will also be explained at the beginning of that section). We are going to look at FWER, FDR and Power for five different testing methods and two different $n$ values and compare them. We see how controlling each parameter changes the power of the test in different scenarios and determine, which method works best.
+
+# Sparse mixture model
+
+Let us consider the sparse mixture model $$f(\mu) = (1 - \varepsilon) \delta_0 + \varepsilon \delta_{\mu}$$ where $\varepsilon = n^{-\beta}$, $\beta \in (0, 1)$ and $\mu = \sqrt{2r \log n}$. We are going to analyse this for $\beta \in \{ 0.6; 0.8 \}, r \in \{ 0.1; 0.4 \} \text{ and } n \in \{ 5000; 50000 \}$. For this type of global testing problem, we have $n$ independent hypotheses of the form: $$\mathbf{H_{0i}}: X_i \sim N(0, 1) \quad vs \quad \mathbf{H_{1i}}: X_i \sim (1 - \varepsilon) N(0, 1) + \varepsilon N(\mu, 1)$$ Thid means that under the alternative, $X_i$ has standard normal distribution with probability $1 - \varepsilon$ and normal distribution with parameters $\mu$ and 1 with probability $\varepsilon$. In this case, since all the hypotheses are simple, we can use the Neyman-Pearson theorem to find the most powerful test. We can determine that the likelihood ratio is of the form: $$L = \prod_{i = 1}^n \left( \left( 1 - \varepsilon \right) + \varepsilon e^{\mu X_i - \mu^2/2} \right)$$ Finding the critical value for this test can be difficult to do exactly, so we are going to do this numerically by simulating 10000 samples size $n$ from the null hypothesis, calculating the likelihood ratio for every one of them and then determining the $1 - \alpha$ quantile from the results. Below we can see a table with the results for given $\beta$, $r$ and $n$.
+
+\newpage
+
+```{r, echo = FALSE}
+critical_values_L <- readRDS("critical_values_l.rds")
+
+library(dplyr)
+
+df <- do.call(rbind, lapply(names(critical_values_L), function(n_name) {
+  do.call(rbind, lapply(names(critical_values_L[[n_name]]), function(beta_name) {
+    do.call(rbind, lapply(names(critical_values_L[[n_name]][[beta_name]]), function(r_name) {
+      data.frame(
+        n = n_name,
+        beta = beta_name,
+        r = r_name,
+        critical_value = as.numeric(critical_values_L[[n_name]][[beta_name]][[r_name]])
+      )
+    }))
+  }))
+}))
+
+df$n <- gsub("n = ", "", df$n)
+df$beta <- gsub("beta = ", "", df$beta)
+df$r <- gsub("r = ", "", df$r)
+
+colnames(df) <- c("n", "$\\beta$", "r", "critical value")
+
+kable(df, format = "latex", digits = 4, caption = "L statistic critical values", escape = FALSE, align = "cccc") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+After calculating those values we can compare the powers of the Neyman-Pearson test to five other types of global testing methods:
+
+- Higher Criticism test (HC), where we reject $\mathbf{H_0}$ for a high value of the statistic: $$HC = \max_{\frac{1}{n} < t < \frac{1}{2}} \sqrt{n} \frac{F_n(t) - t}{\sqrt{t(1 - t)}}$$
+- modified Higher Criticism, where we reject $\mathbf{H_0}$ for a high value of the statistic: $$HC_{mod} = \max_{0 < t < 1} \sqrt{n} \frac{F_n(t) - t}{\sqrt{t(1 - t)q(t)}}, \\ q(t) = \log \log \left( \frac{1}{t(1 - t)} \right)$$
+- Bonferroni, where we reject $\mathbf{H_0}$ if: $$\min_i p_i \leq \frac{\alpha}{n}$$
+- Fisher, where we reject $\mathbf{H_0}$ if: $$\sum^n_{i = 1} 2 \log p_i > \chi^2_{2n}(1 - \alpha)$$
+- chi-square, where we reject $\mathbf{H_0}$ if: $$\sum^n_{i = 1} X_i^2 > \chi^2_n (1 - \alpha)$$
+
+In this case, the power is understood as the ratio of rejected null hypotheses to true alternatives computed based on 10000 simulations. The calculated values will be presented in two forms - both a table and a plot showing the values of the power for all the tests.
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+powers <- readRDS("powers.rds")
+
+powers_to_table <- function(powers) {
+  rows <- list()
+  
+  for (n_name in names(powers)) {
+    for (beta_name in names(powers[[n_name]])) {
+      for (r_name in names(powers[[n_name]][[beta_name]])) {
+        
+        vec <- powers[[n_name]][[beta_name]][[r_name]]
+        
+        rows[[length(rows) + 1]] <- data.frame(
+          n = gsub("n = ", "", n_name),
+          beta = gsub("beta = ", "", beta_name),
+          r = gsub("r = ", "", r_name),
+          test = names(vec),
+          power = as.numeric(vec),
+          row.names = NULL
+        )
+      }
+    }
+  }
+  
+  do.call(rbind, rows)
+}
+
+power_table <- powers_to_table(powers)
+
+plot_data <- power_table %>%
+  mutate(
+    x = paste0("b=", beta, ", r=", r),
+    x = factor(x, levels = unique(x)),
+    n = factor(n),
+    test = factor(test)
+  )
+
+ggplot(plot_data,
+       aes(x = x, y = power, color = test, group = test)) +
+  geom_line(linewidth = 1) +
+  geom_point(linewidth = 2) +
+  facet_wrap(~ n, nrow = 1,
+             labeller = labeller(n = function(x) paste("n =", x))) +
+  labs(
+    x = "",
+    y = "Power",
+    color = "",
+    title = "Test Power depending on n"
+  ) +
+  scale_color_discrete(
+    labels = c(
+      bonf_test = "Bonferroni",
+      fish_test = "Fisher",
+      `hc_test.95%` = "HC",
+      `hc_mod_test.95%` = "modified HC",
+      chi_sq_test = "Chi squared",
+      `neym_pear_test.95%` = "Neyman–Pearson"
+    )
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"
+  )
+```
+
+```{r, echo = FALSE}
+power_table_wide <- pivot_wider(
+  power_table,
+  names_from = test,
+  values_from = power
+)
+
+colnames(power_table_wide) <- c("n", "$\\beta$", "r", "modified HC", "HC", "Bonferroni", "Chi squared", "Fisher", "Neyman-Pearson")
+
+kable(power_table_wide, format = "latex", digits = 4, caption = "Test powers", escape = FALSE, align = "cccccccc") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+Above we can see that the highest power for all the tests, independently of the sample size, is for the scenario with $\beta = 0.6$ and $r = 0.4$. Similarly, the lowest values are for $\beta = 0.8$ and $r = 0.1$. When it comes to tests, we obtain the best results with the Neyman-Pearson test, which is not surprising, since this is the most powerful test in our scenario. It is also a test that cannot be used in practice, since we would not know $\mu$ and $\varepsilon$. Similarly good results are obtained using the $HC$ statistic (these results become significantly worse when looking at the $HC_{mod}$ statistic - which has mostly the lowest power of all). That shows that when it comes to power, $HC$ test is a good alternative for the Neyman-Pearson test if we do not know the values for $\mu$ and $\varepsilon$ since they work somewhat similarly. The Bonferroni's method works quite well for the larger $n$ (in the best scenario of course), but it's not as good in the smaller sample size. The Fisher and Chi squared tests' powers are pretty low, compared to the other tests.
+
+The theory for those results lies in the fact from the lecture that: $$\rho^*(r) = \begin{cases} 
+      \beta-\frac{1}{2} & \frac{1}{2}<\beta\leq\frac{3}{4} \\
+      (1-\sqrt{1-\beta})^2 & \frac{3}{4}<\beta\leq1 
+   \end{cases}$$ 
+
+This is the threshold curve of $r$ for Neyman-Pearson test. In this situation:
+
+- if $r > \rho^*(r)$ then $\mathbb{P}_{\mathbf{H_0}}(\text{Type I Error}) + \mathbb{P}_{\mathbf{H_1}}(\text{Type II Error}) \rightarrow 0$.
+- if $r \leq \rho^*(r)$ then $\lim \inf (\mathbb{P}_{\mathbf{H_0}}(\text{Type I Error}) + \mathbb{P}_{\mathbf{H_1}}(\text{Type II Error})) \geq 1$.
+
+That means that if $r > \rho^*(r)$ the Neyman-Pearson test has full power and in other case, this test is powerless. This is what we see here. 
+
+- For $\beta = 0.6$ and $r = 0.1$ we have $\rho^*(r) = 0.1$ so $r = \rho^*(r)$ and the test is powerless.
+- For $\beta = 0.6$ and $r = 0.4$ we have $\rho^*(r) = 0.1$ so $r > \rho^*(r)$ and the test is powerful.
+- For $\beta = 0.8$ and $r = 0.1$ we have $\rho^*(r) \approx 0.306$ so $r < \rho^*(r)$ and the test is powerless.
+- For $\beta = 0.8$ and $r = 0.4$ the situation is the most interesting, since $\rho^*(r) \approx 0.306$ and $r > \rho^*(r)$ and the test still does not have the full power.
+
+In the last situation, even though $r$ is greater than the value of the function, we cannot see the full power. It is because the difference between $\rho$ and $r$ is smaller than in the other situation. That is why the power is higher, but not similar to $1$. Similarly in the first scenario, the values are equal and that is why the power is a little higher than for the $\beta = 0.8$ and $r = 0.1$ case. 
+
+# Multiple testing problem
+
+## Theoretical introduction
+
+The next problem that we are going to focus on is multiple testing problem. In it we have $n$ hypotheses, that we consider simultaneously, while we want to control the number of false discoveries, that is, situations in which we reject the null hypothesis, when it is true. 
+
+It is not possible to unambiguously extend the definition of Type I error from single hypothesis to multiple case (there is no single way to do that). Instead, we use FWER (Familywise Error Rate) and we try to control that value. FWER is the probability of making at least one false discovery (so FWER $= \mathbb{P}(V \geq 1)$, where $V$ is the number of false discoveries).
+
+Alternatively, we control the FDR (False Discovery Rate) which is the expected proportion of the false discoveries (so FDR $= \mathbb{E}(\text{FDP}) = \mathbb{E}\left( \frac{V}{R} \mathbf{1}_{\{ R \geq 1 \}}\right)$ where $R$ is a number of all rejected null hypotheses).
+
+We need to determine now, when do we use which procedures. It is pretty easy to understand it intuitively. When the number of hypotheses is low, the procedures that control FWER are pretty good, since the consequences of a false discovery can be significant. The situation changes if the number of hypotheses is high. The FWER controlling methods are pretty conservative and therefore they often do not return any discoveries. When we have more hypotheses, this leads to really low power of the test. This is when control of the FDR comes in handy, since in this case we control the average proportion of the false discoveries in repeated experiments, while FWER controls the number of false discoveries in an individual experiment. 
+
+It is also important to note, that FDR $\leq$ FWER generally (and FDR = FWER if all the null hypotheses are true).
+
+The analysis below will focus on two scenarios. First, we are going to take a low dimensional setup (so $n = 20$) and then large dimensional setup ($n = 5000$). For both of those, we are going to test five procedures - four of them controlling the FWER and one controlling FDR. These methods are:
+
+- Bonferroni: very conservative procedure (usually low power), but do not need the independence assumption. We reject all $\mathbf{H_i}$ if: $$p_i \leq \frac{\alpha}{n}$$
+- Sidak: slightly less conservative than Bonferroni, but we need the p-values to be independent for each test. We reject all $\mathbf{H_i}$ if: $$p_i \leq \alpha_n = 1 - (1 - \alpha)^{1/n}$$
+- Holm: less conservative than Bonferroni, controls FWER at level $\alpha$ in a strong sense. We order p-values $p_{(1)} \leq p_{(2)} \leq ... \leq p_{(n)}$ and reject $\mathbf{H_{(1)}}, ..., \mathbf{H_{(i_0 - 1)}}$ for: $$i_0 = \min \left\{ i: p_{(i)} > \frac{\alpha}{n - i + 1} \right\}$$
+- Hochberg: it is even less conservative than Holm's procedure, but it requires independence. We order p-values $p_{(1)} \leq p_{(2)} \leq ... \leq p_{(n)}$ and we reject $\mathbf{H_{(1)}}, ..., \mathbf{H_{(i_0)}}$ for: $$i_0 = \max \left\{ i: p_{(i)} \leq \frac{\alpha}{n - i + 1} \right\}$$
+- Benjamini-Hochberg (BH): the only one that controls FDR and usually not FWER, it is expected to be more powerful than the rest of the procedures. Works well in scenarios where we have many small signals. We order p-values $p_{(1)} \leq p_{(2)} \leq ... \leq p_{(n)}$ and we reject $\mathbf{H_{(1)}}, ..., \mathbf{H_{(i_0)}}$ for: $$i_0 = \max \left\{ i: p_{(i)} \leq \frac{i}{n} \alpha \right\}$$
+
+## Low dimensional setup
+
+Let us start from analysing the low dimensional setup (so $n = 20$). Below we can see the results for three values of $\mu$:
+
+- $\mu_1 = 1.5 \sqrt{2 \log n}, ... \mu_2 = ... = \mu_n = 0$
+- $\mu_1 = ... = \mu_5 = 1.05 \sqrt{2 \log n}, \mu_6 = ... = \mu_n = 0$
+- $\mu_i = 1.5 \sqrt{2 \log \left( \frac{20}{i} \right)}, i = 1, ..., 10, \mu_{11} = ... = \mu_n = 0$
+
+The values of FWER, FDR and Power (which is calculated as the proportion of identified alternative hypotheses among all alternative hypotheses) are presented below in the table form.
+
+```{r, echo = FALSE}
+results_low <- readRDS("results_low.rds")
+```
+
+```{r, results='asis', echo = FALSE}
+t1 <- kable(results_low$mu1, format = "latex", digits = 4)
+t2 <- kable(results_low$mu2, format = "latex", digits = 4)
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","1st $\\mu$ results","}
+      \\vspace{6pt}",
+          t1,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","2nd $\\mu$ results","}
+      \\vspace{6pt}",
+          t2,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+```
+
+\newpage
+
+```{r, echo = FALSE}
+kable(results_low$mu3, format = "latex", digits = 4, caption = "3rd $\\mu$ results", escape = FALSE, align = "cccc") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+Let us start by looking at the FWER values. In the tables we can see, that it is pretty low for all $\mu$ for the methods that are supposed to control it and higher when we look at the BH test. It is expected, since this test controls only FDR.
+
+When it comes to FDR, the values are generally small in all methods, but this is not surprising, since (as we saw above) FDR is always less or equal than FWER. That means that if a method controls FWER on a specific level, we also can see, that the value of FDR is generally small. This value is also small for the Benjamini-Hochberg method, which is supposed to control its value.
+
+Lastly, let us see the power of these tests. In the first situation, the power is really similar in all the cases. That is because there we have a problem, where there is one strong signal, which is pretty easy to detect by the methods that control the FWER. Two other cases have fewer and less strong signals, where BH procedure works slightly better (although its power is not satisfying).
+
+## Large dimensional setup
+
+Last part is going to focus on large dimensional setup (so $n = 5000$). This time the results are presented for four values of $\mu$:
+
+- $\mu_1 = 1.5 \sqrt{2 \log n}, = \mu_2 = ... = \mu_n = 0$;
+- $\mu_1 = ... = \mu_{100} = 1.05 \sqrt{2 \log n}, \mu_{101} = ... = \mu_n = 0$;
+- $\mu_1 = ... = \mu_{100} = 1.005 \sqrt{2 \log n}, \mu_{101} = ... = \mu_n = 0$;
+- $\mu_1 = ... = \mu_{1000} = 1.005 \sqrt{2 \log{\left( \frac{n}{100} \right)}}, \mu_{1001} = ... = \mu_n = 0$.
+
+Again, the calculated FWER, FDR and Power are presented in a table form below.
+
+```{r, echo = FALSE}
+results_large <- readRDS("results_large.rds")
+```
+
+```{r, results='asis', echo = FALSE}
+t3 <- kable(results_large$mu1, format = "latex", digits = 4)
+t4 <- kable(results_large$mu2, format = "latex", digits = 4)
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","1st $\\mu$ results","}
+      \\vspace{6pt}",
+          t3,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","2nd $\\mu$ results","}
+      \\vspace{6pt}",
+          t4,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+```
+
+\newpage
+
+```{r, results='asis', echo = FALSE}
+t5 <- kable(results_large$mu3, format = "latex", digits = 4)
+t6 <- kable(results_large$mu4, format = "latex", digits = 4)
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","3rd $\\mu$ results","}
+      \\vspace{6pt}",
+          t5,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","4th $\\mu$ results","}
+      \\vspace{6pt}",
+          t6,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+```
+
+Let us start from FWER. Again, like before, we can see that the values (no matter the $\mu$) are small for the methods that control its value. It is worth noticing, that FWER for the BH method of testing has really high values in almost all cases (even 1 for the last $\mu$). That is the first visual difference that we can see for this problem in comparison to the previous one.
+
+Next, let us look at the FDR values. Again, we see the same structure as before, where we can see that these values are much smaller than FWER for every method. It stays consistent with the theory presented before. The values for the methods that control FWER sometimes are really small, but for FDR-controlling BH procedure, the values seem rational.
+
+Lastly, let us look at the powers of those tests. In the first situation, so the one with one strong signal, all of the methods are pretty good. For the second and third $\mu$ values we can see, that BH method is significantly better than the others - which is because, as we said before, this method works well in scenarios with many small signals. In the last scenario we can also see, that BH have much higher power, than the rest, but it is not the best. 
+
+## Comparison between these setups
+
+We can see, that, as stated before, different methods work better for different scenarios. The power of the FDR-controlling method is consistent throughout all tests so it is the most universal method of all. Based on our simulations, we can say, that there are situations (like smaller effects for low $n$ or the last scenario for large $n$), where none of the tests give satisfying results, but it is still better to choose FDR controlling procedure than the others, since the power there can be significantly better. Although the FWER controlling methods usually performed much worse than BH, they work well in a scenario with one strong signal.

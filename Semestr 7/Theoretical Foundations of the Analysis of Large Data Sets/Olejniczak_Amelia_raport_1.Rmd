@@ -1,0 +1,451 @@
+---
+title: "Comparison between estimators and analysis of the p-values in the most powerful
+  test"
+author: "Amelia Olejniczak"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+The analysis in this report is going to be split into two parts. In the first half we will focus on comparing the MLE and moment estimator for the random sample from the distribution with the density $f(x, \alpha) = (\alpha + 1)x^{\alpha}$ (where $x \in (0, 1)$ and $\alpha > -1$). After that, the focus will be shifted to the most powerful test with hypothesis $H_0: \lambda = 5$ and $H_1: \lambda = 3$ for the sample size $n$ from the exponential distribution and the p-values of that test. Both cases will be analysed for two sample sizes: $n = 20$ and then $n = 200$.
+
+# Comparison between MLE and moment estimators
+
+## Theoretical calculation
+
+First let us focus on the analysis of MLE and moment estimators for the random sample from the distribution with the density $f(x, \alpha) = (\alpha + 1)x^{\alpha}$. Firstly, we need to find the $\hat{\alpha}_{MLE}$ for the $\alpha$ parameter in this distribution. To do that we need to determine the likelihood function: $$L(\alpha) = \prod^n_{i=1}f(x, \alpha) = \prod^n_{i=1} (\alpha + 1) x_i^{\alpha} = (\alpha + 1)^n \prod^n_{i=1} x_i^{\alpha}$$
+
+Then we modify it to get the log-likelihood function: $$l(\alpha) = \log{L(\alpha)} = \log\left((\alpha + 1)^n \prod^n_{i=1} x_i^{\alpha}\right) = n \log(\alpha + 1) + \sum^n_{i=1} \log x_i^{\alpha} = n \log(\alpha + 1) + \alpha \sum^n_{i=1} \log x_i $$
+
+After that we calculate the derivative and set it equal to zero: $$l'(\alpha) = \frac{n}{\alpha + 1} + \sum^n_{i = 1} \log x_i = 0$$ $$\frac{1}{\alpha + 1} = - \frac{\sum_{i=1}^n x_i}{n}$$ $$\alpha + 1 = - \frac{n}{\sum_{i = 1}^n x_i}$$
+
+That gives us: $$\hat{\alpha}_{MLE} = - \frac{n}{\sum^n_{i = 1} \log x_i} - 1$$
+
+To check that the value that we got is the maximum of the likelihood function we need the second derivative, which is: $$l''(\alpha) = - \frac{n}{(\alpha + 1)^2}$$ since $n > 0$ and $(\alpha + 1)^2 > 0$ that means that the value of the second derivative is less than zero. That shows that there is maximum in $\hat{\alpha}_{MLE}$.
+
+Next thing that we need to calculate is the Fisher information for the MLE. To do that, we calculate the logarithm of the density function, then we differentiate twice with respect to $\alpha$ to get the second derivative. The Fisher information is equal to minus the expected value of that second derivative. The full calculation looks like this: $$\log f(x, \alpha) = \log(\alpha + 1) + \alpha \log x$$ $$\frac{d}{d\alpha} \log f(x, \alpha) = \frac{1}{\alpha + 1} + \log x$$ $$\frac{d^2}{d\alpha^2} \log f(x, \alpha) = - \frac{1}{(\alpha + 1)^2}$$ Because we see that the second derivative does not depend on $x$, the Fisher information is: $$I(\alpha) = - \mathbb{E}\left( \frac{d^2}{d\alpha^2} \right) = \frac{1}{(\alpha + 1)^2}$$
+
+Now we determine the asymptotic distribution of the estimator $\hat{\alpha}_{MLE}$. We know that $$\sqrt{n}(\hat{\alpha}_{MLE} - \alpha) \xrightarrow{D} N\left(0, \frac{1}{I(\alpha)}\right)$$ That means that $$(\hat{\alpha}_{MLE} - \alpha) \xrightarrow{D} N\left(0, \frac{1}{nI(\alpha)}\right)$$ And at the end we get $$\hat{\alpha}_{MLE} \xrightarrow{D} N\left({\alpha}, \frac{1}{nI(\alpha)}\right)$$
+After putting the value of the Fisher information calculated above, we get $$\hat{\alpha}_{MLE} \xrightarrow{D} N\left({\alpha}, \frac{(\alpha + 1)^2}{n}\right)$$ Based on that we can determine the value of mean squared error (MSE). We know that the value of the MSE is determined by taking the variance of the estimator and adding the bias to it. We know that the estimator's bias is close to 0 (as the expected value in the asymptotic distribution is equal to $\alpha$), so we can estimate the MSE by estimating the variance. That being said, the estimated value of MSE can be calculated as $$\widehat{MSE}(\hat{\alpha}_{MLE}) \approx \widehat{Var}(\hat{\alpha}_{MSE}) = \frac{(\hat{\alpha}_{MLE} + 1)^2}{n}$$
+
+We also need to get the moment estimator of the parameter $\alpha$. We understand the moment estimator as setting the expected value (or theoretical mean) to the empirical mean of the sample. We know that the distribution of the sample is the beta distribution with parameters $\alpha + 1$ and $1$. That makes the expected value $\mathbb{E}X = \frac{\alpha + 1}{\alpha + 2}$. After setting it equal to $\bar{X}$ and doing some transformations we get the moment estimator as: $$\hat{\alpha}_{mom} = \frac{2\bar{X} - 1}{1 - \bar{X}}$$
+
+## Analysis based on generated sample wth $\alpha = 5$
+
+In this section of the report we will compare the two estimators for specified $\alpha$ parameter, which we set to be equal $5$. We are going to generate a sample sizes $n = 20$ and $n = 200$ using `rbeta()` with parameters $6$ and $1$. After that, using calculations seen in the previous section, we determine the two estimators - the maximum likelihood estimator and the moment estimator. Underneath we can see the tables with calculated estimators compared based on the size of the sample. In the same table we can also see the difference $\alpha - \hat{\alpha}$ and the square of that number.
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+library(knitr)
+library(kableExtra)
+
+set.seed(735648)
+alpha <- 5
+n <- c(20, 200)
+
+get_sample <- function(n, a) {
+  rbeta(n, a + 1, 1)
+}
+
+get_alpha_mle <- function(sample) {
+  n <- length(sample)
+  -n/sum(log(sample)) - 1
+}
+
+get_alpha_mom <- function(sample) {
+  sample_mean <- mean(sample)
+  (2 * sample_mean - 1)/(1 - sample_mean)
+}
+
+calculated_estimators <- lapply(n, function(n) {
+  results <- replicate(1000, {
+    sample <- get_sample(n, alpha)
+    
+    alpha_mle <- get_alpha_mle(sample)
+    alpha_mom <- get_alpha_mom(sample)
+    
+    diff_alpha_mle <- alpha - alpha_mle
+    diff_alpha_mom <- alpha - alpha_mom
+    
+    sq_diff_alpha_mle <- diff_alpha_mle ** 2
+    sq_diff_alpha_mom <- diff_alpha_mom ** 2
+    
+    list(
+      alpha_mle = alpha_mle, 
+      diff_alpha_mle = diff_alpha_mle,
+      sq_diff_alpha_mle = sq_diff_alpha_mle,
+      alpha_mom = alpha_mom,
+      diff_alpha_mom = diff_alpha_mom,
+      sq_diff_alpha_mom = sq_diff_alpha_mom
+    )
+  }, simplify = FALSE)
+  
+  list(
+    alpha_mle = sapply(results, `[[`, "alpha_mle"),
+    diff_alpha_mle = sapply(results, `[[`, "diff_alpha_mle"),
+    sq_diff_alpha_mle = sapply(results, `[[`, "sq_diff_alpha_mle"),
+    alpha_mom = sapply(results, `[[`, "alpha_mom"),
+    diff_alpha_mom = sapply(results, `[[`, "diff_alpha_mom"),
+    sq_diff_alpha_mom = sapply(results, `[[`, "sq_diff_alpha_mom")
+  )
+})
+
+names(calculated_estimators) <- paste0("n_", n)
+
+df_table_mle <- data.frame(
+  alpha_mle <- c(calculated_estimators[["n_20"]][["alpha_mle"]][1], calculated_estimators[["n_200"]][["alpha_mle"]][1]),
+  diff_alpha_mle <- c(calculated_estimators[["n_20"]][["diff_alpha_mle"]][1], calculated_estimators[["n_200"]][["diff_alpha_mle"]][1]),
+  sq_diff_alpha_mle <- c(calculated_estimators[["n_20"]][["sq_diff_alpha_mle"]][1], calculated_estimators[["n_200"]][["sq_diff_alpha_mle"]][1])
+)
+
+colnames(df_table_mle) <- c("alpha_hat", "alpha - alpha_hat", "(alpha - alpha_hat)^2")
+rownames(df_table_mle) <- c("n = 20", "n = 200")
+
+df_table_mom <- data.frame(
+  alpha_mom <- c(calculated_estimators[["n_20"]][["alpha_mom"]][1], calculated_estimators[["n_200"]][["alpha_mom"]][1]),
+  diff_alpha_mom <- c(calculated_estimators[["n_20"]][["diff_alpha_mom"]][1], calculated_estimators[["n_200"]][["diff_alpha_mom"]][1]),
+  sq_diff_alpha_mom <- c(calculated_estimators[["n_20"]][["sq_diff_alpha_mom"]][1], calculated_estimators[["n_200"]][["sq_diff_alpha_mom"]][1])
+)
+
+colnames(df_table_mom) <- c("alpha_hat", "alpha - alpha_hat", "(alpha - alpha_hat)^2")
+rownames(df_table_mom) <- c("n = 20", "n = 200")
+
+kable(df_table_mle, format = "latex", align = "ccc", caption = "MLE") %>% kable_styling(latex_options = c("hold_position"))
+kable(df_table_mom, format = "latex", align = "ccc", caption = "Moments estimator") %>% kable_styling(latex_options = c("hold_position"))
+```
+
+In the tables above we can see, that there is not much difference between the estimators. Both of them are really close to the real value of $\alpha$, which as we know is equal to $5$. In these two samples we can even notice that the moments estimator is a bit better, than MLE. Suprisingly, the estimator for the bigger sample is a bit worse, than the one for $n = 20$, but it might be caused by an unlucky sample. 
+
+To see a definite difference between each estimator for both sizes it is better to replicate the samples. We are going to replicate the generating and calculations a 1000 times and then we are going to show the results on the histograms, q-qplots and boxplots for both estimators. Firstly let us focus on analysing the histograms. On them we can also see the density of the asymptotic function for $\hat{\alpha}_{MLE}$ presented as a dark blue line.
+
+```{r, echo = FALSE, message=FALSE, warning=FALSE, fig.height=3.6}
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+df <- bind_rows(
+  data.frame(n = 20, alpha_mle = calculated_estimators[["n_20"]]$alpha_mle,
+             alpha_mom = calculated_estimators[["n_20"]]$alpha_mom),
+  data.frame(n = 200, alpha_mle = calculated_estimators[["n_200"]]$alpha_mle,
+             alpha_mom = calculated_estimators[["n_200"]]$alpha_mom)
+)
+
+
+df_long <- df %>%
+  pivot_longer(cols = c(alpha_mle, alpha_mom),
+               names_to = "estimator",
+               values_to = "alpha_estimate")
+
+ggplot(df_long, aes(x = alpha_estimate, fill = estimator)) +
+  geom_histogram(aes(y = ..density..), alpha = 0.6, position = "identity", bins = 30) +
+  facet_wrap(~ n) +
+  geom_vline(xintercept = alpha, col = 'salmon4', size = 0.6) +
+  stat_function(
+    fun = function(x) dnorm(x, mean = 5, sd = sqrt(36/20)),
+    data = subset(df_long, n == 20),
+    color = "skyblue4", size = 0.6
+  ) +
+  stat_function(
+    fun = function(x) dnorm(x, mean = 5, sd = sqrt(36/200)),
+    data = subset(df_long, n == 200),
+    color = "skyblue4", size = 0.6
+  ) +
+  labs(
+    title = "Histogram of Alpha Estimates (MLE vs MOM)",
+    x = expression(hat(alpha)),
+  ) +
+  scale_fill_manual(values = c("alpha_mle" = "salmon1", "alpha_mom" = "skyblue")) +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+On the histograms above we can see, that the values are close to the density curves. They are also close to real value of $\alpha = 5$ (which is shown on the plots as the dark red vertical line). We can notice that the plot for the smaller sample size is wider than the plot for $n = 200$. It makes sense if we look at the value of theoretical variance for estimator $\hat{\alpha}_{MLE}$ since it is dependent on the value of $n$ (it is bigger when the $n$ is smaller). We can also notice that there is not much visible difference between the histograms for $\hat{\alpha}_{MLE}$ and $\hat{\alpha}_{mom}$ in both circumstances. Now, let us see the boxplots for these two statistics in the same sample sizes. 
+
+```{r, echo = FALSE, fig.height=3.5}
+ggplot(df_long, aes(x = alpha_estimate, fill = estimator)) +
+  geom_boxplot() +
+  geom_vline(xintercept = alpha, col = 'royalblue4', size = 0.6) +
+  facet_wrap(~ n) +
+  labs(
+    title = "Boxplot of Alpha Estimates (MLE vs MOM)",
+    x = expression(hat(alpha))
+  ) +
+  scale_fill_manual(values = c("alpha_mle" = "salmon1", "alpha_mom" = "skyblue")) +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+If we look at the boxplots for these statistics we can notice, that both of them are really similar in shape when it comes to different estimators. No matter which sample size we look at, both boxplots are really similar to each other. When it comes to different sample sizes, the estimated values are closer to each other in the bigger sample size. It is consistent with the previous histograms, where the histogram was wider for the smaller sample size. Last but not least let us see what the q-q plot looks like.
+
+```{r, echo = FALSE, fig.height=3.4}
+ggplot(df_long, aes(sample = alpha_estimate, col = estimator)) +
+  stat_qq() +
+  stat_qq_line() +
+  facet_wrap(~n) + 
+  labs(
+    title = "Q-Q plot of Alpha Estimates (MLE vs MOM)",
+    xlab = "Theoretical quantiles",
+    ylab = "Sample quantiles"
+  ) +
+  scale_color_manual(values = c("alpha_mle" = "salmon", "alpha_mom" = "skyblue")) +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+On these two plots we can see that, again, there is not much difference between the two estimators. The points, especially in the bigger samples, are really close to the line, referencing the theoretical quantiles of the normal distribution. We can see that the plots look much better for the bigger sample, which is consistent with plots shown before. That means we can assume that both of the estimators have normal distribution (or an asymptotic normal distribution).
+
+## Analysis of the bias, the variance and the MSE and the approximate 95% intervals
+
+We know, from theoretical calculations before, that the $\hat{\alpha}_{MLE}$ has an asymptotic normal distribution with parameters $N\left(\alpha, \frac{(\alpha + 1)^2}{n}\right)$, which in our case is $N(5, 1.8)$ for the sample $n = 20$ and $N(5, 0.18)$ for the other one. Based on these asymptotic distributions we can determine the values of the MSE, bias and variance. We can see them in the table below.
+
+```{r, echo = FALSE}
+df_theoretical_values <- data.frame(
+  variance = c(1.8, 0.18),
+  bias = c(0, 0),
+  MSE = c(1.8, 0.18)
+)
+
+rownames(df_theoretical_values) <- c("n = 20", "n = 200")
+
+kable(df_theoretical_values, format = "latex", align = "ccc", caption = "Theoretical values for MLE") %>% kable_styling(latex_options = c("hold_position"))
+```
+
+We will compare the values above to the estimated values of those parameters. We will also get the 95% confidence intervals for them. For the MSE and bias we will use the confidence interval for mean using the normal distribution (since the number of observation is greater than 30) and for variance we will determine the confidence interval using $\chi^2$ distribution with $N - 1$ degrees freedom. The number of observations in these cases is equal to $N = 1000$, because we determine those values for a $1000$ replications of each estimator. The bias and MSE estimator are determined by taking the mean of $\alpha - \hat{\alpha}$ and $(\alpha - \hat{\alpha})^2$ parameters, taken for every sample. The variance is calculated using the `var()` function. Below we can see two tables, each with the specific estimators (`est_`) and confidence intervals (`ci_`) for each estimator.
+
+```{r, echo = FALSE}
+ci_variance <- function(var_est, df = 999, alpha = 0.05) {
+  lower <- (df * var_est) / qchisq(1 - alpha/2, df)
+  upper <- (df * var_est) / qchisq(alpha/2, df)
+  c(lower, upper)
+}
+
+ci_mean <- function(values, alpha = 0.05) {
+  m <- mean(values)
+  s <- sd(values)
+  n <- length(values)
+  se <- s/sqrt(n)
+  crit <- qnorm(1 - alpha/2)
+  lower <- m - crit * se
+  upper <- m + crit * se
+  c(lower, upper)
+}
+
+results_mle <- lapply(n, function(n) {
+  name <- paste0("n_", n)
+  df_sim <- calculated_estimators[[name]]
+  
+  est_bias <- mean(df_sim[["diff_alpha_mle"]])
+  est_mse <- mean(df_sim[["sq_diff_alpha_mle"]])
+  est_var <- var(df_sim[["alpha_mle"]])
+  
+  ci_var <- ci_variance(est_var)
+  ci_bias <- ci_mean(df_sim[["diff_alpha_mle"]])
+  ci_mse <- ci_mean(df_sim[["sq_diff_alpha_mle"]])
+  
+  list(est_bias = round(est_bias, 5), 
+       est_mse = round(est_mse, 5), 
+       est_var = round(est_var, 5), 
+       ci_bias = paste0("[", round(ci_bias[1], 5), ", ", round(ci_bias[2], 5), "]"), 
+       ci_mse = paste0("[", round(ci_mse[1], 5), ", ", round(ci_mse[2], 5), "]"),
+       ci_var = paste0("[", round(ci_var[1], 5), ", ", round(ci_var[2], 5), "]")
+       )
+})
+
+df_est_ci_mle <- data.frame(
+  est_bias = c(results_mle[[1]][["est_bias"]], results_mle[[2]][["est_bias"]]),
+  est_mse = c(results_mle[[1]][["est_mse"]], results_mle[[2]][["est_mse"]]),
+  est_var = c(results_mle[[1]][["est_var"]], results_mle[[2]][["est_var"]]),
+  ci_bias = c(results_mle[[1]][["ci_bias"]], results_mle[[2]][["ci_bias"]]),
+  ci_mse = c(results_mle[[1]][["ci_mse"]], results_mle[[2]][["ci_mse"]]),
+  ci_var = c(results_mle[[1]][["ci_var"]], results_mle[[2]][["ci_var"]])
+)
+
+rownames(df_est_ci_mle) = c("n = 20", "n = 200")
+
+results_mom <- lapply(n, function(n) {
+  name <- paste0("n_", n)
+  df_sim <- calculated_estimators[[name]]
+  
+  est_bias <- mean(df_sim[["diff_alpha_mom"]])
+  est_mse <- mean(df_sim[["sq_diff_alpha_mom"]])
+  est_var <- var(df_sim[["alpha_mom"]])
+  
+  ci_var <- ci_variance(est_var)
+  ci_bias <- ci_mean(df_sim[["diff_alpha_mom"]])
+  ci_mse <- ci_mean(df_sim[["sq_diff_alpha_mom"]])
+  
+  list(est_bias = round(est_bias, 5), 
+       est_mse = round(est_mse, 5), 
+       est_var = round(est_var, 5), 
+       ci_bias = paste0("[", round(ci_bias[1], 5), ", ", round(ci_bias[2], 5), "]"), 
+       ci_mse = paste0("[", round(ci_mse[1], 5), ", ", round(ci_mse[2], 5), "]"),
+       ci_var = paste0("[", round(ci_var[1], 5), ", ", round(ci_var[2], 5), "]")
+       )
+})
+
+df_est_ci_mom <- data.frame(
+  est_bias = c(results_mom[[1]][["est_bias"]], results_mom[[2]][["est_bias"]]),
+  est_mse = c(results_mom[[1]][["est_mse"]], results_mom[[2]][["est_mse"]]),
+  est_var = c(results_mom[[1]][["est_var"]], results_mom[[2]][["est_var"]]),
+  ci_bias = c(results_mom[[1]][["ci_bias"]], results_mom[[2]][["ci_bias"]]),
+  ci_mse = c(results_mom[[1]][["ci_mse"]], results_mom[[2]][["ci_mse"]]),
+  ci_var = c(results_mom[[1]][["ci_var"]], results_mom[[2]][["ci_var"]])
+)
+
+rownames(df_est_ci_mom) = c("n = 20", "n = 200")
+
+kable(df_est_ci_mle, format = "latex", align = "ccc", caption = "Estimators and confidence intervals for MLE estimator") %>% kable_styling(latex_options = c("hold_position"))
+kable(df_est_ci_mom, format = "latex", align = "ccc", caption = "Estimators and confidence intervals for mom estimator") %>% kable_styling(latex_options = c("hold_position"))
+```
+
+Let us start from the comparison between each sizes and estimators. When it comes to all the values for both the estimators, they are really similar. We could have expected it, looking at all the plots presented before. When it comes to the size of the sample, that we determine the estimator from, we can see (expectedly) that all of the estimators are a bit worse for $n = 20$. It is the easiest to notice it when looking at the bias estimator. In both cases the absolute value of this estimator is much greater than zero in the smaller sample. The bias for $n = 200$ is much smaller. The thing that is worth noticing is that the theoretical value from table before is inside the confidence interval only in case of MSE and variance for $n = 200$. The zero is not in any of the confidence intervals, same as any of the values for smaller samples. The size of the samples being so small also might have affected these results. Even though we had a 1000 replications all the estimators were worse than in the bigger sample. 
+
+# Analysis of the p-value
+
+## Theoretical analysis
+
+In this part, we have a sample size $n$ from the exponential distribution with density $f(x, \lambda) = \lambda e^{-\lambda x}$, for $x > 0, \lambda >0$. The test that we will consider in the analysis is the most powerful test at the significance level $\alpha = 0.05$ for the hypothesis $H_0: \lambda = 5$ against $H_1: \lambda = 3$. 
+
+To find the formula for the critical value in this test we need to use the Neyman-Pearson lemma. Based on it, we can determine the cirical value from: $$\frac{\prod^n_{i = 1} f_1(x_i)}{\prod^n_{i = 1} f_0(x_i)} > const$$ From this, we can determine the test statistic. In our case, the calculations look like this: $$\frac{\prod^n_{i = 1} f_1(x_i)}{\prod^n_{i = 1} f_0(x_i)} = \frac{\prod_{i = 1}^n 3 e^{-3x_i}}{\prod_{i = 1}^n 5 e^{-5x_i}} = \ ... \ = \frac{3^n}{5^n} e^{\left(2 \sum_{i = 1}^n x_i \right)} > const$$
+
+That gives us the test statistic: $$\sum^n_{i = 1} x_i > c$$ where $c$ is a constant, different than before. Because each $X_i$ is a random variable from exponential distribution, we can say that the sum, so our test statistic, has gamma distribution with parameters $n$ and $\lambda$. To determine the constant $c$ we need to use the knowledge of the significance level $\alpha$. That is: $$\mathbb{P}_{H_0}\left( \sum^n_{i = 1} x_i > c \right) = 0.05$$ After some transformations we end up with $$\mathbb{P}\left( \sum^n_{i = 1} x_i \leq c \right) = 0.95$$ The $c$ here is determined by the quantile function for the gamma distribution with parameters $n$ and $\lambda$. The second parameter in our case will be equal to $5$, since we calculate the probability under the null hypothesis. That means we can write it as: $$c = F^{-1}_{gamma(n, 5)}(0.95)$$
+
+To calculate the power, using the value $c$ calculated above we need to determine $$\text{Power} = \mathbb{P}_{H_1} \left( \sum_{i = 1}^n x_i > c\right) = 1 - \mathbb{P}_{H_1} \left( \sum_{i = 1}^n x_i <= c\right)$$ It is worth mentioning that in this case, the $\lambda$ parameter will be set equal to 3, since that is the value under the alternative. We can also write the power as: $$\text{Power} =  1 - F_{gamma(n, 3)}(F^{-1}_{gamma(n, 5)}(0.95))$$
+
+Because in this part we are going to focus mostly on the p-values in this test, we need to first provide the pormula for p-value for a given sample. We know, that p-value is the probability of getting more extreme results in the test under null hypothesis than the one determined by test statistic. In other words, it is the probability, that some random variable is greater than the value of our test statistic. In our case $$p = \mathbb{P}_{H_0}\left( T > \sum^n_{i = 1} x_i \right) = 1 - \mathbb{P}_{H_0}\left( T \leq \sum^n_{i = 1} x_i \right)$$ We know what the distribution is under the null hypothesis. That means that the p-value is: $$p = 1 - F_{gamma(n, 5)}\left( \sum^n_{i = 1} x_i \right)$$
+
+```{r, echo = FALSE}
+h0_sample <- rexp(20, 5)
+h1_sample <- rexp(20, 3)
+```
+
+As an example we will calculate the p-values for two samples size $n = 20$ - one from $H_0$ and the other from $H_1$. The values are `r round(1 - pgamma(sum(h0_sample), 20, 5), 5)` for the null hypothesis and `r round(1 - pgamma(sum(h1_sample), 20, 5), 5)` for the alternative. They align with the theory, since we expect there to be higher probability of this test statistic if the null hypothesis is true. In here we can even see, that the p-value is less than $\alpha = 0.05$ in the alternative, so the test can work as intended. 
+
+Last important part that we need to do before the simulations is determining the distribution of the p-value when the data come from $H_0$. We can find, that the p-value in this case has the uniform distribution on $[0, 1]$. Let us show why this is true. The p-value looks like this: $$p = 1 - F_{gamma(n, 5)}\left( \sum^n_{i = 1} x_i \right)$$ We know, that $\sum^n_{i = 1} x_i$ has the gamma distribution with parameters $n$ and $5$. That means, that $F_{gamma(n, 5)}\left( \sum^n_{i = 1} x_i \right)$ has uniform distribution (based on Probability Integral Transform). So $1 - F_{gamma(n, 5)}\left( \sum^n_{i = 1} x_i \right)$ also have the same uniform distribution. That shows that the p-value has the uniform distribution when the data comes from $H_0$. On the other hand, when the data comes from $H_1$, we expect the p-value to be small.
+
+## Analysis based on simulations
+
+To do the analysis based on simulations we will generate 1000 samples for two sizes, $n = 20$ and $n = 200$. The samples will also be generated from each hypothesis. Based on them, we are going to be calculating respective p-values and drawing histograms and q-q plots for uniform distribution. Then we will use the simulations to construct the 95% confidence interval for the type I error of the test (for the samples coming from $H_0$) and the same intervals for the power of the test (for samples coming from $H_1$). 
+
+Firstly let us look at the histograms:
+
+```{r, echo = FALSE, fig.height=3.5}
+pvalues <- lapply(c(20, 200), function(n) {
+  pvalue_h0 <- replicate(1000, {
+    sample <- rexp(n, 5)
+    1 - pgamma(sum(sample), n, 5)
+  })
+  
+  pvalue_h1 <- replicate(1000, {
+    sample <- rexp(n, 3)
+    1 - pgamma(sum(sample), n, 5)
+  })
+  list(
+    pvalue_h0 = pvalue_h0,
+    pvalue_h1 = pvalue_h1)
+})
+
+names(pvalues) <- paste0("n_", n)
+
+df_pvalues <- lapply(names(pvalues), function(name) {
+  data.frame(
+    n = name,
+    pvalue_h0 = pvalues[[name]]$pvalue_h0,
+    pvalue_h1 = pvalues[[name]]$pvalue_h1
+  )
+}) %>%
+  bind_rows()
+
+df_long_pvalues <- df_pvalues %>%
+  pivot_longer(cols = c(pvalue_h0, pvalue_h1),
+               names_to = "hypothesis",
+               values_to = "pvalue")
+
+ggplot(df_long_pvalues, aes(x = pvalue, fill = hypothesis)) +
+  geom_histogram(aes(y = ..density..), position = "identity", bins = 30, alpha = 0.6) +
+  geom_vline(xintercept = 0.05, col = "salmon4") +
+  geom_hline(yintercept = 1, col = "skyblue4") +
+  facet_wrap(~n) +
+  labs(
+    title = "Histogram of p-values (H0 vs. H1)",
+  ) +
+  scale_fill_manual(values = c("pvalue_h0" = "salmon1", "pvalue_h1" = "skyblue")) +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```  
+
+As we can see on those histograms, the pvalue for the samples from the alternative are mostly smaller than the value $\alpha = 0.05$ represented by the dark line. In the bigger sample we can even see that all of them are smaller than $0.05$. When it comes to the pvalues under the null hypothesis we can see that all of the values are on a very similar level. That is to be expected, since the p-value has the uniform distribution under $H_0$, where the density is constant, represented on the plot with a dark blue horizontal line. The height of the bars align a little better on the plot for the larger samples, which is also unsurprising.
+
+Next let us look at the q-q plots for uniform distribution.
+
+```{r, echo = FALSE, fig.height = 3.6}
+ggplot(df_long_pvalues, aes(sample = pvalue, col = hypothesis)) +
+  stat_qq(distribution = qunif) +
+  stat_qq_line(distribution = qunif) +
+  facet_wrap(~n) + 
+  labs(
+    title = "Q-Q plot of p-values (H0 vs. H1)",
+  ) +
+  scale_color_manual(values = c("pvalue_h0" = "salmon1", "pvalue_h1" = "skyblue")) +
+  theme_bw() +
+  theme(legend.position = "bottom")
+```
+
+As we can see on these plots, the p-values for the samples under the null hypothesis align very well with theoretical quantiles. That means we can safely say, that the simulations confirm the distribution determined before. The difference between sizes in this case is not visible in this form. When it comes to the p-values from the samples under the alternative, it does not look like they have the uniform distribution. The plot for the sample size $n = 20$ gets far from the line on the right side of the plot. Something different happens on the q-q plot for the larger sample size. The plot is really low on the axis. That means, that the p-values in this case are incredibly close to $0$. That is what we expect after looking at the histograms.
+
+At last, we are going to focus on the analysis of the confidence intervals for the type I error of the test and the power of the test (first based on the calculated p-values from the samples under $H_0$, and second from p-values from the samples under $H_1$). We wil do this using the `binom.test()` function. All the values, with theoretical calculation for power, based on previous formulas will be presented in a table form.
+
+```{r, echo = FALSE}
+rejected_20_h0 <- sum(pvalues[["n_20"]][["pvalue_h0"]] <= 0.05)
+rejected_200_h0 <- sum(pvalues[["n_200"]][["pvalue_h0"]] <= 0.05)
+rejected_20_h1 <- sum(pvalues[["n_20"]][["pvalue_h1"]] <= 0.05)
+rejected_200_h1 <- sum(pvalues[["n_200"]][["pvalue_h1"]] <= 0.05)
+
+ci_20_h0 <- binom.test(rejected_20_h0, 1000)$conf.int
+ci_200_h0 <- binom.test(rejected_200_h0, 1000)$conf.int
+ci_20_h1 <- binom.test(rejected_20_h1, 1000)$conf.int
+ci_200_h1 <- binom.test(rejected_200_h1, 1000)$conf.int
+
+true_power_20 <- 1 - pgamma(qgamma(0.95, 20, 5), 20, 3)
+true_power_200 <- 1 - pgamma(qgamma(0.95, 200, 5), 200, 3)
+
+df_type_I_error <- data.frame(
+  conf_int <- c(paste0("[", round(ci_20_h0[1], 4), ", ", round(ci_20_h0[2], 4), "]"), paste0("[", round(ci_200_h0[1], 4), ", ", round(ci_200_h0[2], 4), "]"))
+)
+
+rownames(df_type_I_error) <- c("n = 20", "n = 200")
+colnames(df_type_I_error) <- "Confidence Interval"
+
+kable(df_type_I_error, format = "latex", align = "ccc", caption = "Confidence Intervals for Type I error") %>% kable_styling(latex_options = c("hold_position"))
+
+df_power <- data.frame(
+  true_power <- c(true_power_20, true_power_200),
+  conf_int <- c(paste0("[", round(ci_20_h1[1], 4), ", ", round(ci_20_h1[2], 4), "]"), paste0("[", round(ci_200_h1[1], 4), ", ", round(ci_200_h1[2], 4), "]"))
+)
+
+rownames(df_power) <- c("n = 20", "n = 200")
+colnames(df_power) <- c("True value", "Confidence Interval")
+```
+
+First let us focus on the table for the confidence intervals for type I error. We know that the expected value of type I error is $0.05$, since that is our $\alpha$. In our case we can notice that the value is inside the interval in both cases. The ends are also really close in both cases.
+
+\newpage
+
+```{r, echo = FALSE}
+kable(df_power, format = "latex", align = "ccc", caption = "Confidence Intervals for Power with real value") %>% kable_styling(latex_options = c("hold_position"))
+```
+
+When it comes to the confidence interval for the power and comparison to its true value presented in the table we can see, that in both cases the real value is inside the interval. We can also see that the power in both tests (especially the one for $n = 200$) is very high and that means that the test is really good at determining when the null hypothesis is false and in almost all the cases correctly identifies when to reject $H_0$.
+
+# Summary
+
+The analysis above focused on comparing different estimators for the beta distribution with parameters 6 and 1. Crucial point of this text was also the analysis of the p-values of the test with simple hypothesis where the sample came from the exponential distribution. All of the deep dive was done through theoretical calculations and simulations. 
+
+When it comes to the comparison between the maximum likelihood estimator and the moments estimator there were little to no differences found. The simulations showed that in case of the generated samples they behaved almost identical. 
+
+The second analysis, focused on the p-values for the uniformly most powerful test, showed that p-value under the null hypothesis has the uniform distribution, while under the alternative this property no longer holds. The test also had low type I error and high power, meaning that it mostly correctly identified the hypothesis.
+
+In the entire report we could notice that increasing the size of the sample gave better results than before. 

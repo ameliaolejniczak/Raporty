@@ -1,0 +1,370 @@
+---
+title: "Global testing - Bonferroni, Fisher and Neyman-Pearson tests"
+author: "Amelia Olejniczak"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+setwd("C:\\Users\\ameli\\Documents\\R\\theoretical foundations of large data sets")
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+set.seed(411)
+```
+
+# Introduction
+
+This report takes a closer look at the Global testing problem. Firstly, we are going to look at the Global testing of the expected value of a sample from the Poisson distribution using Fisher's Combination Test and Bonferroni's method. We are going to look at their probability of type I error as well as power in two problems: "many small effects" and "needle in the haystack". The next part is going to focus mostly on the Neyman-Pearson most optimal test for "needle in the haystack" problem in normal distribution, with needle $\gamma$. For $\gamma = (1 - \epsilon) \sqrt{2 \log n}$ we are going to compare the $L$ and $\widetilde{L}$ statistics - their values on histogram, their variance as well as probability of them being equal. Then we change the needle to $\gamma = (1 + \epsilon) \sqrt{2 \log n}$ and we test the powers of Bonferroni and Neyman-Pearson test in the same problem. At the very end we are going to compare the t-Student distribution and standardised $\chi^2$ distribution to well known standard normal distribution.
+
+# Global testing of the expected value of the Poisson distribution
+
+Firstly, let us consider a sample $X_1, ..., X_n$ from the Poisson distribution. We create a testing problem, where we want to check, if the expected value of this sample is greater or equal to 5. So the tested single hypothesis can be written as: $$H_0: \mathbb{E}(X_i) = 5 \qquad vs. \qquad H_1: \mathbb{E}(X_i) > 5$$ The test statistic in this case is $t = \sum^n_{i = 1} X_i$ since we know, that this sum has the Poisson distribution with $\lambda = n \cdot 5$ under the null hypothesis (because $X_i$ under the null hypothesis has Poisson distribution with $\lambda = 5$).
+
+We want to analyse the p-value of this test. We know, that the p-value is the probability of getting results same or more extreme than the ones recieved from our sample. Because this is a one-sided test, we can calculate the p-value as $$\mathbb{P}_{H_0}(T \geq t) = 1 - \mathbb{P}(T < t)$$ where $t$ is our observed statistic and $T$ is a random variable with Poisson distribution with $\lambda = n \cdot 5$. Since the Poisson distribution is discrete, the probability of $T$ being equal to $t$ is non-zero and therefore there is no equality between $\mathbb{P}(T < t)$ and $\mathbb{P}(T \leq t)$. In this case, to calculate it using R's function `ppois()` we need to subtract $1$ from the test statistic. Then we can create function, where from our sample we calculate p-value as `1 - ppois(sum(sample) - 1, n * 5)`, where `n` is the length of the sample.
+
+```{r, echo = FALSE}
+calculating_pvalue <- function(sample) {
+  n <- length(sample)
+  sum_s <- sum(sample)
+  1 - ppois(sum_s - 1, n * 5)
+}
+```
+
+Now, let us consider a 1000 of those hypotheses with a sample length $n = 100$ and calculate respective p-values. To do that, we need to generate a $1000$ samples from the null hypothesis, all with $n = 100$ elements and calculate respective p-values. Below, we can see a histogram of the obtained results. 
+
+```{r, echo = FALSE, warning = FALSE, fig.height=3.5}
+p_values <- replicate(1000, {
+  sample <- rpois(100, 5)
+  calculating_pvalue(sample)
+})
+
+df <- data.frame(p_values = p_values)
+
+ggplot(df, aes(x = p_values)) +
+  geom_histogram(bins = 20, fill = "skyblue", alpha = 0.8, aes(y = ..density..)) +
+  geom_hline(yintercept = 1, col = "black") + 
+  theme_bw() +
+  labs(title = "Histogram of p-values",
+       x = "p-value",
+       y = "density")
+```
+
+We can see on the histogram above, that the bins are more or less similar to each other. We know, that if the test statistic has some continuous distribution under the null hypothesis, the p-values have uniform distribution $p \sim U[0, 1]$. In our case, when the test statistic has discrete distribution, we cannot say that distribution of p-values is exactly uniform, but based on the histogram we can assume that it is fairly similar. 
+
+## Testing the global hypothesis using Fisher and Bonferroni test
+
+Next, we are going to consider the problem of testing the global hypothesis $H_0 = \bigcap_{j = 1}^{1000}H_{0j}$. Where $H_j$ is the hypothesis explained before. Based on simulations we are going to estimate the type I error for the Bonferroni and Fisher's test at the significance level $\alpha = 0.05$. 
+
+To do that, firstly we need to explain the pocedure in both tests. Let us start from the Bonferroni method. We need to calculate p-value for each hypothesis $H_i$. Then based on those calculated p-values we reject the global null $H_0$ if $$\min_i p_i \leq \frac{\alpha}{n}$$ In case of the Fisher's Combination Test we use the same calculated p-values and then we need the statistic $$T = -\sum^n_{i = 1} 2 \log p_i$$ which for independent $p_1, ..., p_n \sim U[0, 1]$ has the chi square distribution with $2n$ degrees of freedom. We know that the p-values are uniformly distributed under the null hypothesis and that means that for independent hypotheses $H_1, ..., H_n$ and for given significance level $\alpha$ Fisher's Combination Test rejects the global null if $$T > \chi^2_{2n}(1 - \alpha)$$
+
+To estimate the probability of the type I error for our test we need to generate samples from the null hypotheses and then check how often the null hypotheses is rejected in both of these cases. The results are presented in the table below. 
+
+\newpage
+
+```{r, echo = FALSE}
+testing_c <- readRDS("testing_c.rds")
+
+type_i_errors <- data.frame(
+  Bonferroni = mean(testing_c[1, ]),
+  Fisher = mean(testing_c[2, ])
+)
+
+rownames(type_i_errors) <- "Type I Error"
+
+kable(type_i_errors, caption = "Probability of Type I Errors for Fisher and Bonferroni", format= "latex", align = "ccc") %>% kable_styling(latex_options = c("hold_position"))
+```
+
+As we can see, the probability of the type I error is close to true $\alpha = 0.05$ for the Bonferroni's method. We know that it is supposed to control this probability on level $\alpha$ so it is not surprising. The Fisher's Combination Test has this probability much smaller than the value of $\alpha$. The reason for this might be because the assumptions are not exactly met. If we look back at the theoretical description of this test, we see that the p-values must be uniformly distributed for this test to work properly. In our case, like said before, the p-values are not exactly uniformly distributed, since the test statistic comes from discrete distribution. That means the distribution of the p-value is approximately uniform and that might be problematic for the test to work well.
+
+Let us now analyse the power of these methods in two cases. First we have the "needle in the haystack" problem where we change the alternative to $$\mathbb{E}(X_1) = 7 \quad \text{and} \quad \mathbb{E}(X_j) = 5 \ \text{for} \ j \in \{2, ... 1000\}$$ The second case that we will look at is the "many small effects" problem, where the alternative looks like this: $$\mathbb{E}(X_j) = 5.2 \quad \text{for} \quad j \in \{1, ..., 100\} \quad \text{and} \quad \mathbb{E}(X_j) = 5 \quad \text{for} \quad j \in \{101, ..., 1000 \}$$ To estimate the power of the tests we are going to generate samples from each alternative and calculate the values same as before. The estimated powers are presented in a table below
+
+```{r, echo = FALSE}
+needle_in_the_hay <- readRDS("needle_in_the_hay.rds")
+
+many_small_eff <- readRDS("many_small_eff.rds")
+
+powers <- data.frame(
+  Bonferroni = c(mean(needle_in_the_hay[1, ]), mean(many_small_eff[1, ])), 
+  Fisher = c(mean(needle_in_the_hay[2, ]), mean(many_small_eff[2, ]))
+)
+
+rownames(powers) <- c("Needle in the hay", "Many small effects")
+
+kable(powers, caption = "Power of the test for Fisher and Bonferroni", format= "latex", align = "ccc") %>% kable_styling(latex_options = c("hold_position"))
+```
+
+As we can see in the table above, the power for the Bonferroni test is significantly better for the "needle in the haystack" problem, compared to "many small effects". The Fisher's works the other way around (so pretty good for "many small effects" and worse for "needle in the haystack"), however the difference between powers is not as visible. It is consistent with the theory, where we know that the Bonferroni's test is expected to be powerful if there is at least one very significant alternative and thus one at least one very significant p-value. The theory also states that the Bonferroni's test tends to be powerless where we have many small alternatives. The Fisher test is powerful in this situation (since it aggregates all of the p-values in log scale), while being less powerful when there are a few strong effects. We can see exactly that in the table above.
+
+# Neyman-Pearson Estimators
+
+Let us have $Y = (Y_1, ..., Y_n)$ which is a random vector from $N(\mu, I)$ distribution. We consider a test: $$H_0: \mu = 0 \quad vs. \quad H_1: \textit{one of the elements of } \mu \textit{ is equal to } \gamma$$ where $\gamma = (1 - \epsilon) \sqrt{2 \log{n}}$ and $\alpha = 0.05$. We know, that the statistic $L$ of the optimal Neyman-Pearson test is as such: $$L = \frac{1}{n} \sum_{i = 1}^n e ^{\gamma Y_i - \gamma^2/2}$$ and we can approximate it as $$\widetilde{L} = \frac{1}{n} \sum_{i = 1}^n \left[ e^{\gamma Y_i - \gamma^2/2} \mathbf{1}_{\{ Y_i < \sqrt{2 \log{n}}\}} \right]$$
+
+## Determining the $L$ statistic using the Neyman-Pearson lemma
+
+Let us show, how to determine the $L$ statistic using the Neyman-Pearson lemma. Firstly, we need to remind ourselves the content of this lemma. It says, that for the test $$H_0: f = f_0 \quad vs. \quad H_1: f = f_1$$ the most optimal test (meaning - the test that has the largest power for given significance level $\alpha$) is based on the statistic: $$L(X) = \frac{\prod_{i = 1}^n f_1(X_i)}{\prod_{i = 1}^n f_0(X_i)} = \frac{f_1(X)}{f_0(X)}$$ where $X = (X_1, ..., X_n)$. 
+
+The relationship between our test and the one described above might not be visible at first glance, but if we write the alternative as $H_1: \mu = \mu^{\pi}$, where $\mu^{\pi}$ is a vector, where $mu_i = \gamma$ and $i$ is chosen randomly with probability $\frac{1}{n}$ (so $\mathbb{P}(\pi = i) = \frac{1}{n}$). Now, we can see, that under the null hypothesis $Y \sim N(0, I)$ and under the alternative $Y \sim N(\mu^{\pi}, I)$. It is fairly easy to determine the density under $H_0$ as: $$f_0(Y) = \prod^n_{i = 1} \frac{1}{\sqrt{2 \pi}} e^{\frac{Y_i^2}{2}}$$ Under the alternative we need to additionally remember about the Law of total probability, where we write that $$f_1(Y) = \sum_{i = 1}^n \mathbb{P}(\pi = i) f(Y \ | \ \pi = i)$$ which corresponds to the model where exactly one coordinate is shifted, uniformly at random. Since $\mathbb{P}(\pi = i) = \frac{1}{n}$ and $f(Y \ | \ \pi = i)$ is a product of density of normal distribution, where $Y_i \sim N(\gamma, 1)$ and the rest of them has standard normal distribution the final form of the formula is as follows: 
+
+$$f_1(Y) = \frac{1}{n} \sum_{j = 1}^n \frac{1}{\sqrt{2\pi}} e^{-\frac{(Y_j - \gamma)^2}{2}} \prod^n_{i \neq j} \frac{1}{\sqrt{2\pi}} e ^{-\frac{Y_i^2}{2}}$$
+
+Then, using the Neyman-Pearson lemma: $$L = \frac{f_1(Y)}{f_0(Y)} = \frac{\frac{1}{n} \sum_{j = 1}^n \frac{1}{\sqrt{2\pi}} e^{-\frac{(Y_j - \gamma)^2}{2}} \prod^n_{i \neq j} \frac{1}{\sqrt{2\pi}} e ^{-\frac{Y_i^2}{2}}}{\prod^n_{i = 1} \frac{1}{\sqrt{2 \pi}} e^{-\frac{Y_i^2}{2}}} = \frac1n \sum_{j = 1}^n \frac{e^{-\frac{(Y_j - \gamma)^2}{2}}}{e^{-\frac{Y_i^2}{2}}} = \frac{1}{n} \sum_{i = 1}^n e ^{\gamma Y_i - \gamma^2/2}$$ Which gives us the same statistic as shown at the beginning.
+
+## Analysis of the histograms
+
+Let us start the analysis from looking at the histograms of $1000$ values of $L$ and $\widetilde{L}$ for three sample sizes - $n = 1000$, $n = 10000$ and $n = 100000$. 
+
+```{r, echo = FALSE, warning = FALSE, fig.height=3.5}
+n_list <- c(1000, 10000, 100000)
+
+Ls <- readRDS("Ls.rds")
+
+df_list <- lapply(seq_along(n_list), function(i) {
+  mat <- t(Ls[[i]])
+  df <- as.data.frame(mat)
+  df$n <- n_list[i]
+  df
+})
+
+df_all <- bind_rows(df_list) %>%
+  pivot_longer(cols = c("L", "L_tilde"), names_to = "Type", values_to = "Value")
+
+ggplot(df_all, aes(x = Value, fill = Type)) +
+  geom_histogram(alpha = 0.6, position = "identity", bins = 50, aes(y = ..density..)) +
+  facet_wrap(~n) +
+  labs(title = "L and L_tilde histograms",
+       fill = "Type") +
+  theme_bw()
+```
+
+When we look at the histograms we can see that most of the values for both statistics are rather small. The larger values appear only for the $L$ statistics and they go up to around $90$. That means, that the $L$ statistic can occasionally attain really high values. The characteristic function in $\widetilde{L}$ notices the high values in $Y$ and removes the ones greater or equal than $\sqrt{2 \log n}$.
+
+## Analysis of the variance
+
+Now let us look at the variance of these statistics. We expect, looking at the histograms above, that the $L$ statistic would have much higher variance than $\widetilde{L}$. We can see received values in the table below.
+
+```{r, echo = FALSE}
+variance <- lapply(Ls, function(l) {
+  var_L <- var(l[1, ])
+  var_L_hat <- var(l[2, ])
+  list(var_L = var_L, var_L_hat = var_L_hat)
+})
+
+df_var <- data.frame(
+  var_L = c(variance[[1]][["var_L"]], variance[[2]][["var_L"]], variance[[3]][["var_L"]]),
+  var_L_tilde = c(variance[[1]][["var_L_hat"]], variance[[2]][["var_L_hat"]], variance[[3]][["var_L_hat"]])
+)
+
+rownames(df_var) <- c("n = 1000", "n = 10000", "n = 100000")
+colnames(df_var) <- c("L", "L_tilde")
+
+kable(df_var, caption = "Estimated variance for the statistic from Neyman-Pearson test", format= "latex", align = "ccc") %>% kable_styling(latex_options = c("hold_position"))
+```
+
+As we can see, the values are as expected - for the $L$ statistic it is between $5$ and $11$, while for the $\widetilde{L}$ statistic it is pretty low, all around $0.1$. It stays true with the theory, where we know, that $\text{Var} \widetilde{L} \rightarrow 0$ for $n \rightarrow \infty$ and we see that exactly in the results.
+
+## Estimated probability $\mathbb{P}(L = \widetilde{L})$
+
+The probability, that $L = \widetilde{L}$ is equivalent to the probability that $Y_i < \sqrt{2 \log n}$, since if it is true, then $\mathbf{1}_{\{ Y_i < \sqrt{2 \log{n}}\}} = 1$ and equality occurs between the two statistics. So the problem can be simplified to finding the probability that $Y_i < \sqrt{2 \log n}$ for all $i$. Since $Y \sim N(0, I)$ under the null hypothesis, we can calculate that probability as $\mathbb{P}(X < \sqrt{2 \log n})^n$, where $X$ is a random variable from standard normal distribution.
+
+The same probability in our scenario can be estimated using our calculated statistics. We need to check when the statistics are equal to each other and divide the number of that by the number of replicates. Below, we can see the theoretical and estimated probability for each $n$.
+
+```{r, echo = FALSE}
+theoretical_probabilities <- lapply(n_list, function(n) {
+  value <- sqrt(2 * log(n))
+  pnorm(value)^n
+})
+
+probabilities <- lapply(Ls, function(l) {
+  mean(l[1, ] == l[2, ])
+})
+
+df_prob <- data.frame(
+  theoretical_probabilities <- c(theoretical_probabilities[[1]], theoretical_probabilities[[2]], theoretical_probabilities[[3]]),
+  estimated_probabilities <- c(probabilities[[1]], probabilities[[2]], probabilities[[3]])
+)
+
+rownames(df_prob) <- c("n = 1000", "n = 10000", "n = 100000")
+colnames(df_prob) <- c("Theoretical", "Estimated")
+
+kable(df_prob, caption = "Probability", format= "latex", align = "ccc") %>% kable_styling(latex_options = c("hold_position"))
+```
+
+As we can see there, the probabilities are more or less similar to the theoretical values. The difference is nonsignificant for all of them. We can see, that the values get closer to $1$ the bigger the size is. Since we know, that $\mathbb{P}(\widetilde{L} \neq L) \rightarrow 0$ for $n \rightarrow \infty$, so it is not surprising that $\mathbb{P}(\widetilde{L} = L) \rightarrow 1$ for $n \rightarrow \infty$ as shown above.
+
+# Power of Neyman-Pearson test in comparison to Bonferroni test for needle in the haystack problem
+
+In this section we are going to analyse the power of the Neyman-Pearson test in comparison to Bonferroni test in testing problem described before. Main difference can be found in the way $\gamma$ is defined, since now $\gamma = (1 + \epsilon) \sqrt{2 \log{n}}$. We will consider $\epsilon \in \{ 0.05, 0.2 \}$ and $n \in \{ 500, 5000, 50000\}$. Before we can do the analysis we need to find the critical value of the optimal Neyman-Pearson test numerically.
+
+## Determining the critical value
+
+We are going to generate $10000$ replications of the $\log L$ statistic for sample size $n$ from the null hypothesis. For the $\log L$ statistic the calculations get a bit easier, that is why we are going to use it. The chosen number of replications ($10000$) is a good compromise between the results' accuracy and time it takes to generate and calculate them. Then we are going to take the $0.95$ quantile to get the critical value where we reject the null hypothesis. Below we can see the table with calculated critical values:
+
+```{r, echo = FALSE}
+n_values <- c(500, 5000, 50000)
+B <- 10000
+epsilon_values <- c(0.05, 0.2)
+alpha <- 0.05
+
+results <- readRDS("results.rds")
+
+df_c <- data.frame(
+  epsilon_05 <- c(results[[1]][[1]][["critical_value"]], results[[2]][[1]][["critical_value"]], results[[3]][[1]][["critical_value"]]),
+  epsilon_2 <- c(results[[1]][[2]][["critical_value"]], results[[2]][[2]][["critical_value"]], results[[3]][[2]][["critical_value"]])
+)
+
+rownames(df_c) <- c("n = 500", "n = 5000", "n = 50000")
+colnames(df_c) <- c("epsilon = 0.05", "epsilon = 0.2")
+
+kable(df_c, caption = "Critical values", format= "latex", align = "ccc") %>% kable_styling(latex_options = c("hold_position"))
+```
+
+We can see, that the values are smaller for the $\epsilon = 0.2$ and for both values of $\epsilon$ they decrease when we increase the sample size.
+
+## Power of the Neyman-Pearson test and Bonferroni's method 
+
+After determining the critical value we need to calculate the powers of both tests. For that we need to generate $10000$ samples from the alternative (so we generate vectors, where one random element has distributon $N(\gamma, 1)$, and the rest have standard normal distribution). We choose the same number of samples as before, since it can give us more stable results. Then, for the Neyman-Pearson test we check how often we reject the null hypothesis (so how often $\log L$ is greater than estimated critical value). For the Bonferroni method we consider test $$H_0: \mu = 0 \quad vs. \quad H_1: \mu \neq 0$$ which is a different way to write our testing problem. Since this test has two-sided alternative we reject the global null if $$\max_i |Y_i| > \left|z\left(\frac{\alpha}{2n}\right)\right|$$ where $z\left(\frac{\alpha}{2n}\right)$ is a quantile from standard normal distribution. Below, we can see a plot with calculated powers for both tests.
+
+```{r, echo = FALSE, fig.height = 3.5}
+df <- bind_rows(
+  lapply(seq_along(n_values), function(i) {
+    bind_rows(
+      lapply(seq_along(epsilon_values), function(j) {
+        x <- results[[i]][[j]]
+        data.frame(
+          n = n_values[i],
+          epsilon = epsilon_values[j],
+          critical_value = x$critical_value,
+          power_L = x$power_L,
+          power_bonf = x$power_bonf
+        )
+      })
+    )
+  })
+)
+
+df_long <- df %>%
+  pivot_longer(cols = c(power_L, power_bonf),
+               names_to = "method",
+               values_to = "power") %>%
+  mutate(method = factor(method,
+                         levels = c("power_L", "power_bonf"),
+                         labels = c("Neyman-Pearson", "Bonferroni")))
+
+ggplot(df_long, aes(x = n, y = power, color = method)) +
+  geom_point(size = 4) +
+  facet_wrap(~ epsilon) +
+  theme_bw() +
+  labs(title = "Power comparison (Bonferroni vs. Neyman-Pearson)",
+       x = "n",
+       y = "Power",
+       color = "Method")
+```
+
+Above we can see, that the power for the optimal Neyman-Pearson test is greater than the power for the Bonferroni test in every circumstance. It is expected, since the Neyman-Person is the optimal test in this circumstance. The difference is smaller for bigger $\epsilon$, and bigger sample size. The power for both of them is worse for the smaller $\epsilon$ and gets a bit better when the sample size gets bigger. Good power for the bigger $\epsilon$ is expected, since it also means bigger $\gamma$ and it is easier for both tests to find the $\gamma$ values much above threshold.
+
+## Comparison to $R_n$
+
+Now let us consider the function $$R_n = \frac{\max \{ X_i: i = 1, ..., n\}}{\sqrt{2 \log n}}$$ where $X_1, ..., X_{100000}$ are iid random variables from standard normal distribution. We are going to look at the graphs of this function for $n \in \{ 2, ..., 100000 \}$ repeated $10$ times and analyse it in relation to test above.
+
+```{r, echo = FALSE, warning = FALSE, fig.height=3.5}
+Rs <- readRDS("Rs.rds")
+
+df <- data.frame(N = 2:100000, do.call(cbind, Rs))
+colnames(df)[-1] <- paste0("Run_", 1:10)
+
+df_long <- df %>%
+  pivot_longer(cols = starts_with("Run_"), names_to = "Run", values_to = "Value")%>%
+  mutate(Run = factor(Run, levels = paste0("Run_", 1:10)))
+
+ggplot(df_long, aes(x = N, y = Value, color = Run)) +
+  geom_line(size = 0.8) +
+  labs(title = "Rn trajectories",
+       x = "N",
+       y = "Rn") +
+  theme_bw() +
+  theme(legend.position = "right")
+```
+
+As we can see on the plots, the values get close to $1$ for large $n$. It is like this because, as we know from theory, large values from sample size $n$ from standard normal distribution converge to $\sqrt{2 \log n}$ for $n \rightarrow \infty$. This knowledge is important for the previous task and it justifies chosen "needle" $\gamma$. Since $(1 + \epsilon) \sqrt{2 \log n} > \sqrt{2 \log n}$ the "needle" is detectable in both tests.
+
+# Cdfs of the Student's distribution and standardised chi-square distribution in comparison to the standard normal distribution
+
+In the last part we are going to compare the cdf of the Student's distribution and standardized chi-square distribution with the cdf of the standard normal distribution. Below, we can see the plot with the cdf of normal distribution (in a black line) and the Student's distribution with $df \in \{ 1, 3, 5, 10, 50, 100\}$. We expect them to be really close to each other. 
+
+If $T$ is a random variable from t-Student distribution with $n$ degrees of freedom, $Z \sim N(0, 1)$ and $U \sim \chi^2_n$ we know that: $$T \sim \frac{Z}{\sqrt{U}} \sqrt{n} = \frac{Z}{\sqrt{\frac{U}{n}}}$$ for $n \rightarrow \infty$. From the Law of Large Numbers we know that $$\frac{U}{n} \rightarrow \mathbb{E}(X_i)^2 = 1$$ and from that $T \sim Z$. That shows that $T \overset{D}\rightarrow N(0, 1)$.
+
+```{r, echo = FALSE, fig.height=3.5}
+x_range <- c(-3, 3)
+
+ggplot(data.frame(x = x_range), aes(x)) +
+  stat_function(fun = function(x) pt(x, 1), aes(color = "t(1)"), size = 1) +
+  stat_function(fun = function(x) pt(x, 3), aes(color = "t(3)"), size = 1) +
+  stat_function(fun = function(x) pt(x, 5), aes(color = "t(5)"), size = 1) +
+  stat_function(fun = function(x) pt(x, 10), aes(color = "t(10)"), size = 1) +
+  stat_function(fun = function(x) pt(x, 50), aes(color = "t(50)"), size = 1) +
+  stat_function(fun = function(x) pt(x, 100), aes(color = "t(100)"), size = 1) +
+  stat_function(fun = pnorm, aes(color = "N(0,1)"), size = 1) +
+  scale_color_manual(
+    name = "Distribution:",
+    values = c(
+      "N(0,1)" = "black",
+      "t(1)" = "#FFDE8B",
+      "t(3)" = "#FFA88B",
+      "t(5)" = "#FF6A8B",
+      "t(10)" = "#C874AA",
+      "t(50)" = "#AD8CFF",
+      "t(100)" = "#90CFFF"
+    )
+  ) +
+  coord_cartesian(xlim = x_range) +
+  labs(title = "Normal and Student distribution",
+       x = "x",
+       y = "cdf") +
+  theme_bw() +
+  theme(legend.position = "right")
+```
+
+As we can see there, the cdf gets closer to the standard normal distribution for the higher $df$. for $df = 50$ and $df = 100$ the difference is very small, insignificant even. This has its basis in theory described before. 
+
+Next let us see the cdfs for the standardized chi-square with $df$ same as above and the cdf of standard normal distribution (again, with black line). Here we also expect it to get closer to the normal cdf, since the standarization is of the form $$T = \frac{\chi^2_{df} - df}{\sqrt{2df}}$$ and from the Central Limit Theorem we know that it approaches the standard normal distribution.
+
+```{r, echo = FALSE, fig.height=3.5}
+stand_chisq_cdf <- function(x, df) {
+  pchisq(df + x * sqrt(2 * df), df)
+}
+
+ggplot(data.frame(x = x_range), aes(x)) +
+  stat_function(fun = function(x) stand_chisq_cdf(x, 1), aes(color = "standchisq(1)"), size = 1) +
+  stat_function(fun = function(x) stand_chisq_cdf(x, 3), aes(color = "standchisq(3)"), size = 1) +
+  stat_function(fun = function(x) stand_chisq_cdf(x, 5), aes(color = "standchisq(5)"), size = 1) +
+  stat_function(fun = function(x) stand_chisq_cdf(x, 10), aes(color = "standchisq(10)"), size = 1) +
+  stat_function(fun = function(x) stand_chisq_cdf(x, 50), aes(color = "standchisq(50)"), size = 1) +
+  stat_function(fun = function(x) stand_chisq_cdf(x, 100), aes(color = "standchisq(100)"), size = 1) +
+  stat_function(fun = pnorm, aes(color = "N(0,1)"), size = 1) +
+  scale_color_manual(
+    name = "Distribution:",
+    values = c(
+      "N(0,1)" = "black",
+      "standchisq(1)" = "#FFDE8B",
+      "standchisq(3)" = "#FFA88B",
+      "standchisq(5)" = "#FF6A8B",
+      "standchisq(10)" = "#C874AA",
+      "standchisq(50)" = "#AD8CFF",
+      "standchisq(100)" = "#90CFFF"
+    )
+  ) +
+  coord_cartesian(xlim = x_range) +
+  labs(title = "Normal and standardised chi-square distribution",
+       x = "x",
+       y = "cdf") +
+  theme_bw() +
+  theme(legend.position = "right")
+```
+
+In this case, we can see that the cdfs do not align as well as before. It also gets better when we increase the number of degrees freedom, but for $df = 50$ and $df = 100$ it is not as good as for the Student's distribution. But, since we can see the improvement when increasing the number of degrees freedom, it is also consistent with the theory.
