@@ -1,0 +1,523 @@
+---
+title: "Lista 2."
+author: "Amelia Olejniczak"
+output: 
+  pdf_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Zadanie 1.
+
+```{r, include=FALSE}
+setwd("C:\\Users\\ameli\\Documents\\R\\ml")
+```
+
+Do wykonania tego i kolejnych zadań wykorzystam dane o zależności czasu utrzymania od liczby kopiarek zapisane w pliku \textbf{CH01PR20.txt}. W pierwszym zadaniu mam przedstawić wszystkie dane na wykresie, zatem w poniższym kodzie to właśnie robię.
+
+Jak można zobaczyć, zapisuję dane z wyżej podanego pliku tekstowego do tabeli danych, którą nazywam `data`. Następnie zmieniam nazwy kolumn tak, by odzwierciedlały to, co znajduje się w pliku.
+
+Do narysowania wykresu punktowego wykorzystuję funkcję `plot`. Zmieniam w nim nazwy osi, kolor punktów oraz ich kształt. 
+
+```{r, fig.height=5, fig.width=8, fig.align='center'}
+data <- read.table('CH01PR20.txt')
+colnames(data) <- c("Czas", "Liczba_kopiarek")
+plot(data$Liczba_kopiarek, data$Czas, xlab="Liczba obsługiwanych kopiarek", ylab = "Czas obsługi", col = 'chocolate4', pch = 16)
+```
+
+Gdy spojrzymy na powyższe punkty, bez problemu jesteśmy w stanie zauważyć ich liniowość. Dla coraz większej liczby kopiarek, zwiększa się również czas potrzebny do ich obsługi.
+
+# Zadanie 2.
+
+Aby wyznaczyć estymowaną regresję liniową tych danych, potrzebujemy dwóch parametrów $\beta_1$ - później nazywany slope oraz $\beta_0$ - później nazwany intercept. Możemy ich estymowane wartości wyznaczyć w R na dwa sposoby - teoretyczny i korzystając z funkcji wbudowanych. W pierwszej kolejności zajmę się ich teoretycznym wyznaczaniem, a następnie wykorzystam wbudowane w R funkcje. Na koniec zaprezentuję dwa wykresy z prostą regresji liniowej, żeby widoczne było, że obie proste zostały wyznaczone poprawnie. 
+
+Wzory teoretyczne na wyliczenie slope oraz intercept prezentują się następująco: $$\hat{\beta}_1 = \frac{\sum^n_{i=1}{(X_i-\bar{X})(Y_i-\bar{Y})}}{\sum^n_{i=1}{(X_i-\bar{X})^2}}$$ $$\hat{\beta}_0 = \bar{Y} - \hat{\beta}_1\bar{X}$$ gdzie $X_i$ to kolejne dane z kolumny przedstawiającej liczbę kopiarek, a $Y_i$ to dane z kolumny czasu obsługi. $\bar{X}$ oraz $\bar{Y}$ to średnie tych zmiennych.
+
+Poniżej umieszczam kod, obliczający slope oraz intercept właśnie z powyższych wzorów.
+
+```{r}
+x <- data$Liczba_kopiarek
+y <- data$Czas
+xmean <- mean(x)
+ymean <- mean(y)
+slope_t <- sum((x - xmean)*(y - ymean))/sum((x - xmean)**2)
+intercept_t <- ymean - slope_t * xmean
+```
+
+Z kolei funkcje, które umożliwiają wyliczenie tego bezpośrednio w R są to `lm(Y~X, data=data)`, która wylicza m.in. właśnie potrzebny nam intercept oraz slope. Dokładne wyliczenie można zovbaczyć poniżej.
+
+```{r}
+colnames(data) <- c("Y", "X")
+ml <- lm(Y~X, data=data)
+intercept_r <- ml$coefficients[1]
+slope_r <- ml$coefficients[2]
+```
+
+Teraz narysuję oba wykresy, aby były widoczne obie proste regresji liniowej. Ta wyliczona ze wzorów teoretycznych będzie zaznaczona kolorem czerwonym, a ta wyliczona za pomocą komendy w R - kolorem zielonym.
+
+```{r}
+colnames(data) <- c("Czas", "Liczba_kopiarek")
+par(mfrow=c(1, 2))
+plot(data$Liczba_kopiarek, data$Czas, xlab="Liczba obsługiwanych kopiarek", ylab = "Czas obsługi", col = 'chocolate4', pch = 16)
+abline(a = intercept_t, b = slope_t, col = "red", lwd=2)
+plot(data$Liczba_kopiarek, data$Czas, xlab="Liczba obsługiwanych kopiarek", ylab = "Czas obsługi", col = 'chocolate4', pch = 16)
+abline(a = intercept_r, b = slope_r, col = "green", lwd=2)
+```
+
+Można zauważyć na poniższych wykresach, że obie wartości zostały wyliczone poprawnie. Widać, że znajdują się w tym samym miejscu i dzięki nim można lepiej zobaczyć liniowość badanych punktów.
+
+# Zadanie 3.
+
+Aby wyznaczyć 95% przedział ufności dla slope'a oraz intersepta również można skorzystać z dwóch sposobów - licząc ze wzorów teoretycznych oraz za pomocą kodów w R. W pierwszej kolejności, podobnie jak wcześniej, zajmę się tym pierwszym sposobem. Wykorzystam do niego wyliczone również z wzorów teoretycznych wartości estymatorów slope'a oraz intersepta.
+
+Zacznę od przedziału ufności dla slope'a. Ponieważ $\hat{\beta}_1 \sim N(\beta_1, \sigma^2(\hat{\beta}_1))$, gdzie $\sigma^2(\hat{\beta}_1) = \frac{\sigma^2}{\sum^n_{i=1}{(X_i - \bar{X})^2}}$ to przedział ufności o współczynniku ufności $1 - \alpha$ przy nieznanym parametrze $\sigma^2(\hat{\beta}_1)$ ma postać $$\hat{\beta}_1 \pm t_cs(\hat{\beta}_1)$$ gdzie $t_c$ jest to kwantyl rzędu $1 - \frac{\alpha}{2}$ rozkładu t-studenta z $n - 2$ stopniami swobody, a $s(\hat{\beta}_1)$ to pierwiastek kwadratowy z $$s^2(\hat{\beta}_1) = \frac{s^2}{\sum^n_{i=1}{(X_1-\bar{X})^2}}$$ gdzie $s^2=\frac{1}{n-2}\sum^n_{i=1}{(Y_i-\hat{\beta}_0-\hat{\beta}_1X_i)^2}$. 
+
+Z kolei dla intercepta, $\hat{\beta}_0 \sim N(\beta_0, \sigma^2(\hat{\beta}_0))$, gdzie $\sigma^2(\hat{\beta}_0) = \sigma^2 (\frac{1}{n} + \frac{\bar{X}^2}{\sum^n_{i=1}{(X_i - \bar{X})^2}})$ przedział ufności o współczynniku ufności $1-\alpha$ przy nieznanym parametrze $\sigma^2(\hat{\beta}_0)$ wyznacza się podobnie jako $$\hat{\beta}_0 \pm t_cs(\hat{\beta}_0)$$ gdzie $t_c$ to, tak jak wcześniej, kwantyl rzędu $1 - \frac{\alpha}{2}$ rozkładu t-studenta z $n - 2$ stopniami swobody, a $s(\hat{\beta}_0)$ to pierwiastek kwadratowy z $$s^2(\hat{\beta}_0) = s^2 (\frac{1}{n} + \frac{\bar{X}^2}{\sum^n_{i=1}{(X_i - \bar{X})^2}})$$ gdzie $s^2$ jest takie samo jak wyżej.
+
+```{r}
+n <- nrow(data)
+alfa <- 0.05
+s <- 1/(n-2) * sum((y - intercept_t - slope_t*x)**2)
+sb1 <- s/(sum((x-xmean)**2))
+t_c <- qt(1-(alfa/2), n-2)
+slope_t_1 <- slope_t - t_c * sqrt(sb1)
+slope_t_2 <- slope_t + t_c * sqrt(sb1)
+sb0 <- s * (1/n + (xmean**2)/(sum((x-xmean)**2)))
+intercept_t_1 <- intercept_t - t_c * sqrt(sb0)
+intercept_t_2 <- intercept_t + t_c * sqrt(sb0)
+```
+
+Powyższe kody są zapisanymi w R obliczeniami. Przedziały ufności z nich wyliczone wynoszą [`r slope_t_1`, `r slope_t_2`] dla slope'a oraz [`r intercept_t_1`, `r intercept_t_2`] dla intercepta.
+
+Z kolei komendą w R, wydającą oba przedziały ufności, jest `confint`, w którą wpisujemy wynik `lm(Y~X, data=data)` wyliczony wyżej.
+
+```{r}
+przedzialy <- confint(ml)
+intercept_r_1 <- przedzialy[1, 1]
+intercept_r_2 <- przedzialy[1, 2]
+slope_r_1 <- przedzialy[2, 1]
+slope_r_2 <- przedzialy[2, 2]
+```
+
+Dla wyliczeń przy pomocy konkretnej komendy w R przedziały ufności to [`r slope_r_1`, `r slope_r_2`] dla slope'a oraz [`r intercept_r_1`, `r intercept_r_2`] dla intercepta, czyli dokładnie takie same wyniki, jak dla wyliczeń teoretycznych.
+
+# Zadanie 4.
+
+W tym zadaniu mamy wykonać test istotności dla $\beta_0$ oraz $\beta_1$. Zaczniemy od tego drugiego. 
+
+W teście istotności hipoteza zerowa ($H_0$) to $\beta_1 = 0$, z kolei hipoteza alternatywna ($H_A$) sytuacja alternatywna $\beta_1 \ne 0$.
+
+Statystyka testowa jest wtedy postaci $$T = \frac{\hat{\beta}_1 - 0}{s(\hat{\beta}_1)}$$ gdzie $s(\hat{\beta}_1)$ jest takiej samej postaci jak w poprzednim zadaniu. Odrzucamy $H_0$, gdy $|T| > t_c$, gdzie $t_c$ jest również takie samo jak w poprzednim zadaniu. Z kolei p-wartość jest to $P(|z| > |T|)$, gdzie $z \sim t(n-2)$.
+
+W poniższym kodzie przedstawiam wyliczenie tego testu razem z p-wartością ze wzorów teoretycznych podanych wyżej.
+
+```{r}
+T_slope_t <- slope_t/sqrt(sb1)
+p_value_s_t <- 2 * (1 - pt(abs(T_slope_t), df=n-2))
+```
+
+Wykonanie porównania $|T| > t_c$ daje odpowiedź `r abs(T_slope_t) > t_c`, zatem możemy odrzucić $H_0$. P-wartościami zajmę się później.
+
+Dla $\beta_0$ test jest analogiczny, z $H_0: \beta_0 = 0$ i $H_A: \beta_0 \ne 0$, więc umieszczę poniżej jedynie teoretyczne kody.
+
+```{r}
+T_intercept_t <- intercept_t/sqrt(sb0)
+p_value_i_t <- 2 * (1 - pt(abs(T_intercept_t), df=n-2))
+```
+
+Można tutaj zobaczyć, że wpisanie $|T| > t_c$ daje wartość `r abs(T_intercept_t) > t_c`, zatem nie możemy odrzucić $H_0$. 
+
+Z kolei konkretnym kodem w R, który pozwala na wykonanie zarówno testu istotności slope'a i intercepta, jak i wyznaczenie p-wartości jest funkcja `summary`, w którą wpisujemy zmienną wyliczoną wcześniej przez `lm(Y~X, data=data)`. Wyodrębniając z `summary` `cofficcients[,4]` dostajemy dokładnie p-wartość, natomiast patrząc jedynie na `coefficients[,3]` otrzymujemy statystyki testowe.
+
+```{r}
+sum <- summary(ml)
+T_intercept_r <- sum$coefficients[1,3]
+T_slope_r <- sum$coefficients[2,3]
+p_value_i_r <- sum$coefficients[1,4]
+p_value_s_r <- sum$coefficients[2,4]
+```
+
+Sprawdźmy najpierw statystyki testowe. Wartości statystyki testowej dla slope'a i intercepta wyliczone teoretycznie wynoszą odpowiednio`r T_slope_t` oraz `r T_intercept_t`, a te same statystyki testowe wyliczone przy użyciu kodów wbudowanych w R to kolejno `r T_slope_r` oraz `r T_intercept_r`. Widać, że mają one taką samą wartość.
+
+Spójrzmy teraz na p-wartości. Dla wyliczeń teoretycznych kolejno dla slope'a i intercepta wynoszą `r p_value_s_t` oraz `r p_value_i_t`. Natomiast te same statystyki wyliczone przez konkretne komendy w R to `r p_value_s_r` oraz `r p_value_i_r`. Jak widać, dla intercepta wartości są dokładnie takie same, jednak dla slope'a przy wyliczeniach teoretycznych otrzymujemy 0. Może to być spowodowane tym, że ta p-wartość (co można zobaczyć po wyliczeniu za pomocą konkretnej komendy w R) jest bardzo mała, na tyle mała, że R może ją zaokrąglić do 0 w powyższych obliczeniach. 
+
+# Zadanie 5.
+
+W tym zadaniu chcemy wyliczyć estymator i przedział ufności dla czasu obsługi kopiarek przy $k$ liczbie obsługiwanych maszyn. Estymator wylicza się ze wzoru $$\hat{\mu}_h = \hat{\beta}_0 + \hat{\beta}_1k$$ 
+
+Ponieważ $\hat{\mu}_h \sim N(\mu_h, \sigma^2(\hat{\mu}_h))$, gdzie $\sigma^2(\hat{\mu}_h)=\sigma^2(\frac{1}{n} + \frac{(k - \bar{X})^2}{\sum^n_{i=1}{(X_i - \bar{X})^2}})$ ($\sigma^2$ takie samo jak wcześniej) to przedział ufności można wyliczyć przy pomocy rozkładu t-studenta. Wynosi on wtedy: $$\hat{\mu}_h \pm t_cs(\hat{\mu}_h)$$ gdzie $s^2(\hat{\mu}_h)=s^2(\frac{1}{n} + \frac{(k - \bar{X})^2}{\sum^n_{i=1}{(X_i - \bar{X})^2}})$, a $t_c$ jest takie jak wcześniej.
+
+Poniższa funkcja `est_confint_t` pozwala na wyliczenie właśnie tego estymatora i tych przedziałów ufności, przy podstawieniu pewnego $k$.
+
+```{r}
+est_confint_t <- function(k)
+{
+  est <- intercept_t + slope_t*k
+  s_2 <- s*(1/n + (k-xmean)^2/sum((x-xmean)^2))
+  right <- est + t_c*sqrt(s_2)
+  left <- est - t_c*sqrt(s_2)
+  return(c(est, left, right))
+}
+
+k <- c(1, 5, 8, 11, 25, 100)
+values_t <- sapply(k, est_confint_t)
+```
+
+Z kolei aby obliczyć to samo przy pomocy funkcji wbudowanych w R, korzystam z funkcji `predict(ml, k, interval="confidence")`, gdzie `ml` to zapisane wcześniej `lm(Y~X, data=data)`. Kod znajduje się poniżej.
+
+```{r}
+k <- data.frame(X=k)
+values_r <- predict(ml, k, interval="confidence")
+```
+
+Aby zobaczyć, że dla obu wyliczeń wyniki są takie same, zaprezentuję je w tabeli.
+
+|$k$|Estymator teoretycznie|Estymator R|Przedział ufności teoretycznie|Przedział ufności R|
+|:-:|:-:|:-:|:-:|:-:|
+|$k = 1$|`r values_t[1, 1]`|`r values_r[1, 1]`|[`r values_t[2, 1]`, `r values_t[3, 1]`]|[`r values_r[1, 2]`, `r values_r[1, 3]`]|
+|$k = 5$|`r values_t[1, 2]`|`r values_r[2, 1]`|[`r values_t[2, 2]`, `r values_t[3, 2]`]|[`r values_r[2, 2]`, `r values_r[2, 3]`]|
+|$k = 8$|`r values_t[1, 3]`|`r values_r[3, 1]`|[`r values_t[2, 3]`, `r values_t[3, 3]`]|[`r values_r[3, 2]`, `r values_r[3, 3]`]|
+|$k = 11$|`r values_t[1, 4]`|`r values_r[4, 1]`|[`r values_t[2, 4]`, `r values_t[3, 4]`]|[`r values_r[4, 2]`, `r values_r[4, 3]`]|
+|$k = 25$|`r values_t[1, 5]`|`r values_r[5, 1]`|[`r values_t[2, 5]`, `r values_t[3, 5]`]|[`r values_r[5, 2]`, `r values_r[5, 3]`]|
+|$k = 100$|`r values_t[1, 6]`|`r values_r[6, 1]`|[`r values_t[2, 6]`, `r values_t[3, 6]`]|[`r values_r[6, 2]`, `r values_r[6, 3]`]|
+
+W powyższej tabeli można zauważyć, że wszystkie wartości dla obu wyliczeń są takie same, więc obliczenia zamieszczone w kodach są, najprawdopodobniej, poprawne.
+
+Analizując tabelę, można zauważyć, że dla coraz większych wartości parametru $k$, przedziały ufności robią się coraz dłuższe. W pierwszych trzech wierszach ($k = 1$, $k = 5$ oraz $k = 8$) przedziały ufności mają dość małą długość (odpowiednio około 10, 6, 8). Dla $k = 1$ jest to dość długi przedział, jeśli patrzymy na niego pod względem liczb, które się w nim znajdują. 
+
+Można jednak zauważyć, że długość przedziału ufności jest tym dłuższa, im dalej znajduje się od znanych danych zapisanych w badanym pliku. 
+
+# Zadanie 6.
+
+Celem tego zadania jest podanie przewidywanego czasu obsługi $k$ serwisowanych maszyn oraz przedziału predykcyjnego dla tego czasu. 
+
+Przewidywany czas obsługi określa się wzorem $$\hat{Y}_h = \hat{\mu}_h = \hat{\beta}_0 + \hat{\beta}_1X_h$$ zatem dokładnie taki sam, jak estymator wyliczany w poprzednim zadaniu. Jest to spowodowane faktem, że nie potrafimy modelować zachowania $\epsilon$, czyli błędu losowego, który znajduje się we wzorze.
+
+Główna zmiana przy przedziale predykcyjnym polega na tym, że zmienia się wariancja dla błędu predykcji. Wynosi ona $$\sigma^2(pred) = \sigma^2(1 + \frac{1}{n} + \frac{(X_h - \bar{X})^2}{\sum^n_{i=1}{(X_i - \bar{X})^2}})$$ dla $\sigma^2$ takiego jak wyżej. 
+
+Przedział predykcyjny ma postać $$\hat{\mu}_h \pm t_cs(pred)$$ gdzie $s(pred)$ jest pierwiastkiem kwadratowym z $s^2(pred) = s^2(1 + \frac{1}{n} + \frac{(X_h - \bar{X})^2}{\sum^n_{i = 1}{(X_i - \bar{X})^2}})$, gdzie $s^2$ jest takie, jak wcześniej.
+
+Poniższy kod przedstawia te wyliczenia w funkcji `est_predint_t`, która wydaje nam przewidywany czas obsługi oraz wyliczony przedział predykcyjny.
+
+```{r}
+est_predint_t <- function(k) {
+  est <- intercept_t + slope_t * k
+  s_pred_2 <- s * (1 + 1/n + ((k - xmean)**2)/(sum((x - xmean)**2)))
+  right <- est + t_c * sqrt(s_pred_2)
+  left <- est - t_c * sqrt(s_pred_2)
+  return(c(est, left, right))
+}
+
+k <- c(1, 5, 8, 11, 25, 100)
+values_pred_t <- sapply(k, est_predint_t)
+```
+
+Z kolei gdy chcemy wykorzystać komendy wpisane w R, możemy użyć tej samej funkcji `predict()` tym razem wpisując `interval = "prediction"`. Otrzymamy wtedy przedział predykcyjny.
+
+```{r}
+k <- data.frame(X=k)
+values_pred_r <- predict(ml, k, interval="prediction")
+```
+
+Zaprezentuję teraz wyniki w tabeli, aby móc zobaczyć, czy są one takie same dla obu sposobów, a także w jaki sposób wielkość $k$ wpływa na rozmiar przedziału predykcyjnego. 
+
+|$k$|Przewidywany czas teoretycznie|Przewidywany czas R|Przedział predykcyjny teoretycznie|Przedział predykcyjny R|
+|:-:|:-:|:-:|:-:|:-:|
+|$k = 1$|`r values_pred_t[1, 1]`|`r values_pred_r[1, 1]`|[`r values_pred_t[2, 1]`, `r values_pred_t[3, 1]`]|[`r values_pred_r[1, 2]`, `r values_pred_r[1, 3]`]|
+|$k = 5$|`r values_pred_t[1, 2]`|`r values_pred_r[2, 1]`|[`r values_pred_t[2, 2]`, `r values_pred_t[3, 2]`]|[`r values_pred_r[2, 2]`, `r values_pred_r[2, 3]`]|
+|$k = 8$|`r values_pred_t[1, 3]`|`r values_pred_r[3, 1]`|[`r values_pred_t[2, 3]`, `r values_pred_t[3, 3]`]|[`r values_pred_r[3, 2]`, `r values_pred_r[3, 3]`]|
+|$k = 11$|`r values_pred_t[1, 4]`|`r values_pred_r[4, 1]`|[`r values_pred_t[2, 4]`, `r values_pred_t[3, 4]`]|[`r values_pred_r[4, 2]`, `r values_pred_r[4, 3]`]|
+|$k = 25$|`r values_pred_t[1, 5]`|`r values_pred_r[5, 1]`|[`r values_pred_t[2, 5]`, `r values_pred_t[3, 5]`]|[`r values_pred_r[5, 2]`, `r values_pred_r[5, 3]`]|
+|$k = 100$|`r values_pred_t[1, 6]`|`r values_pred_r[6, 1]`|[`r values_pred_t[2, 6]`, `r values_pred_t[3, 6]`]|[`r values_pred_r[6, 2]`, `r values_pred_r[6, 3]`]|
+
+W powyższej tabeli można zauważyć, że wyliczone wartości przewidywanego czasu oraz przedziały predykcyjne są takie same dla obu sposobów ich liczenia. 
+
+Jak można z łatwością zauważyć, przedziały predykcyjne mają dość dużą długość (najkrótszy ma długość około 35, a najdłuższy niecałe 200). Ponownie, najdłuższy przedział jest dla największego $k$ zatem można założyć, że przedział predykcyjny jest tym dłuższy, im dalej od badanego zbioru znajduje się liczba.
+
+# Zadanie 7.
+
+Teraz wykonam tabelę aby porównać przedział ufności do przedziału predykcyjnego.
+
+|$k$|Przedział ufności|Przedział predykcyjny|
+|:-:|:-:|:-:|
+|$k = 1$|[`r values_t[2, 1]`, `r values_t[3, 1]`]|[`r values_pred_t[2, 1]`, `r values_pred_t[3, 1]`]|
+|$k = 5$|[`r values_t[2, 2]`, `r values_t[3, 2]`]|[`r values_pred_t[2, 2]`, `r values_pred_t[3, 2]`]|
+|$k = 8$|[`r values_t[2, 3]`, `r values_t[3, 3]`]|[`r values_pred_t[2, 3]`, `r values_pred_t[3, 3]`]|
+|$k = 11$|[`r values_t[2, 4]`, `r values_t[3, 4]`]|[`r values_pred_t[2, 4]`, `r values_pred_t[3, 4]`]|
+|$k = 25$|[`r values_t[2, 5]`, `r values_t[3, 5]`]|[`r values_pred_t[2, 5]`, `r values_pred_t[3, 5]`]|
+|$k = 100$|[`r values_t[2, 6]`, `r values_t[3, 6]`]|[`r values_pred_t[2, 6]`, `r values_pred_t[3, 6]`]|
+
+Jak widać w powyższej tabeli wszystkie przedziały są dłuższe, jeśli badamy przedziały predykcyjne, w porównaniu do przedziałów ufności. Im większa jest wielkość $k$ tym bardziej zbliżone do siebie zą jego wartości.
+
+Przedział predykcyjny jest większy od przedziału ufności, ponieważ większa jest wartość wariancji. $\sigma^2(pred)$ ma dodaną dodatkową jedynkę w nawiasie, w porównaniu do $\sigma^2(\hat{\mu}_h)$. Zatem przy liczeniu szerokości przedziału będzie można zobaczyć dużą różnicę między tymi dwoma przedziałami, właśnie z powodu wielkości tego parametru.
+
+# Zadanie 8.
+
+## Moc testu
+
+Moc testu jest to prawdopodobieństwo uniknięcia błędu drugiego rodzaju, a zatem prawdopodobieństwo odrzucenia hipotezy zerowej, gdy jest fałszywa. W naszym przypadku zatem, gdy $\beta_1 \ne 0$. W takim wypadku moc testu przedstawia się jako $P(odrzucenie \ H_0|\beta_1 \ne 0)$, co można zapisać również jako $P(odrzucenie \ H_0 | \beta_1 = 1)$, ponieważ znamy prawdziwą wartość $\beta_1$ i wynosi ona właśnie 1.
+
+Hipotezę zerową odrzucamy, gdy statystyka testowa $T$ wpada do obszaru krytycznego. Zatem prawdopodobieństwo, które mamy wyliczyć, to $P(|T| > t_c | \beta_1 = 1)$, co można zapisać również jako $P_{\beta_1=1}(|T| > t_c)$.
+
+Aby wyliczyć moc testu potrzebujemy $\sigma^2(\hat{\beta}_1) = \frac{\sigma^2}{SSX}$, gdzie $SSX = \sum^n_{i = 1}{(X_i - \bar{X})^2}$. Statystyka testowa $T$ ma w tym przypadku rozkład t-studenta z $n-2$ stopniami swobody i parametrem niecentralności $\delta = \frac{\beta_1}{\sigma(\hat{\beta}_1)}$. Moc testu wynosi więc: $$\pi(1) = P_{\beta_1=1}(|T| > t_c) = P_{\beta_1 = 1}(T < -t_c) + 1 - P(T < t_c)$$ Poniższy kod przedstawia to wyliczenie dla $n = 40, \sigma^2 = 70, SSX = 500$
+
+```{r}
+n <- 40
+sigma_2 <- 70
+SSX <- 500
+alpha <- 0.05
+df <- n - 2
+beta1 <- 1
+tc <- qt(1-alpha/2,df)
+sigma_2_b1 <- sigma_2/SSX
+delta = beta1/sqrt(sigma_2_b1)
+power <- 1 - pt(tc, df, delta) + pt(-tc, df, delta)
+```
+
+Z powyższych wyliczeń moc testu wynosi `r power`. Nie jest to najlepszy wynik, zazwyczaj oczekujemy mocy testu od $80%$ w górę, aby zminimalizować szansę na błąd II rodzaju. W tym przypadku prawdopodobieństwo na ten błąd wynosi około $26%$. Nie jest to bardzo dużo, jednak daje ryzyko błędu. Jest to więc akceptowalna moc testu, jednak mogłaby być problematyczna, gdybyśmy robili badania, w których zależałoby nam na wykryciu nawet małych elementów. 
+
+## Wykres
+
+W tej części zadania 8, zapresentuję wykres mocy testu dla wartości slope'a $\beta_1$ między $-2$ a $2$.
+
+```{r, warning=FALSE}
+beta1 <- seq(from = -2, to = 2, by = 0.05)
+delta = beta1/sqrt(sigma_2_b1)
+power <- 1 - pt(tc, df, delta) + pt(-tc, df, delta)
+plot(beta1, power, type='l', ylim = c(0,1), lwd = 2, col = "darkblue", xlab = "Wartość slope'a", ylab = "Moc testu", main = "Zależność mocy testu od wartości slope'a")
+abline(h = 0.05, col = "red4", lwd = 2)
+```
+
+Jak można zauważyć na powyższym wykresie, dla wartości $\beta_1 = 0$ moc testu jest najmniejsza, wynosi tyle, co $\alpha = 0.05$, co widać przez czerwoną prostą $y = 0.05$. Moc testu zwiększa się, im dalej wartość parametru $\beta_1$ znajduje się od wartości 0. Dla punktów granicznych $\beta_1 = -2$ oraz $\beta_1 = 2$ moc testu wynosi prawie 100%.
+
+Jest to zrozumiałe. Prawdopodobieństwo odrzucenia $H_0: \beta_1 = 0$ zwiększa się, im dalej jesteśmy od wartości $\beta_1 = 0$, ponieważ dalsza od 0 będzie wtedy estymacja tego parametru.
+
+Porównam teraz powyższy wykres z wykresem dla $\sigma^2 = 120$.
+
+```{r}
+beta1 <- seq(from = -2, to = 2, by = 0.05)
+sigma_2_b1_120 <- 120/SSX
+delta = beta1/sqrt(sigma_2_b1_120)
+power_120 <- 1 - pt(tc, df, delta) + pt(-tc, df, delta)
+plot(beta1, power, type='l', ylim = c(0,1), lwd = 2, col = "darkblue", xlab = "Wartość slope'a", ylab = "Moc testu", main = "Zależność mocy testu od wartości slope'a")
+lines(beta1, power_120, type='l', col = "plum4", lwd = 2)
+legend("bottomright", legend = c(expression(sigma^2 == 70), expression(sigma^2 == 120)), col = c("darkblue", "plum4"), lty = 1, lwd = 2)
+```
+
+Gdy zwiększymy wartość parametru $\sigma^2$ z $\sigma^2 = 70$ do $\sigma^2 = 120$ możemy zauważyć pogorszenie się mocy testu, szczególnie w pobliżu punktu 0. Wynika z tego, że trudniej jest wykryć niewielkie odstępstwa od 0 w prawdziwej wartości parametru $\beta_1$, gdy zwiększamy wariancję. 
+
+Wciąż jednak moc testu jest bardzo wysoka (i zwiększa się) im dalej od 0 się znajdujemy. Dla wartości $\beta_1 = -2$ oraz $\beta = 2$ oraz tym znajdującym się w ich pobliżu różnica w mocy testu jest niewielka dla obu wykresów i jej wartość wynosi około $100%$.
+
+# Zadanie 9.
+
+To zadanie polega na zbadaniu, jak rozkład szumu $\epsilon$ oraz wartości parametru $\beta_1$ wpływają na moc testu oraz błąd I rodzaju. W tym celu wygeneruję wektor losowy $X = (X_1, ..., X_{200})^T$ z rozkładu normalnego wielowymiarowego $N(0, \frac{1}{500}I)$, który później wykorzystam to wygenerowania tysiąca wektorów $Y = 5 + \beta_1X + \epsilon$.
+
+```{r}
+set.seed(1)
+X <- rnorm(200, 0, 1/sqrt(500))
+```
+
+## $\beta_1 = 0, \epsilon \sim N(0, I)$
+
+Poniższa funkcja pozwala na przeprowadzenie testu dla podanej wartości $\beta_1$. Ponieważ $\alpha = 0.05$, to sprawdzamy, kiedy P-wartość jest mniejsza właśnie $0.05$. Otrzymujemy z tego wartość `r TRUE`, jeśli odrzucamy $H_0$ lub `r FALSE`, jeśli tego nie robimy.
+
+```{r}
+pv9ad <- function(beta)
+{
+  beta1 <- beta
+  epsilon <- rnorm(200)
+  Y <- 5 + beta1*X + epsilon
+  model <- lm(Y ~ X)
+  pvalue <- summary(model)$coefficients[2,4]
+  return(pvalue < 0.05)
+}
+```
+
+Po powyższych wyliczeniach, wyznaczę średnią powtórzonej 1000 razy funkcji za pomocą komendy `replicate`, a następnie przyrównam do prawdziwej wartości błędu I rodzaju, która wynosi tyle samo co przyjęta wartość $\alpha$, a zatem $0.05$. Takie działanie powtórzę 3 razy aby móc porównać do siebie wyniki każdego z losowań. Poza tym, uniknę wtedy błędnego wnioskowania z jednego wyjątkowo udanego (lub wyjątkowo nieudanego) losowania.
+
+```{r, include=FALSE}
+set.seed(123)
+A1 <- replicate(1000, pv9ad(0))
+A2 <- replicate(1000, pv9ad(0))
+A3 <- replicate(1000, pv9ad(0))
+blad_I_rodzaju <- 0.05
+```
+
+|Prawdziwa wartość|Losowanie 1.|Losowanie 2.|Losowanie 3.|
+|:-:|:-:|:-:|:-:|
+|`r blad_I_rodzaju`|`r mean(A1)`|`r mean(A2)`|`r mean(A3)`|
+
+Można zobaczyć, że te wartości w każdym przypadku są bardzo bliskie prawdziwej wartości błędu I rodzaju. Różnice wynoszą odpowiednio $0.001$, $0$ oraz $0.007$, zatem bardzo niewiele. Można więc stwierdzić, że gdy $\epsilon \sim N(0,I)$ to nie ma on wpływu na prawdopodobieństwo odrzucenia $H_0$, gdy $\beta_1 = 0$ 
+
+## $\beta_1 = 0, \epsilon_1, ..., \epsilon_{200}$ iid z rozkładu wykładniczego $Exp(1)$
+
+W tym przypadku, również tworzę funkcję, analogiczną do tej z podpunktu (a), ze znaczącą różnicą w wartości parametru `epsilon`, który tym razem będzie wyznaczany poprzez generowanie próby rozmiaru 200 z rozkładu wykładniczego (za pomocą funkcji `rexp`), w przeciwieństwie do rozkładu normalnego (i komendy `rnorm`) wykorzystanych w poprzednim podpunkcie. Całość funkcji można zobaczyć poniżej.
+
+```{r}
+pv9be <- function(beta)
+{
+  beta1 <- beta
+  epsilon <- rexp(200)
+  Y <- 5 + beta1*X + epsilon
+  model <- lm(Y ~ X)
+  pvalue <- summary(model)$coefficients[2,4]
+  return(pvalue < 0.05)
+}
+```
+
+Podobnie jak poprzednio przy pomocy komendy `replicate` wygeneruję wyniki powyższej funkcji 1000 razy, a następnie porównam z prawdziwą wartością błędu I rodzaju. Ponieważ ponownie wartość $\alpha$ wynosi 0.05, to nie zmienia się błąd I rodzaju w stosunku do poprzedniego podpunktu. Wyniki trzech losowań również przedstawię w tabeli.
+
+```{r, include=FALSE}
+set.seed(4)
+B1 <- replicate(1000, pv9be(0))
+B2 <- replicate(1000, pv9be(0))
+B3 <- replicate(1000, pv9be(0))
+```
+
+|Prawdziwa wartość|Losowanie 1.|Losowanie 2.|Losowanie 3.|
+|:-:|:-:|:-:|:-:|
+|`r blad_I_rodzaju`|`r mean(B1)`|`r mean(B2)`|`r mean(B3)`|
+
+W tym przypadku możemy zauważyć, że różnica między prawdziwą wartością błędu I rodzaju, a estymowanym prawdopodobieństwem odrzucenia $H_0$ jest nieco większa niż w poprzednim przypadku. Nie jest to jednak znacząca różnica. Wynosi ona kolejno $0.011$, $0.003$ oraz $0.002$. Można więc stwierdzić, że dla $\epsilon$ z rozkładu wykładniczego estymacja nieco się psuje, ale dalej jest akceptowalna. 
+
+## $\beta_1 = 0, \epsilon_1, ..., \epsilon_{200}$ iid z rozkładu logistycznego $L(0, 1)$
+
+Ponownie, poniższa funkcja różni się od poprzednich jedynie wartością zmiennej `epsilon`, w której w tym przypadku kryje się wygenerowana za pomocą formuły `rlogis(200)` dwustuelementowa próba z rozkładu logistycznego z parametrami 0 oraz 1. Dokładną formę funkcji można zauważyć w poniższym kodzie.
+
+```{r}
+pv9cf <- function(beta)
+{
+  beta1 <- beta
+  epsilon <- rlogis(200)
+  Y <- 5 + beta1*X + epsilon
+  model <- lm(Y ~ X)
+  pvalue <- summary(model)$coefficients[2,4]
+  return(pvalue < 0.05)
+}
+```
+
+Również jak w poprzednich podpunktach, wygeneruję pewną próbę wielkości 1000 przy pomocy powyższej funkcji oraz komendy `replicate`, a następnię wyliczę średnią, którą ponownie przyrównam do $\alpha = 0.05$, wyznaczającego naszą teoretyczną wartość błędu pierwszego rodzaju. Znów powtórzę to 3 razy, aby wyniki były widoczne w tabeli.
+
+```{r, include = FALSE}
+set.seed(7)
+C1 <- replicate(1000, pv9cf(0))
+C2 <- replicate(1000, pv9cf(0))
+C3 <- replicate(1000, pv9cf(0))
+```
+
+|Prawdziwa wartość|Losowanie 1.|Losowanie 2.|Losowanie 3.|
+|:-:|:-:|:-:|:-:|
+|`r blad_I_rodzaju`|`r mean(C1)`|`r mean(C2)`|`r mean(C3)`|
+
+Gdy spojrzymy na tę tabelę, możemy zauważyć, że występuje tu najgorszy estymator. Jest to ten dla pierwszego losowania, który różni się aż o $0.018$ od prawdziwej wartości błędu pierwszego rodzaju. Pozostałe różnią się kolejno o $0.06$ oraz $0.005$. Można więc stwierdzić, że dla $\epsilon_i$ z rozkładu logistycznego $L(0, 1)$ można zauważyć znaczne pogorszenie się estymacji dla niektórych losowań.
+
+Można więc założyć, że gdy $\beta_1 = 0$ estymowane prawdopodobieństwo odrzucenia hipotezy zerowej $H_0: \beta_1 = 0$ pogarsza się, gdy $\epsilon_i$ pochodzi z rozkładu wykładniczego $Exp(1)$ lub rozkładu logistycznego $L(0, 1)$. 
+
+## $\beta_1 = 2, \epsilon \sim N(0, 1)$
+
+W tym przypadku skorzystam ze stworzonej przeze mnie wcześniej funkcji `pv9ad`, podstawiając pod niego zmienną $\beta_1 = 2$. Powtórzę to trzykrotnie.
+
+```{r, include = FALSE}
+set.seed(2)
+D1 <- c(replicate(1000, pv9ad(2)))
+D2 <- c(replicate(1000, pv9ad(2)))
+D3 <- c(replicate(1000, pv9ad(2)))
+```
+
+Aby móc wykonać zadanie w tym przypadku muszę obliczyć moc testu, potrzebną również do pozostałych dwóch podpunktów. Moc testu wyliczam dla $\beta_1 = 2$, w ten sam sposób, co w poprzednich zadaniach. Kod umieszczę poniżej.
+
+```{r}
+n <- 200
+s_2 <- 1
+ssx <- sum((X-mean(X))^2)
+alpha <- 0.05
+beta1 <- 2
+s_2_b1 <- s_2/ssx 
+df <- n-2
+tc <- qt(1-alpha/2,df)
+delta <- beta1/sqrt(s_2_b1)
+power <- 1 - pt(tc,df,delta) + pt(-tc,df,delta)
+
+```
+
+W celu porównania do siebie prawdziwej wartości mocy testu, oraz przybliżonego prawdopodobieństwa odrzucenia hipotezy zerowej, wyniki powyższych wyliczeń umieszczę w tabeli.
+
+|Prawdziwa wartość|Losowanie 1.|Losowanie 2.|Losowanie 3.|
+|:-:|:-:|:-:|:-:|
+|`r power`|`r mean(D1)`|`r mean(D2)`|`r mean(D3)`|
+
+Jakie można wyciągnąć wnioski z powyższych wyników? Przede wszystkim widać, że dla każdego losowania wartość przybliżonego prawdopodobieństwa odrzucenia $H_0: \beta_1 = 0$ jest zbliżone do prawdziwej wartości mocy testu. Nie jest to idealne przybliżenie, ale nie różni się od prawdziwej wartości wiele.
+
+Warto również zauważyć, że teoretycznie wyliczona wartość mocy testu jest stosunkowo mała. Jest to spowodowane tym, że wartość $\beta_1$ również jest stosunkowo mała, więc testowanie rzadko będzie przynosiło dobre efekty.
+
+## $\beta_1 = 2, \epsilon_1, ..., \epsilon_{200}$ iid z rozkładu wykładniczego $Exp(1)$
+
+```{r, include = FALSE}
+set.seed(1)
+E1 <- replicate(1000, pv9be(2))
+E2 <- replicate(1000, pv9be(2))
+E3 <- replicate(1000, pv9be(2))
+mean(E1)
+mean(E2)
+mean(E3)
+```
+
+W tym przypadku wykorzystuję funkcję z podpunktu (b) tego zadania (a zatem funkcję `pv9be`), a także moc testu wyliczoną w poprzednim podpunkcie. Wyniki w tabeli prezentują się następująco.
+
+|Prawdziwa wartość|Losowanie 1.|Losowanie 2.|Losowanie 3.|
+|:-:|:-:|:-:|:-:|
+|`r power`|`r mean(E1)`|`r mean(E2)`|`r mean(E3)`|
+
+Gdy spojrzymy na wyniki, w pierwszej chwili możemy zauważyć, że są znacznie gorsze od tych wyliczonych, gdy $\epsilon \sim N(0, I)$. W tym przypadku, szczególnie w 3 losowaniu, wartości są oddalone od prawdziwej wartości mocy testu. Wciąż są jednak one akceptowalne.
+
+## $\beta_1 = 0, \epsilon_1, ..., \epsilon_{200}$ iid z rozkładu logistycznego $L(0, 1)$
+
+W tym przypadku, wykorzystam funkcję z podpunktu (c) `pv9cf`, w którą wstawię wartość $\beta_1=2$. Wyniki trzykrotnego losowania umieszczę w tabeli, wraz z prawdziwą wartością mocy testu wyliczoną wcześniej.
+
+```{r, include=FALSE}
+set.seed(1)
+F1 <- replicate(1000, pv9cf(2))
+F2 <- replicate(1000, pv9cf(2))
+F3 <- replicate(1000, pv9cf(2))
+```
+
+|Prawdziwa wartość|Losowanie 1.|Losowanie 2.|Losowanie 3.|
+|:-:|:-:|:-:|:-:|
+|`r power`|`r mean(F1)`|`r mean(F2)`|`r mean(F3)`|
+
+Z powyższej tabeli możemy przede wszystkim wyczytać, że w tym przypadku, wyestymowane wartości są bardzo dalekie od prawdziwej wartości mocy testu. Zatem, gdy $\beta_1 = 2$, można stwierdzić, że $\epsilon_i$ o rozkładzie logistycznym znacznie "psuje" estymator prawdopodobieństwa odrzucenia $H_0$, w porównaniu do poprzednich dwóch przykładów. W żadnym badanym z sześciu przypadków w tym zadaniu nie nastąpiło tak złe przybliżenie, jak w tym powyżej.
+
+# Zadanie teoretyczne
+
+## 95% przedział ufności dla $\beta_1$
+
+Jak zaznaczyłam w zadaniu 3. przedział ufności o współczynniku ufności $1 - \alpha$ przy nieznanym $\sigma^2(\hat{\beta}_1)$, a z takim przypadkiem mamy do czynienia w tym zadaniu, ma postać $$\hat{\beta_1} \pm t_cs(\hat{\beta}_1)$$ gdzie $t_c$ to kwantyl rzędu $1 - \frac{\alpha}{2}$ rozkładu t-studenta z $n - 2$ stopniami swobody. W tym przypadku $t_c$ to kwantyl rzędu $0.975$ z $18$ stopniami swobody i wynosi on `r round(qt(0.975, 18), 3)`, co można odczytać z tablic statystycznych rozkładu t-studenta.
+
+Wiedząc, że $s(\hat{\beta}_1) = s(b_1) = 1$ oraz $\hat{\beta}_1 = b_1 = 3$, można obliczyć, że przedział ufności dla $\beta_1$ wynosi: $$3 \pm 1 \cdot 2.101$$ $$1 \pm 2.101$$ co można również zapisać jako $$[3 - 2.101, 3 + 2.101]$$ $$[0.899, 5.101]$$ co daje nam ostateczny wynik.
+
+## Czy istnieje statystyczne uzasadnienie dla twierdzenia, że Y zależy od X?
+
+Aby móc odpowiedzieć na to pytanie należy zrobić test istotności dla hipotezy zerowej $H_0: \beta_1 = 0$ oraz hipotezy alternatywnej $H_A: \beta_1 \ne 0$. Gdy odrzucimy hipotezę zerową (a zatem $\beta_1$ będzie statystycznie istotna) będziemy mogli to traktować, jako statystyczne uzasadnienie, że $Y$ zależy od $X$.
+
+W tym zadaniu wykorzystam teorię opisaną przeze mnie w zadaniu 4. Statystyka testowa ma wzór $T = \frac{b_1 - 0}{s(b_1)}$, gdzie $b_1$ to estymowana wartość $\beta_1$ podana w poleceniu. Gdy podstawimy znane nam wartości wychodzi, że $T = 3$. Wynika z tego, że $|T| > t_c$, ponieważ $t_c$ to ta sama wartość, co w poprzednim podpunkcie i wynosi $2.101$. 
+
+Zatem odrzucamy hipotezę zerową na rzecz hipotezy alternatywnej. Oznacza to, że wartość $\beta_1$ jest statystycznie istotna, a zatem $Y$ zależy od $X$, czego statystycznym uzasadnieniem jest powyższy test istotności.
+
+## Przedział predykcyjny dla E(Y), gdy znany jest przedział ufności
+
+Z polecenia wynika, że przedział ufności dla E(Y), gdzie $X = 5$ wynosi $[13, 19]$. Wzory teoretyczne biorę tym razem z tych zawartych w zadaniu 5. (przedział ufności) oraz zadaniu 6. (przedział predykcyjny). E(Y) będę w dalszej części oznaczać jako $\hat{\mu}_h$, aby zachować zgodność z oznaczeniami na wykładzie.
+
+Przedział ufnośći różni się od przedziału predykcyjnego wartością $s(\hat{\mu}_h)$. Dla przedziału ufności wynosi ona pierwiastek z $s^2(\hat{\mu}_h) = s^2 (\frac{1}{n} + \frac{(X_h - \bar{X})^2}{\sum^n_{i=1}{(X_i-\bar{X})^2}}$, gdzie według naszego polecenia $X_h = 5$. Z kolei przedział predykcyjny jest pod pierwiastkiem o $s^2$ większy.  
+
+Obliczmy więc w pierwszej kolejności $s^2(\hat{\mu}_h)$ dla przedziału ufności. Wychodzi nam z tego: $$2t_cs(\hat{\mu}_h) = 19 - 13$$ $$2 \cdot 2.101 \cdot s(\hat{\mu}_h) = 6$$ $$s(\hat{\mu}_h) = \frac{6}{4.202} \approx 1.43$$
+
+Zatem kwadrat tej wartości wynosi $$s^2(\hat{\mu}_h) \approx 2.0449$$ Z tego względu ta wartość dla przedziału predykcyjnego przy podanym w poleceniu $s = 4$ to: $$s^2(pred) = s^2 + s^2(\hat{\mu}_h) = 4^2 + 2.0449 = 18.0449$$
+
+Możemy teraz utworzyć przedział predykcyjny: $$\hat{\mu}_h \pm t_cs(pred) = 1 + 3 \cdot 5 \pm 2.101 \cdot \sqrt{18.0449}$$ $$[\hat{\mu}_h - t_cs(pred), \hat{\mu}_h + t_cs(pred)] = [16 - 8.93, 16 + 8.93]$$ Zatem ostatecznie przedział predykcyjny wynosi w zaokrągleniu: $$[7.07, 24.93]$$

@@ -1,0 +1,649 @@
+---
+title: "Lista 3."
+author: "Amelia Olejniczak"
+output: 
+  pdf_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Zadanie 1.
+
+```{r, echo = FALSE}
+setwd("C:\\Users\\ameli\\Documents\\R\\ml")
+table <- read.table('tabela1_6.txt')
+colnames(table) <- c("ID", "GPA", "IQ", "sex", "PH")
+```
+
+W pierwszym zadaniu, bazujemy na danych z tabeli, w której przedstawione mamy informacje na temat 78 uczniów pewnej szkoły. Znamy ich średnią (GPA), wyniki testu IQ, płeć oraz wynik testu Piersa-Harrisa.
+
+```{r, echo = FALSE}
+lm1 <- lm(GPA ~ IQ, data = table)
+b0 <- lm1$coefficients[1]
+b1 <- lm1$coefficients[2]
+```
+
+## Wykres GPA \~ IQ oraz współczynnik determinacji
+
+Bazując na tych danych w pierwszej kolejności zaprezentuję wykreś średniej (GPA) od IQ, wraz z prostą regresji.
+
+Aby móc to zrobić, w pierwszej kolejności muszę wyliczyć wartości $\hat{\beta}_1$ oraz $\hat{\beta}_0$ korzystając ze znanych już kodów wykorzystywanych w poprzednim raporcie. Otrzymane wyniki zaokrąglone do trzech miejsc do przecinku to $\hat{\beta}_1 =$ `r round(b1, 3)` oraz $\hat{\beta}_0 =$ `r round(b0, 3)`. Wynika z tego, że ten model regresji liniowej ma postać: $$Y = -3.557 + 0.101X$$ gdzie Y oznacza GPA, a X - wyniki testu IQ. Wyniki na wykresie prezentują się w następujący sposób:
+
+```{r}
+plot(GPA ~ IQ, data = table, pch = 20)
+abline(a = b0, b = b1, col = "darkred")
+```
+
+Na wykresie można zauważyć pewną liniowość tych punktów. Prosta regresji jest zbliżona do znajdujących się na wykresie punktów.
+
+W następnej kolejności na dwa sposoby obliczę współczynnik determinacji $R^2$. Zacznę od sposobu teoretycznego. Wzór na wyliczenie tego współczynnika prezentuje się w następujący sposób: $$R^2 = \frac{SSM}{SST}$$ gdzie $SSM = \sum^n_{i=1}{(\hat{Y}_i - \bar{Y})^2}$ i $SST = \sum^n_{i=1}{(Y_i - \bar{Y})^2}$. Poniżej zaprezentowany jest kod, wyliczający tę wartość.
+
+```{r}
+bary <- b0 + b1 * table$IQ
+SSM <- sum((bary - mean(table$GPA))**2)
+SST <- sum((table$GPA - mean(table$GPA))**2)
+R_2_th <- SSM/SST
+```
+
+Z kolei gdy chcemy skorzystać z wbudowanych już funkcji w R, możemy użyć `summary()$r.squared`, który "wyrzuci" nam wartość współczynnika determinacji. Poniżej widać właśnie tę funkcję. Wykorzystuję tam zmienną `lm1`, która jest modelem liniowym wyliczonym za pomocą funkcji `lm()`.
+
+```{r}
+R_2_r <- summary(lm1)$r.squared
+```
+
+Warto teraz porównać obie wartości. Zaokrąglając do czterech miejsc po przecinku, wartości tego współczynnika wynoszą `r round(R_2_th, 4) * 100`% dla wyliczeń teoretycznych oraz `r round(R_2_r, 4)*100`% dla wyliczeń w R. Widać, że zaprezentowane wyniki są takie same.
+
+Warto się zastanowić, co oznacza ten wynik. $R^2$ jest miarą jakości dopasowania modelu. Wyjaśnia nam, jaka część całkowitej zmienności w wektorze $Y$ jest wyjaśniona przez model. W tym przypadku wynosi ona około 40%, co widać w prezentowanych wyżej zaokrąglonych wynikach. Jest to stosunkowo dużo.
+
+## Test F
+
+Jako następne, przetestuję hipotezę, że GPA nie jest skorelowane z IQ. Aby to zrobić, wykonam test istotności współczynnika $\beta_1$ z użyciem statystyki $F$. Hipotezy w tym teście prezentują się następująco $$H_0: \beta_1 = 0 \qquad vs \qquad H_1: \beta_1 \ne 0$$ a statystyka $F$ ma postać $$F = \frac{MSM}{MSE}$$ i pochodzi z rozkładu Fishera-Snedecora z dfE ($dfE = n - 2$) oraz dfM ($dfM = 1$) stopniami swobody ($F \sim F(1, n-2)$). Z kolei $MSE = \frac{SSE}{dfE}$ oraz $MSM = \frac{SSM}{dfM}$. Hipotezę zerową odrzucamy, gdy $F > F_c$, gdzie $F_c = F^*(1 - \alpha, 1, n - 2)$, czyli kwantyl $1 - \alpha = 0.95$ rozkładu Fishera-Snedecora z dfE i dfM stopniami swobody.
+
+Można też odrzucić $H_0$ na podstawie P-wartości. P-wartość definiuje się w tym przypadku jako $p = P(z > F) = 1 - P(z < F)$, gdzie $z \sim F(dfM, dfE)$. Odrzucamy hipotezę zerową na rzecz hipotezy alternatywnej, gdy P-wartość jest mniejsza od wartości $\alpha = 0.05$.
+
+Poniższy kod przedstawia teoretyczne wyliczenie znanych wartości, bazując na powyższych wzorach.
+
+```{r}
+n <- nrow(table)
+dfE <- n - 2
+dfM <- 1
+SSE <- SST - SSM
+MSE <- SSE/dfE
+MSM <- SSM/dfM
+F_c <- qf(0.95, dfM, dfE)
+F_th <- MSM/MSE
+pval_th <- 1 - pf(F_th, 1, n-2)
+```
+
+Z kolei jeśli chcemy wyliczyć te wartości w R, wystarczą kody `anova()$F value` dla wartości statystyki testowej oraz `anova()[1, 5]` dla P-wartości. Ten kod można zobaczyć poniżej.
+
+```{r}
+F_r <- anova(lm1)$`F value`
+pval_r <- anova(lm1)[1, 5]
+```
+
+Warto się teraz przyjrzeć wyliczonym wartościom. Zacznijmy od statystyki testorej $F$. Zaokrąglona do 3 miejsca po przecinku wynosi `r round(F_th, 3)` dla wyliczeń teoterycznych oraz `r round(F_r, 3)[1]` dla gotowej funkcji z R. Zatem, jak widać, powyższe wartości są sobie równe. Wartość $F_c$ wynosi (ponownie zaokrąglona do 3 miejsc po przecinku) `r round(F_c, 3)`, zatem jest dużo mniejsza niż wyliczona statystyka testowa. Jak wspominałam, odrzucamy $H_0$, gdy $F > F_c$, a z taką dokładnie sytuacją mamy do czynienia powyżej.
+
+Warto też podać wyliczaną przeze mnie wyżej P-wartość. Wynosi ona `r pval_th` dla wyliczeń teoretycznych oraz `r pval_r` dla gotowej formuły w R. Jak można zauważyć, wartości są ponownie takie same. W dodatku dużo mniejsze od współczynnika istotności $\alpha = 0.05$. Zatem z P-wartości również wynika odrzucenie hipotezy zerowej na rzecz hipotezy alternatywnej. Oznacza to, że możemy stwierdzić z 95% prawdopodobieństwem, że GPA jest skorelowane z wynikami testu IQ.
+
+## Przedziały predykcyjne dla IQ = 75, 100, 140
+
+Następną częścią zadania jest wyliczenie 90% przedziałów predykcyjnych dla trzech wartości IQ - 75, 100 oraz 140. Wykorzystam do tego funkcję `predict()` z wpisanym w niego `interval = "prediction"` oraz `level = 0.9`. W ten sposób otrzymam trzy szukane przedziały predykcyjne, oraz przewidywane wartości średnich dla każdego z nich. Kod przedstawiam poniżej, a wyniki zaprezentuję w tabeli.
+
+```{r}
+iq_75_100_140 <- predict(lm1, data.frame(IQ = c(75, 100, 140)), interval = "prediction",
+                         level = 0.9)
+```
+
+|            |    Przewidywane GPA     |               Przedział predykcyjny                |
+|:----------------------:|:----------------------:|:----------------------:|
+| $IQ = 75$  | `r iq_75_100_140[1, 1]` | [`r iq_75_100_140[1, 2]`, `r iq_75_100_140[1, 3]`] |
+| $IQ = 100$ | `r iq_75_100_140[2, 1]` | [`r iq_75_100_140[2, 2]`, `r iq_75_100_140[2, 3]`] |
+| $IQ = 140$ | `r iq_75_100_140[3, 1]` | [`r iq_75_100_140[3, 2]`, `r iq_75_100_140[3, 3]`] |
+
+Powyższe przedziały predykcyjne mówią nam przede wszystkim o tym, między jakimi wartościami znajdowałyby się średnie ocen uczniów dla podanych wartości IQ.
+
+Jak można zauważyć, przewidywane wartości średniej ocen zwiększają się wraz ze wzrostem IQ, dla którego tworzymy dany przedział ufności. Wartość średniej 10.59 nie powinna nas dziwić, biorąc pod uwagę, że w tabeli znajdują się wartości GPA do około 11. Nie należy tutaj więc myśleć o "polskiej" średniej ocen. Jest to również zrozumiałe biorąc pod uwagę, że zauważona liniowość wskazuje na wzrost średniej wraz ze wzrostem wyniku w teście IQ.
+
+## Wykres z przedziałami predykcyjnymi
+
+Aby wykonać wykres z przedziałami predykcyjnymi należy wykorzystać poprzednie wyliczenia i dodać linie wyznaczające te przedziały za pomocą funkcji `lines()`, która narysuje proste wyznaczające prawy i lewy koniec przedziału ufności dla sekwencji od 70 do 140 punktów IQ. Dokładne działanie przedstawiam poniżej.
+
+```{r}
+new <- data.frame(IQ=c(seq(70, 140, 0.1)))
+leftpred <- predict(lm1, new, interval="prediction", level=0.9)[,2]
+rightpred <- predict(lm1, new, interval="prediction", level=0.9)[,3]
+plot(GPA ~ IQ, data = table, pch = 20)
+abline(a = b0, b = b1, col = "darkred")
+lines(leftpred~seq(70,140,0.1), col="darkblue")
+lines(rightpred~seq(70,140,0.1), col="darkblue")
+```
+
+Gdy spojrzymy na ten wykres możemy dobrze zobaczyć, ile elementów "wypada" poza przedział predykcyjny. W tym przypadku jest to jedynie 6 punktów znajdujących się poza przestrzenią między dwoma niebieskimi liniami (z czego jeden z tych 6 punktów, jak można zauważyć, nachodzi na linię). Jest to bardzo niewiele biorąc pod uwagę rozmiar próby.
+
+# Zadanie 2.
+
+W tym zadaniu pracujemy na tej samej tabeli z danymi. Tym razem będziemy patrzeć na średnią GPA oraz wyiki testu PH. Ponieważ podpunkty (a)-(d) tego zadania działają na takiej samej zasadzie jak w zadaniu 1. opisywanych przed chwilą, w tej części raportu nie będę umieszczała widocznych kodów.
+
+## Wykres GPA \~ PH oraz współczynnik determinacji
+
+```{r, echo = FALSE}
+lm2 <- lm(GPA ~ PH, data = table)
+b0_2 <- lm2$coefficients[1]
+b1_2 <- lm2$coefficients[2]
+```
+
+Po powtórzeniu poprzednich wyliczeń dla GPA oraz PH wychodzi nam, że $\hat{\beta}_0 =$ `r round(b0_2, 3)` oraz $\hat{\beta}_1 =$ `r round(b1_2, 3)`. Zatem model regresji liniowej wynosi $$Y = 2.226 + 0.092X$$ gdzie Y oznacza GPA, a X - wyniki testu PH.
+
+Wykres tych danych wraz z prostą regresji wygląda w następujący sposób:
+
+```{r, echo = FALSE}
+plot(GPA ~ PH, data = table, pch = 20)
+abline(a = b0_2, b = b1_2, col = "darkred")
+```
+
+Na powyższym wykresie można zauważyć pewną liniowość tych punktów. Nie jest ona jednak tak dobra, jak gdy patrzyliśmy na poprzedni z wykresów, gdzie zaprezentowana była średnia w zależności od wyniku testu IQ.
+
+Aby dowiedzieć się jaka część wartości jest wyjaśniony przez wyliczony model regresji liniowej musimy ponownie obliczyć współczynnik determinacji $R^2$.
+
+```{r, echo = FALSE}
+R_2_2 <- summary(lm2)$r.squared
+```
+
+W tym przypadku wynosi on `r round(R_2_2, 4) * 100`%. Jest to zdecydowanie mniej niż wynik otrzymany w poprzednim zadaniu. Gdy badaliśmy model GPA \~ IQ $R^2$ wynosiło około 40%. Stwierdziłam wtedy, że jest to stosunkowo dużo i otrzymanie w tym zadaniu wyniku niecałe $\frac{2}{3}$ poprzedniego wyniku. Można więc uznać, że ten model gorzej opisuje zmienność w wektorze GPA.
+
+## Test F
+
+Przeprowadzę teraz test istotności $\beta_1$ z użyciem statystyki $F$. Hipoteza zerowa ma postać $H_0: \beta_1 = 0$, a hipoteza alternatywna $H_1: \beta_1 \ne 0$. Aby wykonać test obliczę wartość statystyki F oraz P-wartość.
+
+```{r, echo = FALSE}
+F_2 <- anova(lm2)$`F value`
+pval_2 <- anova(lm2)[1, 5]
+```
+
+Wartość statystyki F wynosi $F =$ `r round(F_2, 3)[1]`. Pochodzi ona z rozkładu Fishera-Snedecora z 1, 76 ($n-2$) stopniami swobody. W ramach przypomnienia - wartość $F_c$, która jest taka sama jak poprzednio, wynosi $F_c =$ `r round(F_c, 3)`. Ponownie mamy więc przesłanki, żeby móc odrzucić $H_0$ na rzecz $H_1$. 
+
+Gdy spojrzymy na P-wartość możemy wyliczyć, że wynosi ona $p =$ `r pval_2`. Jest to, ponownie, znacznie mniej niż $\alpha = 0.05$, co również jest przesłanką do odrzucenia $H_0$. 
+
+Zatem z testu istotności $\beta_1$ $$H_0: \beta_1 = 0 \qquad H_1: \beta_1 \ne 0$$ na podstawie statystyki F wynika, że GPA jest skorelowane z wynikiem testu PH.
+
+## Przedziały predykcyjne dla PH = 25, 55, 85
+
+Przedziały predykcyjne dla $PH = 25, 55, 85$ przedstawię w tabeli, takiej samej jak w poprzednim zadaniu.
+
+```{r, echo = FALSE}
+ph_25_55_85 <- predict(lm2, data.frame(PH = c(25, 55, 85)), interval = "prediction",
+                         level = 0.9)
+```
+
+|            |    Przewidywane GPA     |               Przedział predykcyjny                |
+|:----------------------:|:----------------------:|:----------------------:|
+| $PH = 25$  | `r ph_25_55_85[1, 1]` | [`r ph_25_55_85[1, 2]`, `r ph_25_55_85[1, 3]`] |
+| $PH = 55$ | `r ph_25_55_85[2, 1]` | [`r ph_25_55_85[2, 2]`, `r ph_25_55_85[2, 3]`] |
+| $PH = 85$ | `r ph_25_55_85[3, 1]` | [`r ph_25_55_85[3, 2]`, `r ph_25_55_85[3, 3]`] |
+
+Jak można zauważyć z powyższej tabeli, przy wzroście wyników testu PH również można zauważyć wzrost przewidywanego GPA (wynikający z liniowości). Przedziały predekcyjne są w tym przypadku nieco dłuższe niż poprzednie, wyliczane dla $IQ = 75, 100, 140$. 
+
+## Wykres z przedziałami predykcyjnymi
+
+Spójrzmy teraz na wykres z przedziałami predykcyjnymi.
+
+```{r, echo = FALSE}
+new2 <- data.frame(PH = c(seq(20, 85, 0.1)))
+leftpred2 <- predict(lm2, new2, interval="prediction", level=0.9)[,2]
+rightpred2 <- predict(lm2, new2, interval="prediction", level=0.9)[,3]
+plot(GPA ~ PH, data = table, pch = 20)
+abline(a = b0_2, b = b1_2, col = "darkred")
+lines(leftpred2~seq(20, 85, 0.1), col="darkblue")
+lines(rightpred2~seq(20, 85, 0.1), col="darkblue")
+```
+
+Jak można zauważyć na powyższym wykresie, ponownie znaczna większość wartości wpada w przedział predykcyjny. Jedynie 5 wartości znajduje się poza nim oraz jedna znajduje się na linii wyznaczającej ten przedział. Liczba punktów znajdujących się w przedziale predykcyjnym jest więc taka sama, jak w przypadku, gdy wyliczaliśmy je na podstawie IQ. Warto jednak mieć na uwadze, że to przy przedziały predykcyjne liczone na postawie wyników testu PH są dłuższe.
+
+## Porównanie IQ i PH jako predyktorów GPA
+
+Gdy porównamy IQ oraz wyniki testu PH jako predyktory GPA możemy uznać, że to IQ jest lepsze w tym przypadku. Przede wszystkim ze względu na wartość $R^2$, która jest zdecydowanie wyższa w przypadku, gdy predyktorem GPA jest IQ. Poza tym, przedziały predykcyjne były w tamtym przypadku krótsze, zatem również może to świadczyć o tym, że IQ jest lepszym predyktorem GPA. Na koniec, mimo że zarówno przy IQ, jak i PH odrzuciliśmy hipotezę zerową, jakoby nie było korelacji między każdym z tych wyników, a średnią, to przy IQ była dużo wyższa statystyka testowa (oraz dużo mniejsza p-wartość), a zatem w tym przypadku odrzucenie $H_0$ wydaje się "pewniejsze".
+
+Biorąc to wszystko pod uwagę, IQ będzie lepszym predyktorem GPA.
+
+# Zadanie 3.
+
+W tym zadaniu wykorzystam dane z tabeli danych, z której korzystałam na poprzednim raporcie - zatem pokazującej liczbę kopiarek oraz czas ich obsługi.
+
+```{r, echo = FALSE}
+data1 <- read.table('CH01PR20.txt')
+colnames(data1) <- c("Y","X")
+lm2 <- lm(Y~X, data=data1)
+n <- nrow(data1)
+```
+
+## Suma residuów
+
+Residua oznaczają różnicę między rzeczywistymi wartościami, a tymi przybliżonymi przez model. Aby obliczyć ich sumę wykorzystam zapisane w modelu liniowym informacje. dokładny kod wstawiam poniżej.
+
+```{r}
+residual <- lm2$`residuals`
+residual_sum <- sum(residual)
+```
+
+Wynosi ona `r residual_sum`. Jak widać, jest ona bardzo bardzo mała, zbliżona do zera. Oznacza to, że wartości przewidywane przez model średnio są dość zbliżone do rzeczywistości. Warto jednak mieć w pamięci, że nie jest to równoznaczne temu, że model jest dobry. Mogą się pojawiać tutaj wartości rzeczywiste dalece odbiegające od tych przewidywanych przez model, co nie zostanie zauważone przez sumę residuów. 
+
+## Wykres residuów względem zmiennej objaśnianej
+
+Wykres residuów względem zmiennej objaśnianej pomoże zauważyć jakieś odstępstwa od liniowej struktury. Kod do wykonania takiego wykresu wraz z dodaniem prostej, wyznaczającej zero, zaprezentuję poniżej razem z gotowym wykresem.
+
+```{r}
+plot(residual~data1$X, xlab = "X")
+abline(h=0, col="red")
+```
+
+Patrząc na ten wykres nie wydaje się, że można zauważyć jakąś prawidłowość lub strukturę w danych. Jednak ważnym jest, że nie można tutaj również zauważyć, aby punkty były równo rozłożone po obu stronach prostej wyznaczającej residuum o wartości zero. Dla wartości X większych od 5 widać, że znaczna część punktów znajduje się ponad czerwoną prostą, a te poniżej znajdują się już w okolicach wartości -20, a nie -10, tak jak jest ponad prostą.
+
+## Wykres residuów względem kolejności w pliku danych
+
+Gdy patrzymy na wykres residuów względem kolejności występowania w pliku danych, chcemy zobaczyć czy spełniony jest warunek o niezależności błędów losowych. Kod do stworzenia tego wykresu jest niemal identyczny jak poprzedni, z tą różnicą, że w funkcję `plot()` wpisujemy `residual~index` (gdzie `index` to liczba od 1 do n oznaczająca kolejność w pliku) zamiast `residual~data1$X`. Kod wraz z wykresem umieszczam poniżej.
+
+```{r}
+index <- 1:n
+plot(residual~index)
+abline(h=0, col="red")
+```
+
+Na wykresie w tym przypadku, poza nierównomiernym rozłożeniem w stosunku do czerwonej prostej, możemy zauważyć pewną strukturę. Wartości residuów znacznie zbliżają się do prostej im większy jest index (zatem im później w pliku danych występują). Może to być przesłanką do wnioskowania, że warunek o niezależności błędów losowych nie został spełniony.
+
+## Rozkład residuów
+
+Aby przebadać rozkład residuów wykonam histogram ich wartości wraz z krzywą gęstości rozkładu normalnego ze średnią i odchyleniem standardowym wszystkich residuów. Poza tym umieszczę również wykres kwantylowo-kwantylowy dla wartości residuów. Poniżej prezentuję kod służący do wyrysowania tych wykresów oraz wykresy obok siebie.
+
+```{r}
+par(mfrow = c(1, 2))
+hist(residual, freq = F, main = " ", col = "darkblue", breaks = 10)
+curve(dnorm(x, mean(residual), sd(residual)), add = T, col = "darkred", lwd = 2)
+
+qqnorm(residual, main = " ", col = "darkblue", pch = 20)
+qqline(residual, col = "darkred", lwd = 2)
+```
+
+Gdy przyjrzymy się powyższym wykresom możemy zauważyć, że przypominają te, które powinny występować gdy residua mają rozkład normalny. Zaczynając od histogramu - nie jest on idealnie ułożony jak krzywa gęstości, jednak jest wystarczająco blisko, żeby można było uznać bliskość do rozkładu normalnego. Z kolei wykres kwantylowo-kwantylowy wskazuje na większą bliskość rozkładu residuów do rozkładu normalnego. Punkty są bardzo blisko prostej, jedynie dla pierwszych kwantyli można zauważyć delikatne oddalenie od niej.
+
+Bazując na powyższej analizie można założyć, że residua mają rozkład zbliżony do normalnego.
+
+# Zadanie 4.
+
+W tym zadaniu potrzebujemy rozszerzyć poprzednią tabelę z danymi o dodatkową obserwację (1000, 2).
+
+## Tabela porównująca zmodyfikowane dane z pierwotnymi
+
+Aby wykonać tabelę, na podstawie której będę w stanie porównać zmodyfikowane dane z pierwotnymi. Wszystkie obliczenia wykonałam w R, jednak umieszczenie kodów uważam za bezcelowe, ponieważ wszystkie te wartości były już przeze mnie wyliczane na poprzednim raporcie lub na tym powyżej.
+
+```{r, echo = FALSE}
+alpha <- 0.05
+t_c <- qt(1-alpha/2, 43)
+
+b0_3 <- lm2$coefficients[1]
+b1_3 <- lm2$coefficients[2]
+t_3 <- summary(lm2)$coefficients[2,3]
+p_val_3 <- summary(lm2)$coefficients[2,4]
+R2_3 <- summary(lm2)$r.squared
+s2_3 <- (summary(lm2)$sigma)**2
+
+t_c_mod1 <- qt(1-alpha/2, 44)
+mod1 <- data1
+mod1[46,] <- c(1000,2)
+colnames(mod1) <- c("Y","X")
+lm2_mod1 <- lm(Y~X, data=mod1)
+b0_4 <- lm2_mod1$coefficients[1]
+b1_4 <- lm2_mod1$coefficients[2]
+t_4 <- summary(lm2_mod1)$coefficients[2,3]
+p_val_4 <- summary(lm2_mod1)$coefficients[2,4]
+R2_4 <- summary(lm2_mod1)$r.squared
+s2_4 <- (summary(lm2_mod1)$sigma)**2
+```
+
+||Pierwotne dane|Zmodyfikowane dane|
+|:-:|:-:|:-:|
+|Równanie regresji|$Y = -0.58 + 15.035X$|$Y = 63.091 + 6.594X$|
+|Statystyka T|$31.123$|$0.862$|
+|P-wartość|`r p_val_3`|`r p_val_4`|
+|$R^2$|$0.957$|$0.017$|
+|$\sigma^2$|$79.451$|$20452.19$|
+
+Patrząc na powyższą tabelę można zauważyć, że modyfikacja danych wpływa na każdy jej element. Ponieważ $t_c =$ `r t_c` dla niezmodyfikowanych danych oraz $t_c =$ `r t_c_mod1`, to wpływa również na wynik testu istotności dla slope'a $\beta_1$. Żadna z wartości nie jest podobna do tych dla danych bez modyfikacji. Wynika z tego, że dodanie jednej wartości może w znaczny sposób wpłynąć na liniowość tych punktów. Widać to dla wartości $R^2$, w której na początku przez model było wyjaśnione prawie 96% obserwacji, a gdy dodaliśmy dodatkową obserwację było to jedynie nieco poniżej 2%. Jest to ogromna różnica. Tak samo w przypadku $\sigma^2$, gdzie ta wartość jest o wiele większa gdy mamy do czynienia ze zmodyfikowanymi danymi.
+
+## Wykres residuów względem zmiennej objaśniającej dla zmodyfikowanych danych
+
+Wyrysowanie wykresu następuje w ten sam sposób co poprzednio, zatem nie umieszczę tutaj kodu. Wykres zaprezentowany jest poniżej.
+
+```{r, echo = FALSE}
+residual_mod1 <- lm2_mod1$`residuals`
+plot(residual_mod1~mod1$X, xlab = "X", ylab = "residual")
+abline(h=0, col="red")
+```
+
+Wykres powyżej jest zupełnie nieczytelny. Jest to spowodowane, jak widać, dodaną przeze mnie sztucznie wartością znacznie odstającą. Ta jedna wartość sprawia, że nie widzimy żadnej z niezbędnych założeń o błędach losowych - przede wszystkim nie można zauważyć tutaj stałej wariancji.
+
+## Wykres residuów względem kolejności obserwacji w pliku dla zmodyfikowanych danych
+
+Ponownie, wykres został narysowany w ten sam sposób, co w poprzednim zadaniu, zatem nie umieszczę kodu.
+
+```{r, echo = FALSE}
+index_mod1 <- 1:(n+1)
+plot(residual_mod1~index_mod1, xlab = "index", ylab = "residual")
+abline(h=0, col="red")
+```
+
+Ponownie wykres jest mniej czytelny. Dodana przeze mnie duża wartość odstająca sprawia, że trudno jest wyciągnąć wnioski. Jasnym jest jednak, że nagła obserwacja tak bardzo różniąca się od pozostałych może być przesłanką do przypuszczeń, że błędy losowe nie są niezależne. Z pewnością jest jasne, że ta jedna odstająca wartość ma znaczny wpływ na liniowość obserwacji.
+
+## Rozkład residuów dla zmodyfikowanych danych
+
+Aby zbadać rozkład residuów ponownie przyjrzę się histogramowi gęstości wraz z krzywą gęstości rozkładu normalnego, a także wykresowi kwantylowo-kwantylowemu dla residuów. Kod będzie ponownie taki sam jak wcześniej, zatem nie będę go tutaj umieszczać.
+
+```{r, echo = FALSE}
+par(mfrow = c(1, 2))
+hist(residual_mod1, freq = F, main = " ", col = "darkblue", breaks = 10, xlab = "residual")
+curve(dnorm(x, mean(residual_mod1), sd(residual_mod1)), add = T, col = "darkred", lwd = 2)
+
+qqnorm(residual_mod1, main = " ", col = "darkblue", pch = 20)
+qqline(residual_mod1, col = "darkred", lwd = 2)
+```
+
+Jak widać na powyższych wykresach, ta obserwacja w znaczący sposób "psuje" liniowość tych punktów. Gdy spojrzymy na histogram można zauważyć w zasadzie trzy słupki, z czego jeden znacząco zbyt wysoki w okolicach średniej, oraz słupek po prawej stronie wykresu, który występuje w miejscu, gdzie krzywa gęstości znajduje się w niewidocznej odległości od prostej. Szansa na taką wartość byłaby prawie zerowa, gdybyśmy mieli do czynienia z rozkładem normalnym.
+
+Z kolei patrząc na wykres kwantylowo-kwantylowy można zobaczyć, że dodatkowa wartość znajduje się o wiele zbyt daleko, w stosunku do tego, gdzie powinna być dla takiego rozkładu normalnego. 
+
+Wynika z tego, że wartości znacznie odstające od pozostałych obserwacji w znaczący sposób wpływają na efektywność modelu w przewidywaniu i przybliżaniu wartości. Wpływają również na residua. 
+
+## Tabela porównująca kolejne zmodyfikowane dane do tych pierwotnych oraz poprzednio zmodyfikowanych
+
+Tym razem, do pierwotnych danych dodam obserwację (1000, 6) i porównam w tabeli do pierwotnych danych, a także do poprzedniej modyfikacji.
+
+```{r, echo = FALSE}
+mod2 <- data1
+mod2[46,] <- c(1000, 6)
+colnames(mod2) <- c("Y","X")
+lm2_mod2 <- lm(Y~X, data=mod2)
+b0_5 <- lm2_mod2$coefficients[1]
+b1_5 <- lm2_mod2$coefficients[2]
+t_5 <- summary(lm2_mod2)$coefficients[2,3]
+p_val_5 <- summary(lm2_mod2)$coefficients[2,4]
+R2_5 <- summary(lm2_mod2)$r.squared
+s2_5 <- (summary(lm2_mod2)$sigma)**2
+```
+
+||Pierwotne dane|Zmodyfikowane dane o (1000, 2)|Zmodyfikowane dane o (1000, 6)|
+|:-:|:-:|:-:|:-:|
+|Równanie regresji|$Y = -0.58 + 15.035X$|$Y = 63.091 + 6.594X$|$Y = 7.308 + 17.355X$|
+|Statystyka T|$31.123$|$0.862$|$2.359$|
+|P-wartość|`r p_val_3`|`r p_val_4`|`r p_val_5`|
+|$R^2$|$0.957$|$0.017$|$0.112$|
+|$\sigma^2$|$79.451$|$20452.19$|$18462.14$|
+
+Patrząc na tę tabelę można zauważyć, że dla danych zmodyfikowanych o obserwację (1000, 6) wartości są nieco bliższe pierwotnym. W szczególności - slope jest bardzo bliski pierwotnemu (pierwotny: $\hat{\beta}_1 = 15.035$, drugi zmodyfikowany: $\hat{\beta}_1 = 17.355$) oraz w wyniku testu istotności dla slopa odrzucamy $H_0$ ($t_c =$ `r t_c_mod1` dla zmodyfikowanych danych). Wciąż jednak $R^2$ i $\sigma^2$ nie są najlepsze. Tym razem zaledwie nieco ponad 11% rozkładu jest wyjaśnione przez model, a wariancja jest bardzo bardzo duża.
+
+## Wykres residuów względem zmiennej objaśniającej dla ponownie zmodyfikowanych danych
+
+Poniżej prezentuję wykres dla residuów względem zmiennej objaśniającej dla danych rozszerzonych o obserwację (1000, 6). Kod prezentuje się w ten sam sposób, co poprzednie, zatem nie umieszczam go tutaj.
+
+```{r, echo = FALSE}
+residual_mod2 <- lm2_mod2$`residuals`
+plot(residual_mod2~mod2$X, xlab = "X", ylab = "residual")
+abline(h=0, col="red")
+```
+
+Wykres ten wygląda bardzo podobnie do tego dla poprzednio modyfikowanej próby. Wykres jest nieczytelny, z jednym punktem znacznie oddalony od pozostałych. Brakuje więc tutaj, podobnie jak wcześniej, przede wszystkim stałej wariancji.
+
+## Wykres residuów względem kolejności obserwacji w pliku dla ponownie zmodyfikowanych danych
+
+Spójrzmy teraz na wykres residuów względem kolejności obserwacji w pliku dla ponownie zmodyfikowanych danych.
+
+```{r, echo = FALSE}
+index_mod2 <- 1:(n+1)
+plot(residual_mod2~index_mod2, xlab = "index", ylab = "residual")
+abline(h=0, col="red")
+```
+
+Ponownie ten wykres bardzo przypomina ten sam wykres dla poprzednio zmodyfikowanej próby. Tym razem również ostatnia z obserwacji znacznie odstaje od pozostałych. Tutaj również możemy ją uznać za przesłankę, że nie są to niezależne błędy losowe.
+
+## Rozkład residuów dla zmodyfikowanych danych
+
+Na koniec ponownie przebadam rozkład residuów dla zmodyfikowanych danych. Kod do stworzenia histogramu oraz wykresu kwantylowo-kwantylowego pozostaje taki sam, zatem nie umieszczam go w raporcie.
+
+```{r, echo = FALSE}
+par(mfrow = c(1, 2))
+hist(residual_mod2, freq = F, main = " ", col = "darkblue", breaks = 10, xlab = "residual")
+curve(dnorm(x, mean(residual_mod2), sd(residual_mod2)), add = T, col = "darkred", lwd = 2)
+
+qqnorm(residual_mod2, main = " ", col = "darkblue", pch = 20)
+qqline(residual_mod2, col = "darkred", lwd = 2)
+```
+
+Patrząc na te wykresy można bardziej zauważyć, że ta wartość jest "bardziej odstająca" od reszty, niż ta w poprzednim przypadku. Można to zauważyć w szczególności na histogramie, gdzie mimo ustawienia tej samej ilości słupków (`breaks = 10`) w tym przypadku pierwszy i drugi słupek są zupełnie inaczej rozłożone. 
+
+Ponownie, bazując na obu tych wykresach, można wyraźnie zauważyć, że residua nie mają już rozkładu normalnego.
+
+Zatem obie modyfikacje poskutkowały w znacznym "zepsuciu" liniowości próby.
+
+# Zadanie 5.
+
+W tym zadaniu badamy dane dotyczące stężenia roztworu. W kolumnach znajdują się wartości stężenia oraz czasu. 
+
+```{r, echo = FALSE}
+data2 <- read.table('CH03PR15.txt')
+colnames(data2) <- c("CONCENTRATION", "TIME")
+lm3 <- lm(CONCENTRATION~TIME, data = data2)
+```
+
+## Wykres z przedziałami predykcyjnymi
+
+```{r, echo = FALSE}
+b0_6 <- lm3$coefficients[1]
+b1_6 <- lm3$coefficients[2]
+```
+
+Aby wykonać wykres z przedziałami predykcyjnymi w pierwszej kolejności obliczę intercept i slope dla tej próby. Wynoszą one kolejno $\hat{\beta}_0 =$ `r round(b0_6, 3)` oraz $\hat{\beta}_1 =$ `r round(b1_6, 3)`. Zatem równanie regresji liniowej prezentuje się następująco: $$Y = 2.575 - 0.324X$$ gdzie X oznacza czas, a Y stężenie.
+
+Do wykresu z punktami zawartymi w pliku dodam prostą regresji, a następnie proste wyznaczające 95% przedziały predykcyjne. Wszystkie kody wyliczające każdy z tych elementów już pojawiły się w tym lub poprzednim raporcie, zatem nie będę umieszczać ich w dalszej części.
+
+```{r, echo = FALSE}
+new3 <- data.frame(TIME=c(seq(0, 10, 0.01)))
+leftpred3 <- predict(lm3, new3, interval="prediction", level=0.95)[,2]
+rightpred3 <- predict(lm3, new3, interval="prediction", level=0.95)[,3]
+plot(CONCENTRATION~TIME, data = data2)
+abline(a = b0_6, b = b1_6, col = "darkred")
+lines(leftpred3~seq(0, 10, 0.01), col="darkblue")
+lines(rightpred3~seq(0, 10, 0.01), col="darkblue")
+```
+
+Łatwo zauważyć, że wszystkie punkty znajdują się pomiędzy niebieskimi prostymi, które wyznaczają przedziały predykcyjne. Łatwo jest jednak również zauważyć, że punkty nie są liniowe. Zanim jednak dokonamy transformacji Y, to przeprowadzimy analizę dla tej regresji liniowej.
+
+## Analiza $R^2$ oraz test istotności $\beta_1$
+
+```{r, echo = FALSE}
+R2_6 <- summary(lm3)$r.squared
+F_6 <- anova(lm3)$`F value`
+F_c <- qf(0.95, 1, 13)
+pval_6 <- anova(lm3)[1, 5]
+```
+
+W pierwszej kolejności zajmę się analizą wartości $R^2$. Wynosi ona $R^2 = $ `r R2_6`. Wynika z tego, że nieco ponad 81% całkowitej zmienności jest wyjaśnione przez model. To stosunkowo dużo, zatem potwierdza to tezę, że model liniowy może być dobrym przybliżeniem do predykcji tych danych. 
+
+Przeprowadzę teraz test istotności $\beta_1$ o  przy pomocy statystyki testowej F. $$H_0: \beta_1 = 0 \qquad H_1: \beta_1 \ne 0$$
+
+Statystyka testowa F wynosi $F =$ `r F_6` i ma rozkład Fishera-Snedecora z 1 i 13 stopniami swobody. Porównujemy to do $F_c = F^*(0.95, 1, 13) =$ `r F_c`. Jak widać, $F > F_c$, zatem odrzucamy $H_0$ na rzecz $H_1$. Wynika z tego, że stężenie jest zależne od czasu. 
+
+P-wartość w tym przypadku wynosi `r pval_6`.
+
+## Współczynnik korelacji
+
+Aby obliczyć współczynnik korelacji między obserwowaną i przewidywaną wartością stężenia roztworu należy wyliczyć pierwiastek z wartości współczynnika determinacji $R^2$. Wyliczenie to w kodzie prezentuję poniżej.
+
+```{r}
+corr <- sqrt(R2_6)
+```
+
+Korelacja wynosi tutaj `r corr`, co jest bardzo blisko wartości 1. Oznacza to, że te wartości są istotnie ze sobą związane. 
+
+Wynika z tego, że gdybyśmy nie patrzyli na wykres moglibyśmy założyć, że punkkty są w znacznej mierze ułożone liniowo. Tak jednak nie jest.
+
+# Zadanie 6.
+
+Do przeprowadzenia procedury Box'a-Cox'a wykorzystam przede wszystkim funkcję `boxcox()`, która pomoże w wyznaczeniu parametru $\lambda$. Kod wyliczający ten parametr zamieszczam poniżej.
+
+```{r, fig.show='hide'}
+library("MASS")
+b = boxcox(lm3)
+lambda = b$x[which.max(b$y)]
+```
+
+Wynika z tego, że parametr $\lambda =$ `r lambda`. Ponieważ jest on zbliżony do zera to przekształceniem granicznym parametru Y jest logarytm. Poniższy wykres przedstawia punkty po przekształceniu.
+
+```{r}
+data3 <- data2
+data3$CONCENTRATION <- log(data3$CONCENTRATION)
+lm4 <- lm(CONCENTRATION~TIME, data=data3)
+```
+
+```{r}
+b0_tr <- lm4$coefficients[1]
+b1_tr <- lm4$coefficients[2]
+leftpred4 <- predict(lm4, new3, interval="prediction", level=0.95)[,2]
+rightpred4 <- predict(lm4, new3, interval="prediction", level=0.95)[,3]
+plot(CONCENTRATION~TIME, data = data3)
+abline(a = b0_tr, b = b1_tr, col = "darkred")
+lines(leftpred4~seq(0, 10, 0.01), col="darkblue")
+lines(rightpred4~seq(0, 10, 0.01), col="darkblue")
+```
+
+Jak widać, w tym przypadku są one zdecydowanie ułożone liniowo. Przedziały predykcyjne również są stosunkowo niewielkie.
+
+# Zadanie 7.
+
+Ponieważ w poprzednim zadaniu ustaliliśmy, że logarytm jest przekształceniem granicznym parametru Y, sprawdźmy jak zmieni się analiza z zadania 5., gdy weźmiemy pod uwagę nową zmienną $\tilde{Y} = log(Y)$.
+
+## Wykres z krzywą regresji i 95% przedziałami predykcyjnymi
+
+Aby wyznaczyć krzywą regresji należy wyznaczyć $\hat{\beta}_1$ oraz $\hat{\beta}_0$ dla transformacji Y. Wynoszą one odpowiednio $\hat{\beta}_0 = 1.508$ oraz $\hat{\beta}_1 = - 0.45$. Wyliczenie 95% przedziałów predykcyjnych oraz umieszczenie wszystkiego na wykresie prezenruję poniżej.
+
+```{r}
+new3 <- data.frame(TIME=c(seq(0, 10, 0.01)))
+pred4 <- predict(lm4, new3, interval="prediction", level=0.95)
+left4 <- exp(pred4[,2])
+right4 <- exp(pred4[,3])
+plot(CONCENTRATION~TIME, data = data2)
+lines(exp(pred4[,1])~seq(0, 10, 0.01), col = "darkred")
+lines(left4~seq(0, 10, 0.01), col="darkblue")
+lines(right4~seq(0, 10, 0.01), col="darkblue")
+```
+
+Jak widać, tym razem niemal krzywe niemal idealnie nakładają się na punkty z próby. Wynika z tego, że logarytm jest trafnie określoną transformacją Y.
+
+## Współczynnik korelacji
+
+Ponownie współczynnik korelacji wyliczymy jako pierwiastek kwadratowy ze współczynnika determinacji $R^2$, tym razem dla wartości zawartych w nowopowstałym modelu. 
+
+```{r, echo = FALSE}
+R2_tr <- summary(lm4)$r.squared
+corr_tr <- sqrt(R2_tr)
+```
+
+W tym przypadku $R^2 =$ `r R2_tr`, z czego wynika, że współczynnik korelacji wynosi `r corr_tr`. W tym przypadku jest to niemal dokładnie 1, zatem wartości są tutaj znacznie ze sobą związane. Z kolei z tak wysokiej statystyki $R^2$ wynika, że prawie 100% zmienności jest wyjaśnione przez ten model. Można więc uznać to przekształcenie Y za dużo lepsze przybliżenie zmiennych niż regresja liniowa wykorzystana w zadaniu 5.
+
+# Zadanie 8.
+
+W tym zadaniu mamy przekształcić zmienną czasu. Przekształcona zmienna czasu ma wynosić $\tilde{t} = t^{-\frac{1}{2}}$. Większość kodów wygląda analogicznie, jak poprzednio, zatem nie będę ich odsłaniała.
+
+```{r, echo = FALSE}
+data4 <- data2
+data4$TIME <- data3$TIME**(-1/2)
+lm5 <- lm(CONCENTRATION~TIME, data=data4)
+```
+
+```{r, echo = FALSE}
+b0_tr1 <- lm5$coefficients[1]
+b1_tr1 <- lm5$coefficients[2]
+leftpred5 <- predict(lm5, new3, interval="prediction", level=0.95)[,2]
+rightpred5 <- predict(lm5, new3, interval="prediction", level=0.95)[,3]
+plot(CONCENTRATION~TIME, data = data4)
+abline(a = b0_tr1, b = b1_tr1, col= "darkred")
+lines(leftpred5~seq(0, 10, 0.01), col="darkblue")
+lines(rightpred5~seq(0, 10, 0.01), col="darkblue")
+```
+
+Jak widać, w tym przypadku wykres wydaje się nieco bardziej liniowy niż oryginalnie, nie wygląda jednak tak dobrze, jak gdy mieliśmy do czynienia z przekształceniem Y. Przedziały predykcyjne również są nieco dłuższe. Aby się jednak o tym przekonać dokonajmy tej samej analizy co poprzednio.
+
+## Wykres z krzywą regresji i 95% przedziałami predykcyjnymi
+
+Jeśli chodzi o nowe wartości $\hat{\beta}_1$ oraz $\hat{\beta}_0$ to wynoszą one tutaj $\hat{\beta}_1 =$ `r b1_tr1` oraz $\hat{\beta}_0 =$ `r b0_tr1`. 
+
+Z kolei ponieważ kod do stworzenia wykresu jest analogiczny nie będę go prezentować w tym raporcie.
+
+```{r, echo = FALSE}
+newt<- data.frame(TIME=1/sqrt(seq(1,9,0.1)))
+pred5 <- predict(lm5, newt, interval="prediction", level=0.95)
+leftpred_t <- predict(lm5, newt, interval="prediction", level=0.95)[,2]
+rightpred_t <- predict(lm5, newt, interval="prediction", level=0.95)[,3]
+plot(CONCENTRATION~TIME, data = data2)
+lines(seq(1,9,0.1), leftpred_t, col="darkblue")
+lines(seq(1,9,0.1), rightpred_t, col="darkblue")
+lines(seq(1,9,0.1), pred5[,1], col="darkred")
+```
+
+W tym Przypadku również można zauważyć dobre przybliżenie zmiennej, podobnie jak dla poprzedniego przekształcenia zmiennej. Aby dowiedzieć się, które przekształcenie jest lepsze należy teraz zwrócić uwagę na korelację oraz współczynnik determinacji $R^2$. 
+
+## Współczynnik korelacji
+
+```{r, echo = FALSE}
+R2_tr1 <- summary(lm5)$r.squared
+corr_tr1 <- sqrt(R2_tr1)
+```
+
+Współczynnik determinacji $R^2$ wynosi $R^2 =$ `r R2_tr1`, z kolei współczynnik korelacji ma wartość `r corr_tr1`. Obie wartości są bardzo wysokie, jednak nieco gorsze niż w przypadku, gdy przekształcaliśmy zmienną Y. Wynika z tego, że przekształcenie zmiennej Y lepiej wpłynęło na wyjaśnienie modelu.
+
+# Zadania teoretyczne
+
+## Zadanie 1.
+
+Poniżej przedstawiam kod wyliczający statystyki $t_c$ oraz $F_c$.
+
+```{r}
+t<-function(n){
+  return(qt(1-0.05/2,n))
+}
+
+t_c <- t(c(5, 10, 50))
+
+
+f<-function(n){
+  return(qf(1-0.05,1,n))
+}
+
+F_c <- t(c(5, 10, 50))
+```
+
+Kwadrat $t_c$ wynosi `r t_c**2`, z kolei $F_c$ wynosi `r F_c`, zatem jest to spełnione. Wynika to z faktu, że jeśli $X \sim t(n)$ to $X^2 \sim F(1, n)$.
+
+## Zadanie 2.
+
+Fragment tabeli ANOVA prezentuje się następująco:
+
+||df|SS|
+|:-:|:-:|:-:|
+|Model|1|100|
+|Error|20|400|
+
+Ponieważ $dfE = n-2 = 20$ możemy z tego wyliczyć, że liczba obserwacji wynosi $n = 22$.
+
+Aby wyliczyć estymator parametru $\sigma$ musimy wyliczyć pierwiastek z $MSE = \frac{SSE}{dfE}$, ponieważ $MSE = s^2$. Zatem $$s = \sqrt{MSE} = \sqrt{\frac{400}{20}} = \sqrt{20} \approx 4.47$$
+
+Aby sprawdzić, czy slope jest równy zero przeprowadzę test F. $$H_0: \beta_1 = 0 \qquad H_1: \beta_1 \ne 0$$ Hipotezę zerową odrzucamy, gdy $F = \frac{MSM}{MSE} > F_c$, gdzie $F_c = F^*(1-\alpha, 1, 20) \approx 4.351$. Zatem $MSM = \frac{SSM}{dfM} = \frac{100}{1} = 100$. Wynika z tego, że $F = \frac{100}{20} = 5$. Ponieważ $5>4.351$, to odrzucamy $H_0$ na rzecz $H_1$.
+
+Aby obliczyć jaką część zmienności wyjaśnia model musimy obliczyć współczynnik determinacji $R^2 = \frac{SSM}{SST}$, a zatem potrzebujemy do niego wyliczyć jedynie $SST$, co nie jest trudne, ponieważ $SST = SSM + SSE = 100 + 400 = 500$. Zatem $$R^2 = \frac{100}{500} = \frac{1}{5} = 0.2 = 20%$$ Zatem 20% zmienności wyjaśnia model.
+
+Próbkowy współczynnik korelacji jest pierwiastkiem kwadratowym z współczynnika determinacji, zatem $$\sqrt{R^2} = \sqrt{0.2} \approx 0.447$$

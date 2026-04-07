@@ -1,0 +1,657 @@
+---
+title: "Lista 2."
+author: "Amelia Olejniczak"
+date: "2024-10-25"
+output: 
+  pdf_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Zadanie 1.
+
+To zadanie polega na wyznaczeniu wartości estymatora największej wiarogodności dla $P(X \geq 3)$ dla rozkładu dwumianowego $b(5, p)$. Gęstośc tego rozkładu ma wzór: $$p(x)={5 \choose x} p^x (1-p)^{5-x}$$ gdzie $x = 0, 1, 2, 3, 4, 5$, a $p$ oznacza prawdopodobieństwo sukcesu. Aby obliczyć estymator największej wiarogodności $P(X \geq 3)$ wyznaczam w pierwszej kolejności wartość estymatora $\hat{p} = \frac{\bar{x}}{5}$, który jest estymatorem największej wiarogodności dla parametru p badanego rozkładu. Później, korzystając z wyliczonego $\hat{p}$, wyznaczam $$\widehat{P(X \geq 3)} = 1 - \sum_{x=0}^2{p(x)} = 1 - \sum_{x=0}^2{{5 \choose x} \hat{p}^x (1-\hat{p})^{5-x}}$$ lub analogicznie $$\widehat{P(X \geq 3)} = \sum_{x=3}^5{p(x)} = \sum_{x=3}^5{{5 \choose x} \hat{p}^x (1-\hat{p})^{5-x}}$$ gdzie $\hat{p}$ oznacza wyznaczony wcześniej przeze mnie estymator największej wiarogodności parametru p.
+
+Poniższa funkcja `mle1` pokazuje dokładnie takie wyznaczenie estymatora największej wiarogodności dla $P(X \geq 3)$. Z kolei funkcja `szacunek` wyznacza szacowaną wartość wariancji, obciążenia oraz błędu średniokwadratowego dla konkretnego wektora oraz prawdziwej wartości estymowanego parametru.
+
+Warto jednak zauważyć, że istnieje również inna metoda wyznaczania przybliżonej wartości prawdopodobieństwa $P(X \geq 3)$. W tej metodzie określamy każdy wylosowany element próby jako sukces (jeśli $X_i \geq 3$) lub porażkę (w przeciwnym przypadku). Oznaczamy sukces jako 1, a porażkę jako 0, a następnie liczymy sumę sukcesów i dzielimy przez liczbę elementów całej próby.
+
+Jest to jednak sposób, który ma pewne wady. Dla małej próby (na przykład $n = 10$) przy niewielkim prawdopodobieństwie sukcesu może się zdarzyć tak, że sukces w ogóle nie nastąpi i z estymacji wynikałoby, że zdarzenie jest niemożliwe, co nie jest prawdą. 
+
+Nie można jednak stwierdzić, że ten sposób jest zupełnie bezużyteczny. Nadaje się on przede wszystkim do estymacji prawdopodobieństwa, gdy nie znamy rozkładu zmiennej losowej. Byłby wtedy jedynym sposobem na przybliżenie faktycznego prawdopodobieństwa sukcesu. Ze względu na to, że w tym zadaniu, a także w kolejnym, z rozkładem Poissona, wiemy, jaki rozkład mają zmienne losowe, to możemy skorzystać z pierwszego ze sposobów, o którym mówiłam i będzie on działał lepiej.
+
+```{r}
+mle1 <- function(n, p) {
+  p_hat <- mean(rbinom(n, 5, p))/5
+  mle <- 1 - sum(dbinom(0:2, 5, p_hat))
+  return(mle)
+} 
+
+szacunek <- function(v, teta) {
+  var <- var(v)
+  ob <- mean(v - teta)
+  MSE <- mean((v - teta)**2)
+  c(var, ob, MSE)
+}
+```
+
+Wykorzystam te funkcje, aby otrzymać 10000 estymowanych wartości $P(X \geq 3)$ oraz szacowane wartości obciążenia, wariancji oraz MSE. Umieszczę te dane w tabeli oraz przeanalizuję kolejno dla $n = 50$, $n = 20$ oraz $n = 100$. 
+
+W pierwszej kolejności przyjrzę się poniższej tabeli przedstawiającej estymowaną wartość prawdopodobieństwa dla jednego, konkretnego losowania i wszystkich rozmiarów prób i spróbuję określić, jakie są różnice między wartościami estymatorów dla każdej wartości $p$ oraz dla każdego rozmiaru próby. Następnie dla każdego z rozmiarów prób wykonam oddzielne tabele z szacowanymi wartościami wariancji, obciążenia oraz MSE.
+
+```{r, include=FALSE}
+set.seed(1)
+
+pr1a <- replicate(10000, mle1(50, 0.1))
+s1a <- szacunek(pr1a, 1 - sum(dbinom(0:2, 5, 0.1)))
+
+pr1b <- replicate(10000, mle1(50, 0.3))
+s1b <- szacunek(pr1b, 1 - sum(dbinom(0:2, 5, 0.3)))
+
+pr1c <- replicate(10000, mle1(50, 0.5))
+s1c <- szacunek(pr1c, 1 - sum(dbinom(0:2, 5, 0.5)))
+
+pr1d <- replicate(10000, mle1(50, 0.7))
+s1d <- szacunek(pr1d, 1 - sum(dbinom(0:2, 5, 0.7)))
+
+pr1e <- replicate(10000, mle1(50, 0.9))
+s1e <- szacunek(pr1e, 1 - sum(dbinom(0:2, 5, 0.9)))
+```
+
+```{r, include=FALSE}
+set.seed(1)
+
+pr1a20 <- replicate(10000, mle1(20, 0.1))
+s1a20 <- szacunek(pr1a20, 1 - sum(dbinom(0:2, 5, 0.1)))
+
+pr1b20 <- replicate(10000, mle1(20, 0.3))
+s1b20 <- szacunek(pr1b20, 1 - sum(dbinom(0:2, 5, 0.3)))
+
+pr1c20 <- replicate(10000, mle1(20, 0.5))
+s1c20 <- szacunek(pr1c20, 1 - sum(dbinom(0:2, 5, 0.5)))
+
+pr1d20 <- replicate(10000, mle1(20, 0.7))
+s1d20 <- szacunek(pr1d20, 1 - sum(dbinom(0:2, 5, 0.7)))
+
+pr1e20 <- replicate(10000, mle1(20, 0.9))
+s1e20 <- szacunek(pr1e20, 1 - sum(dbinom(0:2, 5, 0.9)))
+```
+
+```{r, include=FALSE}
+set.seed(1)
+
+pr1a100 <- replicate(10000, mle1(100, 0.1))
+s1a100 <- szacunek(pr1a100, 1 - sum(dbinom(0:2, 5, 0.1)))
+
+pr1b100 <- replicate(10000, mle1(100, 0.3))
+s1b100 <- szacunek(pr1b100, 1 - sum(dbinom(0:2, 5, 0.3)))
+
+pr1c100 <- replicate(10000, mle1(100, 0.5))
+s1c100 <- szacunek(pr1c100, 1 - sum(dbinom(0:2, 5, 0.5)))
+
+pr1d100 <- replicate(10000, mle1(100, 0.7))
+s1d100 <- szacunek(pr1d100, 1 - sum(dbinom(0:2, 5, 0.7)))
+
+pr1e100 <- replicate(10000, mle1(100, 0.9))
+s1e100 <- szacunek(pr1e100, 1 - sum(dbinom(0:2, 5, 0.9)))
+```
+
+||Prawdziwa wartość|$n = 50$|$n = 20$|$n = 100$|
+|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+|$p = 0.1$|`r 1 - sum(dbinom(0:2, 5, 0.1))`|`r pr1a[1]`|`r pr1a20[1]`|`r pr1a100[1]`|
+|$p = 0.3$|`r 1 - sum(dbinom(0:2, 5, 0.3))`|`r pr1b[1]`|`r pr1b20[1]`|`r pr1b100[1]`|
+|$p = 0.5$|`r 1 - sum(dbinom(0:2, 5, 0.5))`|`r pr1c[1]`|`r pr1c20[1]`|`r pr1c100[1]`|
+|$p = 0.7$|`r 1 - sum(dbinom(0:2, 5, 0.7))`|`r pr1d[1]`|`r pr1d20[1]`|`r pr1d100[1]`|
+|$p = 0.9$|`r 1 - sum(dbinom(0:2, 5, 0.9))`|`r pr1e[1]`|`r pr1e20[1]`|`r pr1e100[1]`|
+
+Przyglądając się wartościom w powyższej tabeli można zauważyć, że estymator, którego używam do wyznaczenia prawdopodobieństwa $P(X \geq 3)$ z wylosowanej próby jest całkiem dobry. Nawet dla pojedynczych losowań można zobaczyć, że w każdym losowaniu jest on dość bliski prawdziwej wartości, którą powinniśmy otrzymać. 
+
+Można już tutaj zauważyć, że dla próby wielkości $n = 20$ w większości przypadków estymowane wartości wypadają najgorzej spośród badanych rozmiarów prób. Przykładowo, dla $p = 0.1$, gdzie prawdziwa wartość wynosi `r 1 - sum(dbinom(0:2, 5, 0.1))` dla $n = 20$ estymowana wartość wynosi `r pr1a20[1]`. Jest ona aż o `r pr1a20[1] - 1 + sum(dbinom(0:2, 5, 0.1))` większa od prawdziwej wartości prawdopodobieństwa. W pozostałych przypadkach (poza $p = 0.3$) można zauważyć, że estymator jest najgorszy dla $n = 20$. Nie oznacza to jednak, że zupełnie błędnie estymuje on wartość, poniważ mimo wszystko jest ona dość podobna i nie występują w tych przykładach jakieś znaczące odchylenia.
+
+Z kolei dla $n = 100$ w przypadku tych konkretnych losowań można spostrzec, że nie ma dużej poprawy w estymacji w porównaniu do $n = 50$. Spodziewalibyśmy się, że im większa próba, tym estymator lepiej przybliża prawdziwą wartość, jednak taką zależność, w przypadku tych losowań, można zaobserwować jedynie dla najmniejszej i największej wartości parametru p. W pozostałych trzech przypadkach dla pozostałych prób jest lepsze przybliżenie do prawdziwej wartości prawdopodobieństwa (dla $p = 0.3$ najlepiej przybliża próba $n = 20$, a dla pozostałych dwóch najlepsze przybliżenie jest dla $n = 50$). Może to jednak być spowodowane tym, że sprawdzamy przykładowe próby. Sprawdzę wariancję, obciążenie oraz MSE, aby określić, czy faktycznie im większa próba, tym lepsze przybliżenie.
+
+Warto również zauważyć, że najlepsze przybliżenie jest dla $p = 0.9$ oraz dla $p = 0.5$. To, czy będzie tak w każdym przypadku również określę na podstawie tabeli z wartościami wariancji, obciążenia oraz MSE dla każdego z rozmiarów.
+
+## n = 50
+
+||Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$p = 0.1$|`r s1a[1]`|`r s1a[2]`|`r s1a[3]`|
+|$p = 0.3$|`r s1b[1]`|`r s1b[2]`|`r s1b[3]`|
+|$p = 0.5$|`r s1c[1]`|`r s1c[2]`|`r s1c[3]`|
+|$p = 0.7$|`r s1d[1]`|`r s1d[2]`|`r s1d[3]`|
+|$p = 0.9$|`r s1e[1]`|`r s1e[2]`|`r s1e[3]`|
+
+Spójrzmy najpierw na tabelę dla $n = 50$. Dla każdej wartości parametru $p$ możemy zauważyć, że estymator jest dobry do oszacowania wartości prawdopodobieństwa w każdym przypadku. Można jednak również zauważyć, że w niektórych przypadkach działa on lepiej, niż w innych. 
+
+Przede wszystkim, dla skrajnych wartości parametru $p$ (zatem $p = 0.1$ oraz $p = 0.9$) można zauważyć, że zarówno wariancja, jak i błąd średniokwadratowy są najmniejsze. Zatem dla tych wartości estymator jest najbardziej stabilny i najdokładniejszy, co pogarsza się im bliżej wartości $p = 0.5$ jesteśmy.
+
+W przypadku obciążenia można zauważyć coś bardzo ciekawego - dla mniejszych wartości $p$ (czyli $p = 0.1$ oraz $p = 0.3$) obciążenie jest dodatnie, zatem estymator szacuje nieco większe wartości niż prawdziwa wartość estymatora. Z kolei dla większych wartości $p$ (zatem $p = 0.5$, $p = 0.7$ oraz $p = 0.9$) obciążenie jest mniejsze od zera. Oznacza to, że dla większych wartości $p$ wartości wyznaczone przez estymator są zwykle nieco mniejsze od prawdziwej wartości szacowanego prawdopodobieństwa. 
+
+Można więc stwierdzić, że estymator jest dokładniejszy i bardziej stabilny dla wartości skrajnych ($p = 0.9$ oraz $p = 0.1$) i pogarsza się w tych dwóch sferach im bliżej wartości parametru $p = 0.5$ jesteśmy. Poza tym dla mniejszych wartości parametru $p$ estymator lekko przeszacowuje, z kolei dla większych wartości $p$ niedoszacowuje prawdziwej wartości prawdopodobieństwa. Jest to jednak dobry estymator w każdym przypadku.
+
+## n = 20
+
+||Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$p = 0.1$|`r s1a20[1]`|`r s1a20[2]`|`r s1a20[3]`|
+|$p = 0.3$|`r s1b20[1]`|`r s1b20[2]`|`r s1b20[3]`|
+|$p = 0.5$|`r s1c20[1]`|`r s1c20[2]`|`r s1c20[3]`|
+|$p = 0.7$|`r s1d20[1]`|`r s1d20[2]`|`r s1d20[3]`|
+|$p = 0.9$|`r s1e20[1]`|`r s1e20[2]`|`r s1e20[3]`|
+
+Gdy zmniejszymy rozmiar próby do $n = 20$ można zauważyć nieznaczne pogorszenie się estymatora. Każdy z wyliczanych parametrów - zarówno wariancja, obciążenie jak i MSE są większe dla tej próby (przykładowo wariancja dla $p = 0.5$ jest `r s1c20[1]/s1c[1]` razy większy dla mniejszego $n$). 
+
+Poza tym nie ma jednak znacznych zmian. Podobnie jak wcześniej estymator jest stabilniejszy i dokładniejszy dla skrajnych wartości parametru $p$ i pogarsza się im bliżej $p= 0.5$ jesteśmy. Również tak jak wcześniej obciążenie jest dodatnie dla mniejszych wartości $p$ i ujemne dla tych większych. Estymator zachowuje się więc podobnie dla mniejszej próby - jest on jedynie nieco gorszy.
+
+## n = 100
+
+||Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$p = 0.1$|`r s1a100[1]`|`r s1a100[2]`|`r s1a100[3]`|
+|$p = 0.3$|`r s1b100[1]`|`r s1b100[2]`|`r s1b100[3]`|
+|$p = 0.5$|`r s1c100[1]`|`r s1c100[2]`|`r s1c100[3]`|
+|$p = 0.7$|`r s1d100[1]`|`r s1d100[2]`|`r s1d100[3]`|
+|$p = 0.9$|`r s1e100[1]`|`r s1e100[2]`|`r s1e100[3]`|
+
+Dla największej próby $n = 100$ z kolei od razu rzuca się w  oczy to, że wszystkie wartości są mniejsze niż w poprzednich przypadkach (znów dla tego samego przykładu wariancji dla $p = 0.5$ dla większej próby jest ona `r s1c[1]/s1c100[1]` razy mniejsza niż dla $n = 50$). Zatem można stwierdzić, że estymator działa lepiej, im większa jest próba, na której go wyliczamy. 
+
+Znów, można zauważyć dokładnie te same własności co w poprzednich dwóch rozmiarach prób. Wariancja i MSE tutaj również są tym mniejsze, im bardziej oddalamy się od wartości $p = 0.5$. Obciążenie, również jak poprzednio, jest dodatnie dla mniejszych wartości $p$, natomiast mniejsze od zera dla większych. Estymator ten zachowuje się więc tak samo, bez względu na rozmiar próby. Jest on natomiast lepszy im większa jest próba i gorszy im jest ona mniejsza.
+
+# Zadanie 2.
+
+Dla rozkładu Poissona estymator największej wiarogodności wyznaczam w bardzo podobny sposób. Podobnie jak dla rozkładu dwumianowego, wyznaczam najpierw ENW parametru $\lambda$, który wynosi $$\hat{\lambda} = \bar{x}$$ czyli średnia wartości zmiennych losowych z rozkładu Poissona z parametrem $\lambda$.
+
+Tym razem prawdopodobieństwo, które mamy wyestymować jest to $P(X = x)$, gdzie $x = 0,1, ..., 10$. Zatem można to wyliczyć z gęstości rozkładu Poissona, która wynosi $$p(x) = \frac{\hat{\lambda}^xe^{\hat{\lambda}}}{x!}$$ gdzie $\hat{\lambda}$ oznacza wyliczony estymator.
+
+Poniższa funkcja `mle2` przedstawia dokładnie to opisane wyżej działanie przy pomocy funkcji w R. Wykorzystam ją do ponawiania losowania 10000 razy. Aby wyznaczyć wariancję, obciążenie oraz MSE wykorzystam tę samą funkcję `szacunek`, którą używałam dla poprzedniego rozkładu. 
+
+```{r}
+mle2 <- function(n, l, x) {
+  l_hat <- mean(rpois(n, l))
+  mle <- dpois(x, l_hat)
+  return(mle)
+}
+```
+
+Tym razem ponownie będę przyglądać się jedynie jednemu losowaniu. Sporządzę również tabele z wartościami wariancji, obciążenia oraz MSE dla każdej wartości $\lambda$ oddzielnie, jednak zrobię to jedynie dla $n = 50$. DLa $n = 20$ oraz $n = 100$ wnioski są takie same jak w poprzednim zadaniu.
+
+```{r, include = FALSE}
+set.seed(1)
+
+pr2a0 <- replicate(10000, mle2(50, 0.5, 0))
+s2a0 <- szacunek(pr2a0, dpois(0, 0.5))
+pr2a1 <- replicate(10000, mle2(50, 0.5, 1))
+s2a1 <- szacunek(pr2a1, dpois(1, 0.5))
+pr2a2 <- replicate(10000, mle2(50, 0.5, 2))
+s2a2 <- szacunek(pr2a2, dpois(2, 0.5))
+pr2a3 <- replicate(10000, mle2(50, 0.5, 3))
+s2a3 <- szacunek(pr2a3, dpois(3, 0.5))
+pr2a4 <- replicate(10000, mle2(50, 0.5, 4))
+s2a4 <- szacunek(pr2a4, dpois(4, 0.5))
+pr2a5 <- replicate(10000, mle2(50, 0.5, 5))
+s2a5 <- szacunek(pr2a5, dpois(5, 0.5))
+pr2a6 <- replicate(10000, mle2(50, 0.5, 6))
+s2a6 <- szacunek(pr2a6, dpois(6, 0.5))
+pr2a7 <- replicate(10000, mle2(50, 0.5, 7))
+s2a7 <- szacunek(pr2a7, dpois(7, 0.5))
+pr2a8 <- replicate(10000, mle2(50, 0.5, 8))
+s2a8 <- szacunek(pr2a8, dpois(8, 0.5))
+pr2a9 <- replicate(10000, mle2(50, 0.5, 9))
+s2a9 <- szacunek(pr2a9, dpois(9, 0.5))
+pr2a10 <- replicate(10000, mle2(50, 0.5, 10))
+s2a10 <- szacunek(pr2a10, dpois(10, 0.5))
+
+pr2b0 <- replicate(10000, mle2(50, 1, 0))
+s2b0 <- szacunek(pr2b0, dpois(0, 1))
+pr2b1 <- replicate(10000, mle2(50, 1, 1))
+s2b1 <- szacunek(pr2b1, dpois(1, 1))
+pr2b2 <- replicate(10000, mle2(50, 1, 2))
+s2b2 <- szacunek(pr2b2, dpois(2, 1))
+pr2b3 <- replicate(10000, mle2(50, 1, 3))
+s2b3 <- szacunek(pr2b3, dpois(3, 1))
+pr2b4 <- replicate(10000, mle2(50, 1, 4))
+s2b4 <- szacunek(pr2b4, dpois(4, 1))
+pr2b5 <- replicate(10000, mle2(50, 1, 5))
+s2b5 <- szacunek(pr2b5, dpois(5, 1))
+pr2b6 <- replicate(10000, mle2(50, 1, 6))
+s2b6 <- szacunek(pr2b6, dpois(6, 1))
+pr2b7 <- replicate(10000, mle2(50, 1, 7))
+s2b7 <- szacunek(pr2b7, dpois(7, 1))
+pr2b8 <- replicate(10000, mle2(50, 1, 8))
+s2b8 <- szacunek(pr2b8, dpois(8, 1))
+pr2b9 <- replicate(10000, mle2(50, 1, 9))
+s2b9 <- szacunek(pr2b9, dpois(9, 1))
+pr2b10 <- replicate(10000, mle2(50, 1, 10))
+s2b10 <- szacunek(pr2b10, dpois(10, 1))
+
+pr2c0 <- replicate(10000, mle2(50, 2, 0))
+s2c0 <- szacunek(pr2c0, dpois(0, 2))
+pr2c1 <- replicate(10000, mle2(50, 2, 1))
+s2c1 <- szacunek(pr2c1, dpois(1, 2))
+pr2c2 <- replicate(10000, mle2(50, 2, 2))
+s2c2 <- szacunek(pr2c2, dpois(2, 2))
+pr2c3 <- replicate(10000, mle2(50, 2, 3))
+s2c3 <- szacunek(pr2c3, dpois(3, 2))
+pr2c4 <- replicate(10000, mle2(50, 2, 4))
+s2c4 <- szacunek(pr2c4, dpois(4, 2))
+pr2c5 <- replicate(10000, mle2(50, 2, 5))
+s2c5 <- szacunek(pr2c5, dpois(5, 2))
+pr2c6 <- replicate(10000, mle2(50, 2, 6))
+s2c6 <- szacunek(pr2c6, dpois(6, 2))
+pr2c7 <- replicate(10000, mle2(50, 2, 7))
+s2c7 <- szacunek(pr2c7, dpois(7, 2))
+pr2c8 <- replicate(10000, mle2(50, 2, 8))
+s2c8 <- szacunek(pr2c8, dpois(8, 2))
+pr2c9 <- replicate(10000, mle2(50, 2, 9))
+s2c9 <- szacunek(pr2c9, dpois(9, 2))
+pr2c10 <- replicate(10000, mle2(50, 2, 10))
+s2c10 <- szacunek(pr2c10, dpois(10, 2))
+
+pr2d0 <- replicate(10000, mle2(50, 5, 0))
+s2d0 <- szacunek(pr2d0, dpois(0, 5))
+pr2d1 <- replicate(10000, mle2(50, 5, 1))
+s2d1 <- szacunek(pr2d1, dpois(1, 5))
+pr2d2 <- replicate(10000, mle2(50, 5, 2))
+s2d2 <- szacunek(pr2d2, dpois(2, 5))
+pr2d3 <- replicate(10000, mle2(50, 5, 3))
+s2d3 <- szacunek(pr2d3, dpois(3, 5))
+pr2d4 <- replicate(10000, mle2(50, 5, 4))
+s2d4 <- szacunek(pr2d4, dpois(4, 5))
+pr2d5 <- replicate(10000, mle2(50, 5, 5))
+s2d5 <- szacunek(pr2d5, dpois(5, 5))
+pr2d6 <- replicate(10000, mle2(50, 5, 6))
+s2d6 <- szacunek(pr2d6, dpois(6, 5))
+pr2d7 <- replicate(10000, mle2(50, 5, 7))
+s2d7 <- szacunek(pr2d7, dpois(7, 5))
+pr2d8 <- replicate(10000, mle2(50, 5, 8))
+s2d8 <- szacunek(pr2d8, dpois(8, 5))
+pr2d9 <- replicate(10000, mle2(50, 5, 9))
+s2d9 <- szacunek(pr2d9, dpois(9, 5))
+pr2d10 <- replicate(10000, mle2(50, 5, 10))
+s2d10 <- szacunek(pr2d10, dpois(10, 5))
+```
+
+|Wartość $x$|$\lambda = 0.5$|$\lambda = 1$|$\lambda = 2$|$\lambda = 5$|
+|:-:|:-:|:-:|:-:|:-:|
+|$x = 0$|`r pr2a0[1]`|`r pr2b0[1]`|`r pr2c0[1]`|`r pr2d0[1]`|
+|$x = 1$|`r pr2a1[1]`|`r pr2b1[1]`|`r pr2c1[1]`|`r pr2d1[1]`|
+|$x = 2$|`r pr2a2[1]`|`r pr2b2[1]`|`r pr2c2[1]`|`r pr2d2[1]`|
+|$x = 3$|`r pr2a3[1]`|`r pr2b3[1]`|`r pr2c3[1]`|`r pr2d3[1]`|
+|$x = 4$|`r pr2a4[1]`|`r pr2b4[1]`|`r pr2c4[1]`|`r pr2d4[1]`|
+|$x = 5$|`r pr2a5[1]`|`r pr2b5[1]`|`r pr2c5[1]`|`r pr2d5[1]`|
+|$x = 6$|`r pr2a6[1]`|`r pr2b6[1]`|`r pr2c6[1]`|`r pr2d6[1]`|
+|$x = 7$|`r pr2a7[1]`|`r pr2b7[1]`|`r pr2c7[1]`|`r pr2d7[1]`|
+|$x = 8$|`r pr2a8[1]`|`r pr2b8[1]`|`r pr2c8[1]`|`r pr2d8[1]`|
+|$x = 9$|`r pr2a9[1]`|`r pr2b9[1]`|`r pr2c9[1]`|`r pr2d9[1]`|
+|$x = 10$|`r pr2a10[1]`|`r pr2b10[1]`|`r pr2c10[1]`|`r pr2d10[1]`|
+
+Patrząc na tę tabelę, w pierwszej kolejności rzucają się małe wartości prawdopodobieństwa dla niektórych $x$. Jest to zrozumiałe, ponieważ gdy $\lambda = 0.5$ to prawdopodobieństwo otrzymania $x = 10$ jest niewielkie. Gdy przyjrzymy się wszystkim wartościom to można zauważyć, że największa wartość estymatora jest największa dla wartości $x$ bliskich parametrowi $\lambda$. 
+
+Można zobaczyć, że dla $\lambda = 0.5$ największe prawdopodobieństwo jest dla $x = 0$ i nieco mniejsze dla $x = 1$. Dla $\lambda = 1$ największe wartości szacowanego prawdopodobieństwa są dla $x = 0$, $x = 1$ oraz $x = 2$. Dla $\lambda = 2$ widocznie największe wartości są dla $x = 1$ oraz $x = 2$, natomiast dla $\lambda = 5$ - dla wartości $x$ między $x = 3$, a $x = 6$.
+
+Jeśli przyjrzymy się prawdziwym wartościom tego prawdopodobieństwa (których, aby zaoszczędzić miejsce, nie umieszczam w niniejszym sprawozdaniu) możemy zauważyć, że szacowane wartości są zbliżone do prawdziwych wartości prawdopodobieństwa $P(X = x)$ bez względu na wartości $x$ oraz $\lambda$.
+
+Przyjrzyjmy się tabeli dla $\lambda = 0.5$ przedstawiającej wartości wariancji, obciążenia oraz błędu średniokwadratowego.
+
+||Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$x = 0$|`r s2a0[1]`|`r s2a0[2]`|`r s2a0[3]`|
+|$x = 1$|`r s2a1[1]`|`r s2a1[2]`|`r s2a1[3]`|
+|$x = 2$|`r s2a2[1]`|`r s2a2[2]`|`r s2a2[3]`|
+|$x = 3$|`r s2a3[1]`|`r s2a3[2]`|`r s2a3[3]`|
+|$x = 4$|`r s2a4[1]`|`r s2a4[2]`|`r s2a4[3]`|
+|$x = 5$|`r s2a5[1]`|`r s2a5[2]`|`r s2a5[3]`|
+|$x = 6$|`r s2a6[1]`|`r s2a6[2]`|`r s2a6[3]`|
+|$x = 7$|`r s2a7[1]`|`r s2a7[2]`|`r s2a7[3]`|
+|$x = 8$|`r s2a8[1]`|`r s2a8[2]`|`r s2a8[3]`|
+|$x = 9$|`r s2a9[1]`|`r s2a9[2]`|`r s2a9[3]`|
+|$x = 10$|`r s2a10[1]`|`r s2a10[2]`|`r s2a10[3]`|
+
+W powyższej tabeli można zauważyć, że im mniejszy $x$ tym mniejsza wartość każdej z wielkości. Dla $x = 10$ są one tak małe, że równe niewiele ponad $0$. Jest to zrozumiałe ze względu na to, że samo prawdopodobieństwo jest bardzo niewielkie, zatem wariancja, obciążenie jak i błąd średniokwadratowy również nie powinny być duże. 
+
+Dla każdego $x$ można jednak zauważyć, że wszystkie wartości umieszczone w tabeli są niewielkie. Zatem estymator dobrze przybliża prawdziwą wartość prawdopodobieństwa dla każdej z wartości $x$ dla $\lambda = 0.5$, jednak pogarsza się, im $x$ jest mniejszy (zatem równoznacznie - gdy prawdopodobieństwo się zwiększa).
+
+Spójrzmy teraz na tabelę dla $\lambda = 1$.
+
+||Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$x = 0$|`r s2b0[1]`|`r s2b0[2]`|`r s2b0[3]`|
+|$x = 1$|`r s2b1[1]`|`r s2b1[2]`|`r s2b1[3]`|
+|$x = 2$|`r s2b2[1]`|`r s2b2[2]`|`r s2b2[3]`|
+|$x = 3$|`r s2b3[1]`|`r s2b3[2]`|`r s2b3[3]`|
+|$x = 4$|`r s2b4[1]`|`r s2b4[2]`|`r s2b4[3]`|
+|$x = 5$|`r s2b5[1]`|`r s2b5[2]`|`r s2b5[3]`|
+|$x = 6$|`r s2b6[1]`|`r s2b6[2]`|`r s2b6[3]`|
+|$x = 7$|`r s2b7[1]`|`r s2b7[2]`|`r s2b7[3]`|
+|$x = 8$|`r s2b8[1]`|`r s2b8[2]`|`r s2b8[3]`|
+|$x = 9$|`r s2b9[1]`|`r s2b9[2]`|`r s2b9[3]`|
+|$x = 10$|`r s2b10[1]`|`r s2b10[2]`|`r s2b10[3]`|
+
+W tym przypadku ponownie największe wartości każdej z wielkości są dla $x = 0$. Tutaj również jest to największe prawdopodobieństwo ze wszystkich estymowanych. Dla większych $x$ wartości prawdopodobieństwa są większe niż dla $\lambda - 0.5$, więc również można tutaj zauważyć, że wszystkie wielkości są nieco większe niż w poprzedniej tabeli. 
+
+Dla tej wartości $\lambda$ można również stwierdzić, że im większe prawdopodobieństwo $P(X=x)$, tym większe wartości wariancji, obciążenia oraz błędu średniokwadratowego i odwrotnie. Są one jednak również na tyle małe, że nieznaczące dla każdego $x$.
+
+Jako następną mamy tabelę dla $\lambda = 2$
+
+||Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$x = 0$|`r s2c0[1]`|`r s2c0[2]`|`r s2c0[3]`|
+|$x = 1$|`r s2c1[1]`|`r s2c1[2]`|`r s2c1[3]`|
+|$x = 2$|`r s2c2[1]`|`r s2c2[2]`|`r s2c2[3]`|
+|$x = 3$|`r s2c3[1]`|`r s2c3[2]`|`r s2c3[3]`|
+|$x = 4$|`r s2c4[1]`|`r s2c4[2]`|`r s2c4[3]`|
+|$x = 5$|`r s2c5[1]`|`r s2c5[2]`|`r s2c5[3]`|
+|$x = 6$|`r s2c6[1]`|`r s2c6[2]`|`r s2c6[3]`|
+|$x = 7$|`r s2c7[1]`|`r s2c7[2]`|`r s2c7[3]`|
+|$x = 8$|`r s2c8[1]`|`r s2c8[2]`|`r s2c8[3]`|
+|$x = 9$|`r s2c9[1]`|`r s2c9[2]`|`r s2c9[3]`|
+|$x = 10$|`r s2c10[1]`|`r s2c10[2]`|`r s2c10[3]`|
+
+Widać, że w tym przypadku to obciążenie ma wartości największe (bądź najmniejsze, jeśli ujemne) jeśli prawdopodobieństwo jest największe. Z kolei zarówno wariancja jak i błąd średniokwadratowy są dość podobne do siebie, a dla największych wartości $x = 10$ są nieco większe niż w poprzednich dwóch tabelach.
+
+Ponownie można stwierdzić, że estymator dobrze przybliża wszystkie wartości prawdopodobieństwa. Teraz można zauważyć, że dla największych wartości prawdopodobieństwa to przede wszystkim obciążenie jest najbardziej oddalone od $0$.
+
+Na końcu zaprezentuję tabelę dla $\lambda = 5$
+
+||Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$x = 0$|`r s2d0[1]`|`r s2d0[2]`|`r s2d0[3]`|
+|$x = 1$|`r s2d1[1]`|`r s2d1[2]`|`r s2d1[3]`|
+|$x = 2$|`r s2d2[1]`|`r s2d2[2]`|`r s2d2[3]`|
+|$x = 3$|`r s2d3[1]`|`r s2d3[2]`|`r s2d3[3]`|
+|$x = 4$|`r s2d4[1]`|`r s2d4[2]`|`r s2d4[3]`|
+|$x = 5$|`r s2d5[1]`|`r s2d5[2]`|`r s2d5[3]`|
+|$x = 6$|`r s2d6[1]`|`r s2d6[2]`|`r s2d6[3]`|
+|$x = 7$|`r s2d7[1]`|`r s2d7[2]`|`r s2d7[3]`|
+|$x = 8$|`r s2d8[1]`|`r s2d8[2]`|`r s2d8[3]`|
+|$x = 9$|`r s2d9[1]`|`r s2d9[2]`|`r s2d9[3]`|
+|$x = 10$|`r s2d10[1]`|`r s2d10[2]`|`r s2d10[3]`|
+
+Potwierdzają się tutaj wnoski z poprzedniej tabeli. Najbardziej oddalone od $0$ wartości obciążenia są dla $x$ pomiędzy $x = 2$ oraz $x = 6$ czyli w podobnych miejscach gdzie zaobserwowałam największe wartości estymowanego prawdopodobieństwa. Wartości wariancji i błędu średniokwadratowego są bardzo zbliżone do siebie. 
+
+Dla każdej wartości $\lambda$ oraz $x$ najważniejszym spostrzeżeniem jest jednak, że estymator działa bardzo dobrze.
+
+# Zadanie 3.
+
+W pierwszej kolejności, aby móc dokonać wyboru jednego z pojęć, warto wyjaśnić czym są zarówno liczby losowe jak i pseudolosowe.
+
+\textbf{Liczby losowe} - to liczby które powstają w sposób całkowicie nieprzewidywalny, bez wzorca, który możemy analizować. Najczęściej jest to związane ze zjawiskami w fizyce. 
+
+\textbf{Liczby pseudolosowe} - są to liczby, które powstają na skutek pewnego algorytmu symulującego losowość. Wyglądają one jedynie na całkiem losowe, są one wyliczane tak, aby wydawały się losowe. Są to tzw. ciągi deterministyczne.
+
+W przypadku generowania liczb z rozkładów probabilistycznych lepiej sprawdza się określenie "liczby pseudolosowe". Przede wszystkim jest to spowodowane tym, że często chcemy odtworzyć konkretną próbę losową, aby móc potwierdzić obliczenia. W przypadku liczb pseudolosowych łatwe jest również wygenerowanie wielu różnych liczb.
+
+# Zadanie 4.
+
+W tym zadaniu zajmę się analizą rozkładu beta $b(\theta, 1)$ o gęstości $$f(x) = \theta x^{\theta - 1}$$ W pierwszej kolejności warto zacząć od wyznaczenia estymatora największej wiarogodności dla parametru $\theta$. Wynosi on $$\hat{\theta} = \frac{-n}{\sum_{i=1}^n \log x_i}$$
+
+Polecenie zadania mówi o wyznaczeniu estymatora informacji Fishera na podstawie powtórzenia 10000 generowania 50 elementów z rozkładu $b(\theta, 1)$. Informacja Fishera dla tego rozkładu wynosi $$I(\theta) = \frac{1}{\theta^2}$$ 
+
+Aby wyliczyć estymowaną wartość informacji Fishera, podstawiam wartość estymatora największej wiarogodności pod powyższy wzór. Robię to za pomocą stworzonej przeze mnie funkcji `mle4`, która wyznacza estymator informacji Fishera dla jednego losowania wielkości 50. Następnie uśredniam powtórzone 10000 losowania, aby dostać jedną wartość informacji Fishera. Powtórzę takie działanie dla każdej wartości parametru $\theta$.
+
+```{r}
+mle4 <- function(n, theta) {
+  x <- rbeta(n, theta, 1)
+  mle <- (-n)/sum(log(x))
+  mle_if <- 1/(mle^2)
+  return(mle_if)
+}
+```
+
+```{r, include = FALSE}
+set.seed(2)
+IF4a <- mean(replicate(10000, mle4(50, 0.5)))
+IF4b <- mean(replicate(10000, mle4(50, 1)))
+IF4c <- mean(replicate(10000, mle4(50, 2)))
+IF4d <- mean(replicate(10000, mle4(50, 5)))
+
+set.seed(2)
+IF4a20 <- mean(replicate(10000, mle4(20, 0.5)))
+
+set.seed(2)
+IF4a100 <- mean(replicate(10000, mle4(100, 0.5)))
+```
+
+Główną częścią zadania jest jednak wyliczenie zmiennej $Y = \sqrt{n\widehat{I(\theta)}}(\hat{\theta} - \theta)$. Aby to zrobić, stworzę nową funkcję `Y`, która ponownie wylicza estymator największej wiarogodności dla parametru $\theta$, a następnie wyznacza wartość zmiennej Y dla każdej z nich. Powtórzę to działanie dla każdej wartości $\theta$ z polecenia.
+
+```{r}
+Y <- function(n, theta, eif) {
+  x <- rbeta(n, theta, 1)
+  mle <- (-n)/sum(log(x))
+  Y <- sqrt(n * eif) * (mle - theta)
+  return(Y)
+}
+```
+
+```{r, include=FALSE}
+set.seed(3)
+Y4a <- replicate(10000, Y(50, 0.5, IF4a))
+Y4b <- replicate(10000, Y(50, 1, IF4b))
+Y4c <- replicate(10000, Y(50, 2, IF4c))
+Y4d <- replicate(10000, Y(50, 5, IF4d))
+
+set.seed(2)
+Y4a20 <- replicate(10000, Y(20, 0.5, IF4a20))
+
+set.seed(2)
+Y4a100 <- replicate(10000, Y(100, 0.5, IF4a100))
+```
+
+Na wykresach kwantylowo kwantylowych pojawią się kwantyle rozkładu standardowego normalnego $N(0, 1)$. Podobnie w późniejszej części na histogramach pojawią się krzywe gęstości standardowego rozkładu normalnego $N(0, 1)$. Aby zargumentować taki wybór posłużę się twierdzeniem: $$\sqrt{n}(\hat{\theta}_n-\theta) \xrightarrow{D} N(0, \frac{1}{I(\theta)})$$ Jest ono spełnione dla warunków podanych w zadaniu i wynika z niego, że $$\sqrt{nI(\theta)}(\hat{\theta} - \theta) \xrightarrow{D} N(0, 1)$$ 
+
+Aby dokonać jak najlepszej analizy w pierwszej kolejności porównam ze sobą różne rozmiary prób, tj. $n = 20$, $n = 50$ oraz $n = 100$ i przeanalizuję, jak to wpływa na normalność. Wezmę pod uwagę jedynie $\theta = 0.5$. Na histogramach ustawiam `breaks = 50` aby zachować jak największą czytelność histogramu, nie tracąc jego dokładności.
+
+```{r, echo = FALSE}
+par(mfrow = c(2, 3))
+hist(Y4a, freq = F, breaks = 50, xlab = "Zmienna Y", ylab = "Gęstość", main = "Histogram zmiennej Y dla n = 50", col = "skyblue")
+curve(dnorm(x, mean = 0, sd = 1), lwd = 2, add = TRUE, col = "red3")
+hist(Y4a20, freq = F, breaks = 50, xlab = "Zmienna Y", ylab = "Gęstość", main = "Histogram zmiennej Y dla n = 20", col = "skyblue2")
+curve(dnorm(x, mean = 0, sd = 1), lwd = 2, add = TRUE, col = "red3")
+hist(Y4a100, freq = F, breaks = 50, xlab = "Zmienna Y", ylab = "Gęstość", main = "Histogram zmiennej Y dla n = 20", col = "skyblue3")
+curve(dnorm(x, mean = 0, sd = 1), lwd = 2, add = TRUE, col = "red3")
+qqnorm(Y4a, main = "Q-Q plot dla n = 50", xlab = "Teoretyczne kwantyle", ylab = "Empiryczne kwantyle", col = "skyblue")
+qqline(Y4a, col = "red3", lwd = 2)
+qqnorm(Y4a20, main = "Q-Q plot dla n = 20", xlab = "Teoretyczne kwantyle", ylab = "Empiryczne kwantyle", col = "skyblue2")
+qqline(Y4a20, col = "red3", lwd = 2)
+qqnorm(Y4a100, main = "Q-Q plot dla n = 100", xlab = "Teoretyczne kwantyle", ylab = "Empiryczne kwantyle", col = "skyblue3")
+qqline(Y4a100, col = "red3", lwd = 2)
+```
+
+Na powyższych wykresach można zauważyć, że im większa próba, tym bliżej rozkładu normalnego jest rozkład zmiennej $Y$. Dla $n = 100$ histogram nakłada się niemal idealnie na krzywą gęstości rozkładu normalnego $N(0, 1)$, podczas gdy dla $n = 50$ nakłada się nieco gorzej. Dla $n = 20$ nakłada się najgorzej. 
+
+Najlepiej widać to jednak na wykresach kwantylowo-kwantylowych. Gdy spojrzymy na te wykresy, można bardzo dobrze zobaczyć, jak ze wzrostem rozmiaru próby punkty zbliżają się do czerwonej prostej. Dla najmniejszego badanego rozmiaru próby $n = 20$ wykres przypomina raczej łuk niż, jak oczekiwalibyśmy, prostą. 
+
+Można więc założyć, że zmienna $Y$ ma rozkład tym bliższy rozkładowi normalnemu $N(0, 1)$, im większa jest próba.
+
+Teraz, wykonam histogramy zmiennej Y dla różnych wartości $\theta$, aby zobaczyć jak zmienia się jej normalność. W następnej kolejności, stworzę wykresy kwantylowo-kwantylowe.
+
+```{r, echo = FALSE, fig.width=10, fig.height=9}
+par(mfrow = c(2, 2))
+hist(Y4a, freq = F, breaks = 50, xlab = "Zmienna Y", ylab = "Gęstość", main = "Histogram zmiennej Y dla 0.5", col = "skyblue")
+curve(dnorm(x, mean = 0, sd = 1), lwd = 2, add = TRUE, col = "red3")
+hist(Y4b, freq = F, breaks = 50, xlab = "Zmienna Y", ylab = "Gęstość", main = "Histogram zmiennej Y dla 1", col = "skyblue2")
+curve(dnorm(x, mean = 0, sd = 1), lwd = 2, add = TRUE, col = "red3")
+hist(Y4c, freq = F, breaks = 50, xlab = "Zmienna Y", ylab = "Gęstość", main = "Histogram zmiennej Y dla 2", col = "skyblue3")
+curve(dnorm(x, mean = 0, sd = 1), lwd = 2, add = TRUE, col = "red3")
+hist(Y4d, freq = F, breaks = 50, xlab = "Zmienna Y", ylab = "Gęstość", main = "Histogram zmiennej Y dla 5", col = "skyblue4")
+curve(dnorm(x, mean = 0, sd = 1), lwd = 2, add = TRUE, col = "red3")
+```
+
+Powyższe wykresy pokrywają się z krzywą normalną dość dobrze. Można zauważyć delikatne przesunięcie w lewą stronę w każdym przypadku (słupki wystają tam nieco ponad krzywą). Nie jest to jednak na tyle znaczące, żeby uznać to za znaczące. Na ich podstawie można sądzić, że zmienna $Y$ ma rozkład normalny.
+
+Warto się teraz przyjrzeć wykresom kwantylowo kwantylowym dla tych zmiennych $Y$ z różnymi rozmiarami parametru $\theta$, żeby dokładniej zobaczyć, jak nakładają się z prostą.
+
+```{r, echo = FALSE, fig.width=10, fig.height=9}
+par(mfrow = c(2, 2))
+qqnorm(Y4a, main = "Q-Q plot dla 0.5", xlab = "Teoretyczne kwantyle", ylab = "Empiryczne kwantyle", col = "skyblue")
+qqline(Y4a, col = "red3", lwd = 2)
+qqnorm(Y4b, main = "Q-Q plot dla 1", xlab = "Teoretyczne kwantyle", ylab = "Empiryczne kwantyle", col = "skyblue2")
+qqline(Y4b, col = "red3", lwd = 2)
+qqnorm(Y4c, main = "Q-Q plot dla 2", xlab = "Teoretyczne kwantyle", ylab = "Empiryczne kwantyle", col = "skyblue3")
+qqline(Y4c, col = "red3", lwd = 2)
+qqnorm(Y4d, main = "Q-Q plot dla 5", xlab = "Teoretyczne kwantyle", ylab = "Empiryczne kwantyle", col = "skyblue4")
+qqline(Y4d, col = "red3", lwd = 2)
+```
+
+Na poniższych wykresach można zauważyć, że dla coraz większych wartości parametru $\theta$ delikatnie polepsza się normalność rozkładu. Ogólnie można jednak zobaczyć, że na każdym wykresie teoretyczne kwantyle i te empiryczne pokrywają się w dość dużym stopniu. Jedynie dla największych i najmniejsztch kwantyli pojawiają się niewielkie odchylenia od prostej.
+
+Na podstawie tego wnioskowania można więc stwierdzić, że rozkład zmiennej $Y$ jest zbliżony do standardowego rozkładu normalnego, czego można się spodziewać, znając przytaczane przeze mnie wcześniej twierdzenie.
+
+# Zadanie 5.
+
+Celem w tym zadaniu jest wyliczenie estymatorów, które wyliczaliśmy w poprzednim raporcie, tym razem jednek zamiast rozkładu normalnego testowany jest rozkład Laplace'a. Ma on gęstość: $$f(x) = \frac{1}{2\sigma}e^{(-\frac{|x - \theta|}{\sigma})}$$ gdzie $\sigma > 0$
+
+Aby wykonać odpowiednie wyliczenia korzystam z biblioteki LaplacesDemon, która pozwala na wygenerowanie próby z rozkładu Laplace'a. Każdy z estymatorów wyliczam z funkcji, które wykorzystywałam w poprzednim raporcie. Można je wszystkie zobaczyć poniżej.
+
+```{r, warning=FALSE}
+library(LaplacesDemon)
+
+est1 <- function(n, theta, sigma) {
+  mean(rlaplace(n, theta, sigma))
+}
+
+est2 <- function(n, theta, sigma) {
+  median(rlaplace(n, theta, sigma))
+}
+
+wagi <- function(n) {
+  set.seed(5)
+  w <- runif(n, 0, 1)
+  wi <- w/sum(w)
+  wi1 <- sort(wi[1:n/2])
+  wi2 <- sort(wi[(n/2 + 1):n], decreasing = T)
+  return(c(wi1, wi2))
+}
+
+est3 <- function(n, theta, sigma, wagi) {
+  xi <- sort(rlaplace(n, theta, sigma))
+  sum(wagi[1]*xi[1:ceiling(n/2)]) + sum(wagi[2]*xi[(ceiling(n/2) + 1):n])
+}
+
+est4 <- function(n, theta, sigma) {
+  x <- rlaplace(n, theta, sigma)
+  xi <- sort(x)
+  i <- 1:n
+  d1 <- qnorm((i-1)/n, 0, 1)
+  d2 <- qnorm(i/n, 0, 1)
+  wi <- dnorm(d1, 0, 1) - dnorm(d2, 0, 1)
+  sum(wi*xi)
+}
+```
+
+Analizę wykonam jedynie dla próby rozmiaru $n = 50$, ze względu na to, że dla mniejszej i większej próby wnioski są analogiczne, jak w pierwszym zadaniu.
+
+```{r, include = FALSE}
+wagi_50 <- wagi(50)
+
+set.seed(2)
+pr5a1 <- replicate(10000, est1(50, 1, 1))
+s5a1 <- szacunek(pr5a1, 1)
+set.seed(2)
+pr5a2 <- replicate(10000, est2(50, 1, 1))
+s5a2 <- szacunek(pr5a2, 1)
+set.seed(2)
+pr5a3 <- replicate(10000, est3(50, 1, 1, wagi_50))
+s5a3 <- szacunek(pr5a3, 1)
+set.seed(2)
+pr5a4 <- replicate(10000, est4(50, 1, 1))
+s5a4 <- szacunek(pr5a4, 1)
+
+set.seed(2)
+pr5b1 <- replicate(10000, est1(50, 4, 1))
+s5b1 <- szacunek(pr5b1, 4)
+set.seed(2)
+pr5b2 <- replicate(10000, est2(50, 4, 1))
+s5b2 <- szacunek(pr5b2, 4)
+set.seed(2)
+pr5b3 <- replicate(10000, est3(50, 4, 1, wagi_50))
+s5b3 <- szacunek(pr5b3, 4)
+set.seed(2)
+pr5b4 <- replicate(10000, est4(50, 4, 1))
+s5b4 <- szacunek(pr5b4, 4)
+
+set.seed(2)
+pr5c1 <- replicate(10000, est1(50, 1, 2))
+s5c1 <- szacunek(pr5c1, 1)
+set.seed(2)
+pr5c2 <- replicate(10000, est2(50, 1, 2))
+s5c2 <- szacunek(pr5c2, 1)
+set.seed(2)
+pr5c3 <- replicate(10000, est3(50, 1, 2, wagi_50))
+s5c3 <- szacunek(pr5c3, 1)
+set.seed(2)
+pr5c4 <- replicate(10000, est4(50, 1, 2))
+s5c4 <- szacunek(pr5c4, 1)
+```
+
+Przeanalizuję w pierwszej kolejności przykłady wartości estymatora dla jednej przykładowej próby.
+
+||$\theta = 1, \sigma = 1$|$\theta = 4, \sigma = 1$|$\theta = 1, \sigma = 2$|
+|:-:|:-:|:-:|:-:|
+|$\hat{\theta}_1$|`r pr5a1[1]`|`r pr5b1[1]`|`r pr5c1[1]`|
+|$\hat{\theta}_2$|`r pr5a2[1]`|`r pr5b2[1]`|`r pr5c2[1]`|
+|$\hat{\theta}_3$|`r pr5a3[1]`|`r pr5b3[1]`|`r pr5c3[1]`|
+|$\hat{\theta}_4$|`r pr5a4[1]`|`r pr5b4[1]`|`r pr5c4[1]`|
+
+Na podstawie tego losowania można zauważyć, że to drugi z estymatorów ($\hat{\theta}_2$, a zatem mediana) najlepiej przybliża szukaną wartość. Za pomocą pierwszego estymatora ($\hat{\theta}_1$, czyli średnia) również otrzymuję wagi zbliżone do prawdziwych wartości parametru $\theta$, jednak są one nieco bardziej od nich oddalone niż w przypadku mediany. Sugeruje to, że mediana mogłaby być lepszym estymatorem dla tego parametru niż średnia. Jest to inny wniosek niż wcześniej, dla badania rozkładu normalnego, kiedy to średnia była najlepszym estymatorem.
+
+Warto zauważyć, że estymator trzeci ($\hat{\theta}_3$) oraz czwarty ($\hat{\theta}_4$) nie przybliżają zbyt dobrze szukanego parametru.
+
+Zacznę od estymatora $\hat{\theta}_3$. W przypadku rozkładu normalnego był on dość dobrym przybliżeniem dla szukanych wartości. Tutaj jednak, w drugim przypadku, gdy powinien wynosić około 4, wynosi on około wartości $1$. W pozostałych przypadkach otrzymujemy wartość zbliżoną do $0.25$, gdzie powinniśmy mieć $1$. Świadczy to o tym, że ten estymator zupełnie nie nadaje się do przybliżania parametru przesunięcia $\theta$ w rozkładnie Laplace'a.
+
+Z kolei dla estymatora $\hat{\theta}_4$ można zobaczyć tę samą właśność, co w przypadku rozkładu normalnego. Wartości widoczne w powyższej tabeli wynoszą, odpowiednio, około 1, około 1 oraz około 2. Są to dokładnie wartości parametru $\sigma$, a zatem nie tego parametru, który chcieliśmy estymować. Można więc założyć, że te dwa estymatory zupełnie nie podają przybliżonej $\theta$.
+
+Teraz sporządzę tabele dla każdego z trzech przykładów (a), (b) oraz (c) tego zadania.
+
+## $\theta = 1, \sigma = 1$
+
+||Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$\hat{\theta}_1$|`r s5a1[1]`|`r s5a1[2]`|`r s5a1[3]`|
+|$\hat{\theta}_2$|`r s5a2[1]`|`r s5a2[2]`|`r s5a2[3]`|
+|$\hat{\theta}_3$|`r s5a3[1]`|`r s5a3[2]`|`r s5a3[3]`|
+|$\hat{\theta}_4$|`r s5a4[1]`|`r s5a4[2]`|`r s5a4[3]`|
+
+Przyjrzyjmy się najpierw dwóm pierwszym estymatorom, ponieważ po jednorazowym losowaniu określiłam, że to jeden z nich ma najlepsze przybliżenie parametru $\theta$. Powyższa tabela potwierdza moje przypuszczenia. Można zauważyć, że estymator $\hat{\theta}_2$ (mediana) jest nieco lepszy niż $\hat{\theta}_1$, czyli średnia. Zgadza się to z tym, co można było zobaczyć również w przykładowym losowaniu. Nie są to jednak bardzo znaczące różnice, więc średnia również mogłaby być traktowana jako estymator $\theta$, po prostu nieco gorszy.
+
+Jak widać, estymator $\hat{\theta}_3$ ma obciążenie oddalone dość mocno od zera - wynosi ono `r s5a3[2]`. Zgadzałoby się to z wynikiem otrzymanym w przykładowym losowaniu, gdzie otrzymaliśmy wartość około $0.25$, zatem o $0.75$ mniej niż powinno. Estymator trzeci ma jednak najmniejszą wariancję, więc kolejne przybliżenia są zbliżone do siebie. 
+
+Czwarty estymator ma dość duże obciążenie i błąd średniokwadratowy, nie jest to więc nieobciążony estymator. Ma on wariancję podobną do średniej. W tym przypadku nie widać jednak, że nie nadaje się on do przybliżenia wartości parametru $\theta$.
+
+## $\theta = 4, \sigma = 1$
+
+||Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$\hat{\theta}_1$|`r s5b1[1]`|`r s5b1[2]`|`r s5b1[3]`|
+|$\hat{\theta}_2$|`r s5b2[1]`|`r s5b2[2]`|`r s5b2[3]`|
+|$\hat{\theta}_3$|`r s5b3[1]`|`r s5b3[2]`|`r s5b3[3]`|
+|$\hat{\theta}_4$|`r s5b4[1]`|`r s5b4[2]`|`r s5b4[3]`|
+
+W następnej tabeli możemy zacząć od zwrócenia uwagi na $\hat{\theta}_4$, które od razu wskazuje na bezużyteczność tego estymatora. Zarówno błąd średniokwadratowy, jak i obciążenie są bardzo oddalone od zera. Widoczne było, że jest to zupełnie niedziałający w tej sytuacji estymator. Podobnie było z estymatorem $\hat{\theta}_3$, co również można zauważyć w powyższej tabeli.
+
+Warto więc skupić się wyłącznie na średniej i medianie, które w tym przypadku znowu wskazują na to, że mediana byłaby trochę lepszym wyborem do estymacji parametru $\theta$ rozkładu Laplace'a niż średnia. Ponownie ma ona mniejszą wariancję niż średnia, a także mniejszy błąd średniokwadratowy, chociaż różnice są niewielkie. Jedynie obciążenie jest nieco większe, ale niezbyt znacząco. Zatem podobnie jak w poprzedniej tabeli, średnia również mogłaby być estymatorem tego parametru, po prostu nieco gorszym.
+
+## $\theta = 1, \sigma = 2$
+
+||Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$\hat{\theta}_1$|`r s5c1[1]`|`r s5c1[2]`|`r s5c1[3]`|
+|$\hat{\theta}_2$|`r s5c2[1]`|`r s5c2[2]`|`r s5c2[3]`|
+|$\hat{\theta}_3$|`r s5c3[1]`|`r s5c3[2]`|`r s5c3[3]`|
+|$\hat{\theta}_4$|`r s5c4[1]`|`r s5c4[2]`|`r s5c4[3]`|
+
+W ostatniej tabeli przyjrzę się dokładniej jedynie pierwszym dwóm estymatorom. Jest to spowodowane głównie przez to, że dla pozostałych dwóch moje wnioski się nie różnią w stosunku do tych znajdujących się powyżej.
+
+Tutaj można zauważyć pierwsze znaczące różnice w estymacji parametru $\theta$. Wariancja i MSE są o wiele większe dla $\hat{\theta}_1$ w porównaniu do $\hat{\theta}_2$. Dla obu z nich, wszystkie wartości znajdujące się w tabeli są wyższe niż w dwóch pozostałych. Mediana wciąż jest więc lepszym wyborem do estymacji parametru $\theta$ niż średnia, tym razem dość znacząco. 
+
+Można zauważyć, że podobnie jak w przypadku rozkładu normalnego, gdy $\sigma \neq 1$ każdy z estymatorów "psuje się" w porównaniu do sytuacji przeciwnej.
+
+Bazując na tych przemyśleniach, można stwierdzić, że mediana jest najbardziej optymalnym estymatorem parametru $\theta$ w rozkładzie Laplace'a, w przeciwieństwie do rozkładu normalnego, gdzie to średnia najlepiej go przybliża.

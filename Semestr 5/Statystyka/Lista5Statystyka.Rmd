@@ -1,0 +1,769 @@
+---
+title: "Lista 5."
+author: "Amelia Olejniczak"
+output: 
+  pdf_document:
+    number_sections: false
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Wprowadzenie teoretyczne
+
+Poniższy raport dotyczy testowania hipotez. Sprawdzę w nim, w jaki sposób moc testu sprawdzającego czy rozkłady są sobie równe zależy od wielkości parametrów. Takie testowanie wygląda w następujący sposób:
+
+Mamy dwie niezależne od siebie próby: $X_1, ..., X_m$ $iid$ o dystrybuancie $F$ oraz $Y_1, ..., Y_n$ $iid$ o dystrybuancie $G$. Rozważmy hipotezę $$H_0: F = G \qquad vs \qquad H_1: F \ne G$$ na poziomie istotności $\alpha$.
+
+Niech $N = m + n$ oraz $Z = (Z_1, ..., Z_N) = (X_1, ..., X_m, Y_1, ..., Y_n)$ to wektor łączący ze sobą obie próby. Niech $R_i$ będzie rangą $Z_i$ w próbie $Z$ dla $i = 1, ..., N$. Klasyczna liniowa statystyka rangowa związana z funkcją wynikową $\varphi \in L_2(0, 1)$ ma postać $$T_{\varphi} = \sqrt{\frac{mn}{N}} \left( \frac{1}{m} \sum^m_{i = 1} \varphi \left( \frac{R_i - 0.5}{N} \right) - \frac{1}{n} \sum^N_{i = m + 1} \varphi \left( \frac{R_i - 0.5}{N} \right) \right)$$ gdzie wybór funkcji $\varphi$ determinuje, jaką statystykę badamy. Możemy z niej uzyskać statystykę Wilcoxona, Ansari-Bradley'a oraz Lepage'a. Ponadto, statystyka $T_{\varphi}$ ma asymptotyczny rozkład standardowy normalny, gdy $\int_0^1 \varphi(u)du = 0$ oraz $\int_0^1 \varphi^2(u)du = 1$.
+
+Gdy $\varphi(u) = \varphi_1(u) = \sqrt3 (2u - 1)$ możemy otrzymać **statystykę Wilcoxona** $W = T^2_{\varphi_1}$. Sprawdźmy, czy zostają spełnione warunki o rozkładzie: $$\int_0^1 \varphi_1(u)du = \int_0^1 \sqrt3 (2u - 1) du = \sqrt3 (u^2 - u) \ |_0^1 = \sqrt3((1-1)-(0-0)) = 0$$ $$\int_0^1 \varphi_1^2(u)du = 3 \int_0^1 (4u^2 - 4u + 1) du = 3 \left( \frac{4}{3} u^3 - 2u^2 +u \right) \ |_0^1 = 3 \left( \frac{4}{3} - 2 + 1 \right) = 1$$
+
+Z kolei dla $\varphi(u) = \varphi_2(u) = \sqrt{48} (0.25 - |u - 0.5|)$ mamy do czynienia ze **statystyką Ansari-Bradley'a** $AB = T_{\varphi_2}$. Sprawdźmy, czy $T_{\varphi_2}$ również ma asymptotyczny rozkład standardowy normalny. $$\int_0^1 \varphi_2(u) du = \sqrt{48} \int_0^1 (0.25 - |u - 0.5|)du = \sqrt{48} \left(\int_0^{0.5} (0.25 - 0.5 + u)du + \int_{0.5}^1 (0.25 - u + 0.5)du \right) =$$ $$= \sqrt{48} \left( \int_0^{0.5} (u - 0.25)du + \int_{0.5}^1 (0.75 - u)du \right) = \sqrt{48} \left( (\frac{u^2}{2} - 0.25u) \ |_0^{0.5} + (0.75u - \frac{u^2}{2}) \ |_{0.5}^1 \right) = 0$$ $$\int_0^1 \varphi_2^2(u)du = 48 \int_0^1 (0.25 - |u - 0.5|)^2 du = 48 \left( \int_0^{0.5} (u - 0.25)^2du + \int_{0.5}^1 (0.75 - u)^2du \right) =$$ $$= 48 \int_0^{0.5} \left( u^2 - \frac{u}{2} + \frac{1}{16} \right)du + 48 \int_{0.5}^1 \left( \frac{9}{16} - \frac{3u}{2} + u^2 \right)du = 48 \left( \frac{u^3}{3} - \frac{u^2}{4} + \frac{u}{16} \right) \ |_0^{0.5} + 48 \left( \frac{9u}{16} - \frac{3u^2}{4} + \frac{u^3}{3} \right) |_{0.5}^1 = 1$$
+
+Gdy mamy do czynienia ze **statystyką Lepage'a** badamy tak naprawdę $L = W + AB$. Natomiast **statystyka Kołmogorowa-Smirnowa** ma postać $$KS = \sqrt{\frac{mn}{N}} \sup_{x \in R} |F_m(x) - G_n(x)|$$ gdzie $F_m$ oraz $G_n$ są, dystrybuantami empirycznymi dla odpowiednio próby X i Y. W poniższych zadaniach będę analizować testy oparte na każdej ze statystyk testowych podanych powyżej.
+
+# Zadanie 1. 
+
+W tym zadaniu wygeneruję $n = m = 20$ a następnie $n = m = 50$ obserwacji z rozkładu normalnego $N(0, 1)$. Następnie wyznaczę wartości wyżej podanych statystyk. Po powtórzeniu doświadczenia 10000 razy wyznaczę wartości krytyczne odpowiadających im testów prawostronnych. Przyjęty przeze mnie poziom istotności to $\alpha = 0.05$. Kody służące do wyliczenia $T_{\varphi}^2$ oraz statystyki $KS$ prezentuję poniżej.
+
+```{r}
+phi1 <- function(u) {
+  return(sqrt(3) * (2 * u - 1))
+}
+
+phi2 <- function(u) {
+  return(sqrt(48) * (0.25 - abs(u - 0.5)))
+}
+
+T2_phi <- function(sx, sy, phi) {
+  sz <- c(sx, sy)
+  sz_ranks <- rank(sz)
+  m <- length(sx)
+  n <- length(sy)
+  N <- m + n
+  sum1 <- sum(phi((sz_ranks[1:m] - 0.5)/N))
+  sum2 <- sum(phi((sz_ranks[(m+1):N] - 0.5)/N))
+  return((sqrt(m*n/N) * ((1/m) * sum1 - (1/n) * sum2))**2)
+}
+
+KS <- function(sx, sy) {
+  sz <- c(sx, sy)
+  m <- length(sx)
+  n <- length(sy)
+  N <- n + m
+  F_m <- function(t) {mean(sx <= t)}
+  G_n <- function(t) {mean(sy <= t)}
+  sup <- max(sapply(sz, function(x) {abs(F_m(x) - G_n(x))}))
+  return(sqrt((m * n)/N) * sup)
+}
+```
+
+Do wyliczenia wartości krytycznych z powtórzonych 10000 prób wykorzystam funkcję `quantile()`. Tabela poniżej przedstawia wyliczone przeze mnie kwantyle zaokrąglone do trzech miejsc po przecinku dla różnych rozmiarów oraz różnych statystyk.
+
+```{r, echo = FALSE}
+set.seed(1)
+W_20 <- replicate(10000, T2_phi(rnorm(20), rnorm(20), phi1))
+W_Q_20 <- quantile(W_20, 0.95, names = FALSE)
+set.seed(1)
+AB_20 <- replicate(10000, T2_phi(rnorm(20), rnorm(20), phi2))
+AB_Q_20 <- quantile(AB_20, 0.95, names = FALSE)
+L_20 <- W_20 + AB_20
+L_Q_20 <- quantile(L_20, 0.95, names = FALSE)
+set.seed(1)
+KS_20 <- replicate(10000, KS(rnorm(20), rnorm(20)))
+KS_Q_20 <- quantile(KS_20, 0.95, names = FALSE)
+
+set.seed(1)
+W_50 <- replicate(10000, T2_phi(rnorm(50), rnorm(50), phi1))
+W_Q_50 <- quantile(W_50, 0.95, names = FALSE)
+set.seed(1)
+AB_50 <- replicate(10000, T2_phi(rnorm(50), rnorm(50), phi2))
+AB_Q_50 <- quantile(AB_50, 0.95, names = FALSE)
+L_50 <- W_50 + AB_50
+L_Q_50 <- quantile(L_50, 0.95, names = FALSE)
+set.seed(1)
+KS_50 <- replicate(10000, KS(rnorm(50), rnorm(50)))
+KS_Q_50 <- quantile(KS_50, 0.95, names = FALSE)
+```
+
+|Statystyka|$n = m = 20$|$n = m = 50$|
+|:-:|:-:|:-:|
+|Wilcoxona|`r round(W_Q_20, 3)`|`r round(W_Q_50, 3)`|
+|Ansari-Bradleya|`r round(AB_Q_20, 3)`|`r round(AB_Q_50, 3)`|
+|Lepage'a|`r round(L_Q_20, 3)`|`r round(L_Q_50, 3)`|
+|Kołmogorowa-Smirnowa|`r round(KS_Q_20, 3)`|`r round(KS_Q_50, 3)`|
+
+Jak widać po powyższej tabeli, dla obu rozmiarów próby wartości są bardzo do siebie zbliżone. Gdy przyjrzymy się nim dokładniej, jak wartości krytyczne zmieniają się w zależności od badanej statystyki możemy zauważyć, że dla dwóch pierwszych statystyk - $W$ oraz $AB$ możemy zauważyć duże podobieństwo między tymi dwoma statystykami. Jest to całkowicie zrozumiałe. W części teoretycznej pokazałam, że rozkład $T_{\varphi_1}$ oraz $T_{\varphi_2}$ a zatem $\sqrt{W}$ oraz $\sqrt{AB}$. Ze względu na to, że mają one asymptotyczny rozkład $N(0, 1)$ wynika, że statystyki $W$ oraz $AB$ mają asymptotyczny rozkład $\chi^2(1)$. Teoretyczna wartość $0.95$ kwantyla tego rozkładu wynosi `r round(qchisq(0.95, 1), 3)`, więc jest bardzo bliska wartościom otrzymanym dla statystyk $W$ oraz $AB$. 
+
+Z kolei statystyka $L$, która wynosi $L = W + AB$ ma asymptotyczny rozkład $\chi^2(2)$ (co wynika z tego, że jeśli $Q = \sum_{i=1}^2 Z^2_i$, gdzie $Z_i$ mają rozkład standardowy normalny, to $Q \sim \chi^2(k)$). Kwantyl $0.95$ dla rozkładu $\chi^2(2)$ wynosi `r round(qchisq(0.95, 2), 3)` zatem ponownie bardzo blisko prawdziwej wartości.
+
+Z kolei ostatnia ze statystyk, statystyka $KS$ ma teoretyczną wartość krytyczną wyliczaną ze wzoru $c(\alpha) = \sqrt{-\ln(\frac{\alpha}{2}) \cdot \frac{1}{2}}$. Teoretyczna jej wartość, dla przyjętego przeze mnie $\alpha = 0.05$ wynosi `r round(sqrt(-log(0.025) * 0.5), 3)`, co również jest wartością bardzo bliskie do wyliczonych z prób wartości.
+
+Warto zauważyć, że ten sposób generowania danych jest jak najbardziej poprawny. Rozkład statystyki nie zależy od rozkładu próby losowej w żadnym z przedstawionych wyżej przypadków. W tym przypadku moglibyśmy się posłużyć także próbkami z dowolnego ciągłego rozkładu z parametrami 0 oraz 1.
+
+# Zadanie 2.
+
+W tym przypadku celem jest wyliczenie mocy testu na podstawie powtórzoneego 10000 razy wyliczania opisywanych wyżej statystyk. Będziemy tutaj analizować to na podstawie $\mu_2$. Sprawdzimy to ponownie dla dwóch różnych rozmiarów.
+
+Aby móc to zrobić w pierwszej kolejności warto się zastanowić jak matematycznie wyznacza się moc testu. W tym przypadku jest to $$P(T>c|H_1)$$ gdzie $T$ to statystyka testowa, a $c$ - odpowiedni kwantyl rozkładu statystyki testowej. Zatem jest to prawdopodobieństwo odrzucenia hipotezy zerowej, pod warunkiem, że jest ona fałszywa. 
+
+Aby ją wyestymować obliczymy, jak często wyliczone statystyki były większe od kwantyli teoretycznych, których sposób wyliczenia podałam w poprzednim zadaniu, a następnie podzielimy ich liczbę przez liczbę obserwacji (która wynosi 10000 w każdym przypadku). Ze względu na długość kodu, nie umieszczam go poniżej.
+
+W celach estetycznych obserwacje i wnioski wyciągnięte z wykresów umieszczę na tej stronie, a wykresy pojawią się na następniej, aby najlepiej wykorzystać dostępną przestrzeń.
+
+Na wykresach można zauważyć przede wszystkim, że w przypadku statystyki Ansari-Bradley'a oraz zmiany parametru przesunięcia, moc testu jest bardzo mała. Zatem w tym przypadku można uznać, że zupełnie się ona nie nadaje. Z kolei gdy patrzymy na pozostałe statystyki wypadają one dość porównywalnie. W rozkładzie normalnym i logistycznym minimalnie lepiej od pozostałych radzi sobie statystyka Wilcoxona, z kolei w rozkładzie Cauchy'ego - statystyka Kołmogorowa-Smirnowa. 
+
+Warto zauważyć również, że moc testu dla wszystkich statystyk jest najgorsza dla rozkładu logistycznego, z kolei najlepsza jest dla rozkładu Cauchy'ego. Warto jednak zauważyć, że w tym przypadku mamy do czynienia z większymi wartościami parametru $\mu_2$. Gdy spojrzymy na wartości mocy testu dla tych samych $\mu_2$, co wcześniej (więc $\mu_2 = 1.4$ gdzieś w połowie wykresu) możemy zobaczyć, że te wartości są porównywalne do rozkładu logistycznego.
+
+Przyjrzyjmy się teraz różnym rozmiarom. Można zauważyć (dość oczywistą) poprawę mocy testu dla większego rozmiaru próby. Największa i najbardziej znacząca poprawa następuje dla rozkładu logistycznego, jednak w każdym przypadku dla większych wartości $\mu_2$ jest znacząca. Dla mniejszych wartości parametru $\mu_2$ zmiana jest niezauważalna.
+
+```{r, echo = FALSE}
+mu2 <- c(0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4)
+muc2 <- c(0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0)
+set.seed(1)
+samplex_20_n <- lapply(1:7, function(x) replicate(10000, rnorm(20)))
+sampley_20_n <- lapply(mu2, function(mu) replicate(10000, rnorm(20, mu, 1)))
+samplex_50_n <- lapply(1:7, function(x) replicate(10000, rnorm(50)))
+sampley_50_n <- lapply(mu2, function(mu) replicate(10000, rnorm(50, mu, 1)))
+samplex_20_l <- lapply(1:7, function(x) replicate(10000, rlogis(20)))
+sampley_20_l <- lapply(mu2, function(mu) replicate(10000, rlogis(20, mu, 1)))
+samplex_50_l <- lapply(1:7, function(x) replicate(10000, rlogis(50)))
+sampley_50_l <- lapply(mu2, function(mu) replicate(10000, rlogis(50, mu, 1)))
+samplex_20_c <- lapply(1:7, function(x) replicate(10000, rcauchy(20)))
+sampley_20_c <- lapply(muc2, function(mu) replicate(10000, rcauchy(20, mu, 1)))
+samplex_50_c <- lapply(1:7, function(x) replicate(10000, rcauchy(50)))
+sampley_50_c <- lapply(muc2, function(mu) replicate(10000, rcauchy(50, mu, 1)))
+
+W_20_mu_n <- sapply(1:10000, function(i) {
+  sapply(1:length(mu2), function(j) {
+    T2_phi(samplex_20_n[[j]][, i], sampley_20_n[[j]][, i], phi1)
+  })
+})
+W_50_mu_n <- sapply(1:10000, function(i) {
+  sapply(1:length(mu2), function(j) {
+    T2_phi(samplex_50_n[[j]][, i], sampley_50_n[[j]][, i], phi1)
+  })
+})
+W_20_mu_l <- sapply(1:10000, function(i) {
+  sapply(1:length(mu2), function(j) {
+    T2_phi(samplex_20_l[[j]][, i], sampley_20_l[[j]][, i], phi1)
+  })
+})
+W_50_mu_l <- sapply(1:10000, function(i) {
+  sapply(1:length(mu2), function(j) {
+    T2_phi(samplex_50_l[[j]][, i], sampley_50_l[[j]][, i], phi1)
+  })
+})
+W_20_mu_c <- sapply(1:10000, function(i) {
+  sapply(1:length(muc2), function(j) {
+    T2_phi(samplex_20_c[[j]][, i], sampley_20_c[[j]][, i], phi1)
+  })
+})
+W_50_mu_c <- sapply(1:10000, function(i) {
+  sapply(1:length(muc2), function(j) {
+    T2_phi(samplex_50_c[[j]][, i], sampley_50_c[[j]][, i], phi1)
+  })
+})
+
+W_20_mu_n_tf <- W_20_mu_n >= qchisq(0.95, 1)
+power_W_20_mu_n_tf <- apply(W_20_mu_n_tf, 1, mean)
+W_50_mu_n_tf <- W_50_mu_n >= qchisq(0.95, 1)
+power_W_50_mu_n_tf <- apply(W_50_mu_n_tf, 1, mean)
+W_20_mu_l_tf <- W_20_mu_l >= qchisq(0.95, 1)
+power_W_20_mu_l_tf <- apply(W_20_mu_l_tf, 1, mean)
+W_50_mu_l_tf <- W_50_mu_l >= qchisq(0.95, 1)
+power_W_50_mu_l_tf <- apply(W_50_mu_l_tf, 1, mean)
+W_20_mu_c_tf <- W_20_mu_c >= qchisq(0.95, 1)
+power_W_20_mu_c_tf <- apply(W_20_mu_c_tf, 1, mean)
+W_50_mu_c_tf <- W_50_mu_c >= qchisq(0.95, 1)
+power_W_50_mu_c_tf <- apply(W_50_mu_c_tf, 1, mean)
+
+AB_20_mu_n <- sapply(1:10000, function(i) {
+  sapply(1:length(mu2), function(j) {
+    T2_phi(samplex_20_n[[j]][, i], sampley_20_n[[j]][, i], phi2)
+  })
+})
+AB_50_mu_n <- sapply(1:10000, function(i) {
+  sapply(1:length(mu2), function(j) {
+    T2_phi(samplex_50_n[[j]][, i], sampley_50_n[[j]][, i], phi2)
+  })
+})
+AB_20_mu_l <- sapply(1:10000, function(i) {
+  sapply(1:length(mu2), function(j) {
+    T2_phi(samplex_20_l[[j]][, i], sampley_20_l[[j]][, i], phi2)
+  })
+})
+AB_50_mu_l <- sapply(1:10000, function(i) {
+  sapply(1:length(mu2), function(j) {
+    T2_phi(samplex_50_l[[j]][, i], sampley_50_l[[j]][, i], phi2)
+  })
+})
+AB_20_mu_c <- sapply(1:10000, function(i) {
+  sapply(1:length(muc2), function(j) {
+    T2_phi(samplex_20_c[[j]][, i], sampley_20_c[[j]][, i], phi2)
+  })
+})
+AB_50_mu_c <- sapply(1:10000, function(i) {
+  sapply(1:length(muc2), function(j) {
+    T2_phi(samplex_50_c[[j]][, i], sampley_50_c[[j]][, i], phi2)
+  })
+})
+
+AB_20_mu_n_tf <- AB_20_mu_n >= qchisq(0.95, 1)
+power_AB_20_mu_n_tf <- apply(AB_20_mu_n_tf, 1, mean)
+AB_50_mu_n_tf <- AB_50_mu_n >= qchisq(0.95, 1)
+power_AB_50_mu_n_tf <- apply(AB_50_mu_n_tf, 1, mean)
+AB_20_mu_l_tf <- AB_20_mu_l >= qchisq(0.95, 1)
+power_AB_20_mu_l_tf <- apply(AB_20_mu_l_tf, 1, mean)
+AB_50_mu_l_tf <- AB_50_mu_l >= qchisq(0.95, 1)
+power_AB_50_mu_l_tf <- apply(AB_50_mu_l_tf, 1, mean)
+AB_20_mu_c_tf <- AB_20_mu_c >= qchisq(0.95, 1)
+power_AB_20_mu_c_tf <- apply(AB_20_mu_c_tf, 1, mean)
+AB_50_mu_c_tf <- AB_50_mu_c >= qchisq(0.95, 1)
+power_AB_50_mu_c_tf <- apply(AB_50_mu_c_tf, 1, mean)
+
+L_20_mu_n <- W_20_mu_n + AB_20_mu_n
+L_50_mu_n <- W_50_mu_n + AB_50_mu_n
+L_20_mu_l <- W_20_mu_l + AB_20_mu_l
+L_50_mu_l <- W_50_mu_l + AB_50_mu_l
+L_20_mu_c <- W_20_mu_c + AB_20_mu_c
+L_50_mu_c <- W_50_mu_c + AB_50_mu_c
+
+L_20_mu_n_tf <- L_20_mu_n >= qchisq(0.95, 2)
+power_L_20_mu_n_tf <- apply(L_20_mu_n_tf, 1, mean)
+L_50_mu_n_tf <- L_50_mu_n >= qchisq(0.95, 2)
+power_L_50_mu_n_tf <- apply(L_50_mu_n_tf, 1, mean)
+L_20_mu_l_tf <- L_20_mu_l >= qchisq(0.95, 2)
+power_L_20_mu_l_tf <- apply(L_20_mu_l_tf, 1, mean)
+L_50_mu_l_tf <- L_50_mu_l >= qchisq(0.95, 2)
+power_L_50_mu_l_tf <- apply(L_50_mu_l_tf, 1, mean)
+L_20_mu_c_tf <- L_20_mu_c >= qchisq(0.95, 2)
+power_L_20_mu_c_tf <- apply(L_20_mu_c_tf, 1, mean)
+L_50_mu_c_tf <- L_50_mu_c >= qchisq(0.95, 2)
+power_L_50_mu_c_tf <- apply(L_50_mu_c_tf, 1, mean)
+
+KS_20_mu_n <- sapply(1:10000, function(i) {
+  sapply(1:length(mu2), function(j) {
+    KS(samplex_20_n[[j]][, i], sampley_20_n[[j]][, i])
+  })
+})
+KS_50_mu_n <- sapply(1:10000, function(i) {
+  sapply(1:length(mu2), function(j) {
+    KS(samplex_50_n[[j]][, i], sampley_50_n[[j]][, i])
+  })
+})
+KS_20_mu_l <- sapply(1:10000, function(i) {
+  sapply(1:length(mu2), function(j) {
+    KS(samplex_20_l[[j]][, i], sampley_20_l[[j]][, i])
+  })
+})
+KS_50_mu_l <- sapply(1:10000, function(i) {
+  sapply(1:length(mu2), function(j) {
+    KS(samplex_50_l[[j]][, i], sampley_50_l[[j]][, i])
+  })
+})
+KS_20_mu_c <- sapply(1:10000, function(i) {
+  sapply(1:length(muc2), function(j) {
+    KS(samplex_20_c[[j]][, i], sampley_20_c[[j]][, i])
+  })
+})
+KS_50_mu_c <- sapply(1:10000, function(i) {
+  sapply(1:length(muc2), function(j) {
+    KS(samplex_50_c[[j]][, i], sampley_50_c[[j]][, i])
+  })
+})
+
+KS_20_mu_n_tf <- KS_20_mu_n >= sqrt(-log(0.025) * 0.5)
+power_KS_20_mu_n_tf <- apply(KS_20_mu_n_tf, 1, mean)
+KS_50_mu_n_tf <- KS_50_mu_n >= sqrt(-log(0.025) * 0.5)
+power_KS_50_mu_n_tf <- apply(KS_50_mu_n_tf, 1, mean)
+KS_20_mu_l_tf <- KS_20_mu_l >= sqrt(-log(0.025) * 0.5)
+power_KS_20_mu_l_tf <- apply(KS_20_mu_l_tf, 1, mean)
+KS_50_mu_l_tf <- KS_50_mu_l >= sqrt(-log(0.025) * 0.5)
+power_KS_50_mu_l_tf <- apply(KS_50_mu_l_tf, 1, mean)
+KS_20_mu_c_tf <- KS_20_mu_c >= sqrt(-log(0.025) * 0.5)
+power_KS_20_mu_c_tf <- apply(KS_20_mu_c_tf, 1, mean)
+KS_50_mu_c_tf <- KS_50_mu_c >= sqrt(-log(0.0125) * 0.5)
+power_KS_50_mu_c_tf <- apply(KS_50_mu_c_tf, 1, mean)
+```
+
+```{r, echo = FALSE, fig.width = 8, fig.height = 11, fig.align="center"}
+par(mfrow=c(3, 2))
+plot(mu2, power_W_20_mu_n_tf, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład normalny, n = 20", ylim = c(0, 1))
+lines(mu2, power_AB_20_mu_n_tf, col = "pink", lwd = 2)
+lines(mu2, power_L_20_mu_n_tf, col = "plum", lwd = 2)
+lines(mu2, power_KS_20_mu_n_tf, col = "slateblue", lwd = 2)
+
+legend(x = "bottomright", legend = c("W", "AB", "L", "KS"), col = c("lightblue", "pink", "plum", "slateblue"), lty = 1, lwd = 2)
+
+plot(mu2, power_W_50_mu_n_tf, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład normalny, n = 50", ylim = c(0, 1))
+lines(mu2, power_AB_50_mu_n_tf, col = "pink", lwd = 2)
+lines(mu2, power_L_50_mu_n_tf, col = "plum", lwd = 2)
+lines(mu2, power_KS_50_mu_n_tf, col = "slateblue", lwd = 2)
+
+plot(mu2, power_W_20_mu_l_tf, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład logistyczny, n = 20", ylim = c(0, 1))
+lines(mu2, power_AB_20_mu_l_tf, col = "pink", lwd = 2)
+lines(mu2, power_L_20_mu_l_tf, col = "plum", lwd = 2)
+lines(mu2, power_KS_20_mu_l_tf, col = "slateblue", lwd = 2)
+
+plot(mu2, power_W_50_mu_l_tf, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład logistyczny, n = 50", ylim = c(0, 1))
+lines(mu2, power_AB_50_mu_l_tf, col = "pink", lwd = 2)
+lines(mu2, power_L_50_mu_l_tf, col = "plum", lwd = 2)
+lines(mu2, power_KS_50_mu_l_tf, col = "slateblue", lwd = 2)
+
+plot(muc2, power_W_20_mu_c_tf, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład Cauchy'ego, n = 20", ylim = c(0, 1))
+lines(muc2, power_AB_20_mu_c_tf, col = "pink", lwd = 2)
+lines(muc2, power_L_20_mu_c_tf, col = "plum", lwd = 2)
+lines(muc2, power_KS_20_mu_c_tf, col = "slateblue", lwd = 2)
+
+plot(muc2, power_W_50_mu_c_tf, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład Cauchy'ego, n = 50", ylim = c(0, 1))
+lines(muc2, power_AB_50_mu_c_tf, col = "pink", lwd = 2)
+lines(muc2, power_L_50_mu_c_tf, col = "plum", lwd = 2)
+lines(muc2, power_KS_50_mu_c_tf, col = "slateblue", lwd = 2)
+```
+
+# Zadanie 3.
+
+```{r, echo = FALSE}
+sigma2 <- c(1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0)
+sigmac2 <- c(1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0)
+
+set.seed(1)
+sampley_20_n3 <- lapply(sigma2, function(sigma) replicate(10000, rnorm(20, 0, sigma)))
+sampley_50_n3 <- lapply(sigma2, function(sigma) replicate(10000, rnorm(50, 0, sigma)))
+sampley_20_l3 <- lapply(sigma2, function(sigma) replicate(10000, rlogis(20, 0, sigma)))
+sampley_50_l3 <- lapply(sigma2, function(sigma) replicate(10000, rlogis(50, 0, sigma)))
+sampley_20_c3 <- lapply(sigmac2, function(sigma) replicate(10000, rcauchy(20, 0, sigma)))
+sampley_50_c3 <- lapply(sigmac2, function(sigma) replicate(10000, rcauchy(50, 0, sigma)))
+
+W_20_mu_n3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_20_n[[j]][, i], sampley_20_n3[[j]][, i], phi1)
+  })
+})
+W_50_mu_n3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_50_n[[j]][, i], sampley_50_n3[[j]][, i], phi1)
+  })
+})
+W_20_mu_l3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_20_l[[j]][, i], sampley_20_l3[[j]][, i], phi1)
+  })
+})
+W_50_mu_l3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_50_l[[j]][, i], sampley_50_l3[[j]][, i], phi1)
+  })
+})
+W_20_mu_c3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_20_c[[j]][, i], sampley_20_c3[[j]][, i], phi1)
+  })
+})
+W_50_mu_c3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigmac2), function(j) {
+    T2_phi(samplex_50_c[[j]][, i], sampley_50_c3[[j]][, i], phi1)
+  })
+})
+
+W_20_mu_n_tf3 <- W_20_mu_n3 >= qchisq(0.95, 1)
+power_W_20_mu_n_tf3 <- apply(W_20_mu_n_tf3, 1, mean)
+W_50_mu_n_tf3 <- W_50_mu_n3 >= qchisq(0.95, 1)
+power_W_50_mu_n_tf3 <- apply(W_50_mu_n_tf3, 1, mean)
+W_20_mu_l_tf3 <- W_20_mu_l3 >= qchisq(0.95, 1)
+power_W_20_mu_l_tf3 <- apply(W_20_mu_l_tf3, 1, mean)
+W_50_mu_l_tf3 <- W_50_mu_l3 >= qchisq(0.95, 1)
+power_W_50_mu_l_tf3 <- apply(W_50_mu_l_tf3, 1, mean)
+W_20_mu_c_tf3 <- W_20_mu_c3 >= qchisq(0.95, 1)
+power_W_20_mu_c_tf3 <- apply(W_20_mu_c_tf3, 1, mean)
+W_50_mu_c_tf3 <- W_50_mu_c3 >= qchisq(0.95, 1)
+power_W_50_mu_c_tf3 <- apply(W_50_mu_c_tf3, 1, mean)
+
+AB_20_mu_n3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_20_n[[j]][, i], sampley_20_n3[[j]][, i], phi2)
+  })
+})
+AB_50_mu_n3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_50_n[[j]][, i], sampley_50_n3[[j]][, i], phi2)
+  })
+})
+AB_20_mu_l3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_20_l[[j]][, i], sampley_20_l3[[j]][, i], phi2)
+  })
+})
+AB_50_mu_l3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_50_l[[j]][, i], sampley_50_l3[[j]][, i], phi2)
+  })
+})
+AB_20_mu_c3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigmac2), function(j) {
+    T2_phi(samplex_20_c[[j]][, i], sampley_20_c3[[j]][, i], phi2)
+  })
+})
+AB_50_mu_c3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigmac2), function(j) {
+    T2_phi(samplex_50_c[[j]][, i], sampley_50_c3[[j]][, i], phi2)
+  })
+})
+
+AB_20_mu_n_tf3 <- AB_20_mu_n3 >= qchisq(0.95, 1)
+power_AB_20_mu_n_tf3 <- apply(AB_20_mu_n_tf3, 1, mean)
+AB_50_mu_n_tf3 <- AB_50_mu_n3 >= qchisq(0.95, 1)
+power_AB_50_mu_n_tf3 <- apply(AB_50_mu_n_tf3, 1, mean)
+AB_20_mu_l_tf3 <- AB_20_mu_l3 >= qchisq(0.95, 1)
+power_AB_20_mu_l_tf3 <- apply(AB_20_mu_l_tf3, 1, mean)
+AB_50_mu_l_tf3 <- AB_50_mu_l3 >= qchisq(0.95, 1)
+power_AB_50_mu_l_tf3 <- apply(AB_50_mu_l_tf3, 1, mean)
+AB_20_mu_c_tf3 <- AB_20_mu_c3 >= qchisq(0.95, 1)
+power_AB_20_mu_c_tf3 <- apply(AB_20_mu_c_tf3, 1, mean)
+AB_50_mu_c_tf3 <- AB_50_mu_c3 >= qchisq(0.95, 1)
+power_AB_50_mu_c_tf3 <- apply(AB_50_mu_c_tf3, 1, mean)
+
+L_20_mu_n3 <- W_20_mu_n3 + AB_20_mu_n3
+L_50_mu_n3 <- W_50_mu_n3 + AB_50_mu_n3
+L_20_mu_l3 <- W_20_mu_l3 + AB_20_mu_l3
+L_50_mu_l3 <- W_50_mu_l3 + AB_50_mu_l3
+L_20_mu_c3 <- W_20_mu_c3 + AB_20_mu_c3
+L_50_mu_c3 <- W_50_mu_c3 + AB_50_mu_c3
+
+L_20_mu_n_tf3 <- L_20_mu_n3 >= qchisq(0.95, 2)
+power_L_20_mu_n_tf3 <- apply(L_20_mu_n_tf3, 1, mean)
+L_50_mu_n_tf3 <- L_50_mu_n3 >= qchisq(0.95, 2)
+power_L_50_mu_n_tf3 <- apply(L_50_mu_n_tf3, 1, mean)
+L_20_mu_l_tf3 <- L_20_mu_l3 >= qchisq(0.95, 2)
+power_L_20_mu_l_tf3 <- apply(L_20_mu_l_tf3, 1, mean)
+L_50_mu_l_tf3 <- L_50_mu_l3 >= qchisq(0.95, 2)
+power_L_50_mu_l_tf3 <- apply(L_50_mu_l_tf3, 1, mean)
+L_20_mu_c_tf3 <- L_20_mu_c3 >= qchisq(0.95, 2)
+power_L_20_mu_c_tf3 <- apply(L_20_mu_c_tf3, 1, mean)
+L_50_mu_c_tf3 <- L_50_mu_c3 >= qchisq(0.95, 2)
+power_L_50_mu_c_tf3 <- apply(L_50_mu_c_tf3, 1, mean)
+
+KS_20_mu_n3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    KS(samplex_20_n[[j]][, i], sampley_20_n3[[j]][, i])
+  })
+})
+KS_50_mu_n3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    KS(samplex_50_n[[j]][, i], sampley_50_n3[[j]][, i])
+  })
+})
+KS_20_mu_l3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    KS(samplex_20_l[[j]][, i], sampley_20_l3[[j]][, i])
+  })
+})
+KS_50_mu_l3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    KS(samplex_50_l[[j]][, i], sampley_50_l3[[j]][, i])
+  })
+})
+KS_20_mu_c3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigmac2), function(j) {
+    KS(samplex_20_c[[j]][, i], sampley_20_c3[[j]][, i])
+  })
+})
+KS_50_mu_c3 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigmac2), function(j) {
+    KS(samplex_50_c[[j]][, i], sampley_50_c3[[j]][, i])
+  })
+})
+
+KS_20_mu_n_tf3 <- KS_20_mu_n3 >= sqrt(-log(0.025) * 0.5)
+power_KS_20_mu_n_tf3 <- apply(KS_20_mu_n_tf3, 1, mean)
+KS_50_mu_n_tf3 <- KS_50_mu_n3 >= sqrt(-log(0.025) * 0.5)
+power_KS_50_mu_n_tf3 <- apply(KS_50_mu_n_tf3, 1, mean)
+KS_20_mu_l_tf3 <- KS_20_mu_l3 >= sqrt(-log(0.025) * 0.5)
+power_KS_20_mu_l_tf3 <- apply(KS_20_mu_l_tf3, 1, mean)
+KS_50_mu_l_tf3 <- KS_50_mu_l3 >= sqrt(-log(0.025) * 0.5)
+power_KS_50_mu_l_tf3 <- apply(KS_50_mu_l_tf3, 1, mean)
+KS_20_mu_c_tf3 <- KS_20_mu_c3 >= sqrt(-log(0.025) * 0.5)
+power_KS_20_mu_c_tf3 <- apply(KS_20_mu_c_tf3, 1, mean)
+KS_50_mu_c_tf3 <- KS_50_mu_c3 >= sqrt(-log(0.0125) * 0.5)
+power_KS_50_mu_c_tf3 <- apply(KS_50_mu_c_tf3, 1, mean)
+```
+
+```{r, echo = FALSE, fig.width = 8, fig.height = 11, fig.align="center"}
+par(mfrow=c(3, 2))
+plot(sigma2, power_W_20_mu_n_tf3, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład normalny, n = 20", ylim = c(0, 1))
+lines(sigma2, power_AB_20_mu_n_tf3, col = "pink", lwd = 2)
+lines(sigma2, power_L_20_mu_n_tf3, col = "plum", lwd = 2)
+lines(sigma2, power_KS_20_mu_n_tf3, col = "slateblue", lwd = 2)
+
+legend(x = "bottomright", legend = c("W", "AB", "L", "KS"), col = c("lightblue", "pink", "plum", "slateblue"), lty = 1, lwd = 2)
+
+plot(sigma2, power_W_50_mu_n_tf3, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład normalny, n = 50", ylim = c(0, 1))
+lines(sigma2, power_AB_50_mu_n_tf3, col = "pink", lwd = 2)
+lines(sigma2, power_L_50_mu_n_tf3, col = "plum", lwd = 2)
+lines(sigma2, power_KS_50_mu_n_tf3, col = "slateblue", lwd = 2)
+
+plot(sigma2, power_W_20_mu_l_tf3, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład logistyczny, n = 20", ylim = c(0, 1))
+lines(sigma2, power_AB_20_mu_l_tf3, col = "pink", lwd = 2)
+lines(sigma2, power_L_20_mu_l_tf3, col = "plum", lwd = 2)
+lines(sigma2, power_KS_20_mu_l_tf3, col = "slateblue", lwd = 2)
+
+plot(sigma2, power_W_50_mu_l_tf3, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład logistyczny, n = 50", ylim = c(0, 1))
+lines(sigma2, power_AB_50_mu_l_tf3, col = "pink", lwd = 2)
+lines(sigma2, power_L_50_mu_l_tf3, col = "plum", lwd = 2)
+lines(sigma2, power_KS_50_mu_l_tf3, col = "slateblue", lwd = 2)
+
+plot(sigmac2, power_W_20_mu_c_tf3, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład Cauchy'ego, n = 20", ylim = c(0, 1))
+lines(sigmac2, power_AB_20_mu_c_tf3, col = "pink", lwd = 2)
+lines(sigmac2, power_L_20_mu_c_tf3, col = "plum", lwd = 2)
+lines(sigmac2, power_KS_20_mu_c_tf3, col = "slateblue", lwd = 2)
+
+plot(sigmac2, power_W_50_mu_c_tf3, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład Cauchy'ego, n = 50", ylim = c(0, 1))
+lines(sigmac2, power_AB_50_mu_c_tf3, col = "pink", lwd = 2)
+lines(sigmac2, power_L_50_mu_c_tf3, col = "plum", lwd = 2)
+lines(sigmac2, power_KS_50_mu_c_tf3, col = "slateblue", lwd = 2)
+```
+
+W tym przypadku badamy, jak zmienia się moc testu w zależności od parametru $\sigma_2$, a zatem parametru skali. Aby to zrobić, wykonujemy te same działania, co poprzednio.
+
+Wykresy dla tego zadania, znajdujące się na poprzedniej stronie wskazują na to, że tym razem test, którego moc jest najmniejsza jest to test Wilcoxona. Wykres dla tej statystyki wygląda bardzo podobnie do wykresu mocy testu dla statystyki Ansari-Bradley'a w przypadku zmiany parametru $\mu_2$. W tym przypadku jednak, gdy mamy do czynienia ze zmianą parametru $\sigma_2$ statystyka Ansari-Bradley'a radzi sobie bardzo dobrze. Znaczną różnicą dla tych statystyk jest duże pogorszenie mocy testu dla statystyki Kołmogorowa-Smirnowa. Jest ona pogorszona w tym przypadku dla każdego rozkładu. 
+
+Jeśli chodzi o zależność od rozkładu, w każdym moc testu jest dość duża. Zmianę w stosunku do poprzednich wykresów można zobaczyć w szczególności dla rozkładu logistycznego, gdzie wcześniej największa moc testu dla rozmiaru $n = m = 20$ plasowała się w okolicach 70%. Tym razem dla statystyki Lepage'a oraz Ansari-Bradley'a sięga ono aż do okolic 100%. W pozostałych przypadkach również można zauważyć poprawę. Należy jednak ponownie pamiętać o większych wartościach parametru skali $\sigma_2$ dla rozkładu Cauchy'ego, zatem największej wartości dla tych samych parametrów należy szukać w okolicach połowy osi x.
+
+Natomiast w przypadku rozmiaru, tak, jak poprzednio, można zauważyć znaczną poprawę dla dowolnego z rozkładów. 
+
+# Zadanie 4.
+
+W tym zadaniu mamy do czynienia z badaniem, jak zmienia się moc testu, gdy zmieniamy zarówno parametr przesunięcia $\mu_2$, jak i parametr skali $\sigma_2$. 
+
+Gdy przyjrzymy się wykresom możemy zobaczyć, że ponownie najgorzej wypada statystyka Wilcoxona. Statystyka Kołmogorowa-Smirnowa również nie radzi sobie najlepiej w tym przypadku. Obie z nich radzą sobie nieco lepiej, niż w poprzednim zadaniu, gdy zmienialiśmy jedynie parametr $\sigma_2$. Mimo, że w przypadku zmiany jedynie parametru $\mu_2$ test Ansari-Bradley'a miał bardzo małą moc, tutaj radzi sobie bardzo dobrze, porównywalnie do testu Lepage'a. 
+
+Patrząc na konkretny rozkład można zauważyć, że (jeśli spojrzymy na te same wartości $\mu_2$ oraz $\sigma_2$) najgorzej radzą sobie testy dla rozkładu Cauchy'ego, a najlepiej dla normalnego. Zatem tak samo jak w pozostałych dwóch przypadkach.
+
+Z kolei dla rozmiaru, oczywiście, lepiej wygląda wykres dla większej próby, zatem $n = m = 50$. 
+
+Gdybym miała określić na podstawie całego powyższego badania, który z testów jest najlepszy stwierdziłabym, że jest to test Lepage'a. Głównie dlatego, że dla każdej wartości paramrtrów i dla każdego rozmiaru wypadał bardzo dobrze. Gdybyśmy chcieli badać dla $\sigma_2 \ne 1$ to musielibyśmy (bez względu na wartość $\mu_2$ zrezygnować z testu Wilcoxona oraz Kołmogorowa-Smirnowa. Z kolei w odwrotnej sytuacji, gdy $\sigma_2 = 1$ to statystyka Ansari-Bradley'a może nie nadawać się najlepiej. Warto również wziąć pod uwagę większą próbę, dla lepszych wyników testu.
+
+```{r, echo = FALSE}
+set.seed(1)
+sampley_20_n4 <- mapply(function(mu, sigma) {
+  replicate(10000, rnorm(20, mu, sigma))
+}, mu2, sigma2, SIMPLIFY = FALSE)
+
+sampley_50_n4 <- mapply(function(mu, sigma) {
+  replicate(10000, rnorm(50, mu, sigma))
+}, mu2, sigma2, SIMPLIFY = FALSE)
+sampley_20_l4 <- mapply(function(mu, sigma) {
+  replicate(10000, rlogis(20, mu, sigma))
+}, mu2, sigma2, SIMPLIFY = FALSE)
+sampley_50_l4 <- mapply(function(mu, sigma) {
+  replicate(10000, rlogis(50, mu, sigma))
+}, mu2, sigma2, SIMPLIFY = FALSE)
+sampley_20_c4 <- mapply(function(mu, sigma) {
+  replicate(10000, rcauchy(20, mu, sigma))
+}, muc2, sigmac2, SIMPLIFY = FALSE)
+sampley_50_c4 <- mapply(function(mu, sigma) {
+  replicate(10000, rcauchy(50, mu, sigma))
+}, muc2, sigmac2, SIMPLIFY = FALSE)
+
+W_20_mu_n4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_20_n[[j]][, i], sampley_20_n4[[j]][, i], phi1)
+  })
+})
+W_50_mu_n4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_50_n[[j]][, i], sampley_50_n4[[j]][, i], phi1)
+  })
+})
+W_20_mu_l4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_20_l[[j]][, i], sampley_20_l4[[j]][, i], phi1)
+  })
+})
+W_50_mu_l4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_50_l[[j]][, i], sampley_50_l4[[j]][, i], phi1)
+  })
+})
+W_20_mu_c4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_20_c[[j]][, i], sampley_20_c4[[j]][, i], phi1)
+  })
+})
+W_50_mu_c4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigmac2), function(j) {
+    T2_phi(samplex_50_c[[j]][, i], sampley_50_c4[[j]][, i], phi1)
+  })
+})
+
+W_20_mu_n_tf4 <- W_20_mu_n4 >= qchisq(0.95, 1)
+power_W_20_mu_n_tf4 <- apply(W_20_mu_n_tf4, 1, mean)
+W_50_mu_n_tf4 <- W_50_mu_n4 >= qchisq(0.95, 1)
+power_W_50_mu_n_tf4 <- apply(W_50_mu_n_tf4, 1, mean)
+W_20_mu_l_tf4 <- W_20_mu_l4 >= qchisq(0.95, 1)
+power_W_20_mu_l_tf4 <- apply(W_20_mu_l_tf4, 1, mean)
+W_50_mu_l_tf4 <- W_50_mu_l4 >= qchisq(0.95, 1)
+power_W_50_mu_l_tf4 <- apply(W_50_mu_l_tf4, 1, mean)
+W_20_mu_c_tf4 <- W_20_mu_c4 >= qchisq(0.95, 1)
+power_W_20_mu_c_tf4 <- apply(W_20_mu_c_tf4, 1, mean)
+W_50_mu_c_tf4 <- W_50_mu_c4 >= qchisq(0.95, 1)
+power_W_50_mu_c_tf4 <- apply(W_50_mu_c_tf4, 1, mean)
+
+AB_20_mu_n4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_20_n[[j]][, i], sampley_20_n4[[j]][, i], phi2)
+  })
+})
+AB_50_mu_n4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_50_n[[j]][, i], sampley_50_n4[[j]][, i], phi2)
+  })
+})
+AB_20_mu_l4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_20_l[[j]][, i], sampley_20_l4[[j]][, i], phi2)
+  })
+})
+AB_50_mu_l4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    T2_phi(samplex_50_l[[j]][, i], sampley_50_l4[[j]][, i], phi2)
+  })
+})
+AB_20_mu_c4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigmac2), function(j) {
+    T2_phi(samplex_20_c[[j]][, i], sampley_20_c4[[j]][, i], phi2)
+  })
+})
+AB_50_mu_c4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigmac2), function(j) {
+    T2_phi(samplex_50_c[[j]][, i], sampley_50_c4[[j]][, i], phi2)
+  })
+})
+
+AB_20_mu_n_tf4 <- AB_20_mu_n4 >= qchisq(0.95, 1)
+power_AB_20_mu_n_tf4 <- apply(AB_20_mu_n_tf4, 1, mean)
+AB_50_mu_n_tf4 <- AB_50_mu_n4 >= qchisq(0.95, 1)
+power_AB_50_mu_n_tf4 <- apply(AB_50_mu_n_tf4, 1, mean)
+AB_20_mu_l_tf4 <- AB_20_mu_l4 >= qchisq(0.95, 1)
+power_AB_20_mu_l_tf4 <- apply(AB_20_mu_l_tf4, 1, mean)
+AB_50_mu_l_tf4 <- AB_50_mu_l4 >= qchisq(0.95, 1)
+power_AB_50_mu_l_tf4 <- apply(AB_50_mu_l_tf4, 1, mean)
+AB_20_mu_c_tf4 <- AB_20_mu_c4 >= qchisq(0.95, 1)
+power_AB_20_mu_c_tf4 <- apply(AB_20_mu_c_tf4, 1, mean)
+AB_50_mu_c_tf4 <- AB_50_mu_c4 >= qchisq(0.95, 1)
+power_AB_50_mu_c_tf4 <- apply(AB_50_mu_c_tf4, 1, mean)
+
+L_20_mu_n4 <- W_20_mu_n4 + AB_20_mu_n4
+L_50_mu_n4 <- W_50_mu_n4 + AB_50_mu_n4
+L_20_mu_l4 <- W_20_mu_l4 + AB_20_mu_l4
+L_50_mu_l4 <- W_50_mu_l4 + AB_50_mu_l4
+L_20_mu_c4 <- W_20_mu_c4 + AB_20_mu_c4
+L_50_mu_c4 <- W_50_mu_c4 + AB_50_mu_c4
+
+L_20_mu_n_tf4 <- L_20_mu_n4 >= qchisq(0.95, 2)
+power_L_20_mu_n_tf4 <- apply(L_20_mu_n_tf4, 1, mean)
+L_50_mu_n_tf4 <- L_50_mu_n4 >= qchisq(0.95, 2)
+power_L_50_mu_n_tf4 <- apply(L_50_mu_n_tf4, 1, mean)
+L_20_mu_l_tf4 <- L_20_mu_l4 >= qchisq(0.95, 2)
+power_L_20_mu_l_tf4 <- apply(L_20_mu_l_tf4, 1, mean)
+L_50_mu_l_tf4 <- L_50_mu_l4 >= qchisq(0.95, 2)
+power_L_50_mu_l_tf4 <- apply(L_50_mu_l_tf4, 1, mean)
+L_20_mu_c_tf4 <- L_20_mu_c4 >= qchisq(0.95, 2)
+power_L_20_mu_c_tf4 <- apply(L_20_mu_c_tf4, 1, mean)
+L_50_mu_c_tf4 <- L_50_mu_c4 >= qchisq(0.95, 2)
+power_L_50_mu_c_tf4 <- apply(L_50_mu_c_tf4, 1, mean)
+
+KS_20_mu_n4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    KS(samplex_20_n[[j]][, i], sampley_20_n4[[j]][, i])
+  })
+})
+KS_50_mu_n4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    KS(samplex_50_n[[j]][, i], sampley_50_n4[[j]][, i])
+  })
+})
+KS_20_mu_l4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    KS(samplex_20_l[[j]][, i], sampley_20_l4[[j]][, i])
+  })
+})
+KS_50_mu_l4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigma2), function(j) {
+    KS(samplex_50_l[[j]][, i], sampley_50_l4[[j]][, i])
+  })
+})
+KS_20_mu_c4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigmac2), function(j) {
+    KS(samplex_20_c[[j]][, i], sampley_20_c4[[j]][, i])
+  })
+})
+KS_50_mu_c4 <- sapply(1:10000, function(i) {
+  sapply(1:length(sigmac2), function(j) {
+    KS(samplex_50_c[[j]][, i], sampley_50_c4[[j]][, i])
+  })
+})
+
+KS_20_mu_n_tf4 <- KS_20_mu_n4 >= sqrt(-log(0.025) * 0.5)
+power_KS_20_mu_n_tf4 <- apply(KS_20_mu_n_tf4, 1, mean)
+KS_50_mu_n_tf4 <- KS_50_mu_n4 >= sqrt(-log(0.025) * 0.5)
+power_KS_50_mu_n_tf4 <- apply(KS_50_mu_n_tf4, 1, mean)
+KS_20_mu_l_tf4 <- KS_20_mu_l4 >= sqrt(-log(0.025) * 0.5)
+power_KS_20_mu_l_tf4 <- apply(KS_20_mu_l_tf4, 1, mean)
+KS_50_mu_l_tf4 <- KS_50_mu_l4 >= sqrt(-log(0.025) * 0.5)
+power_KS_50_mu_l_tf4 <- apply(KS_50_mu_l_tf4, 1, mean)
+KS_20_mu_c_tf4 <- KS_20_mu_c4 >= sqrt(-log(0.025) * 0.5)
+power_KS_20_mu_c_tf4 <- apply(KS_20_mu_c_tf4, 1, mean)
+KS_50_mu_c_tf4 <- KS_50_mu_c4 >= sqrt(-log(0.0125) * 0.5)
+power_KS_50_mu_c_tf4 <- apply(KS_50_mu_c_tf4, 1, mean)
+```
+
+```{r, echo = FALSE, fig.width = 8, fig.height = 11, fig.align="center"}
+par(mfrow=c(3, 2))
+labels <- c("(0.2, 1.0)", " ", "(0.6, 2.0)", " ", "(1.0, 3.0)", " ", "(1.4, 4.0)")
+plot(sigma2, power_W_20_mu_n_tf4, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład normalny, n = 20", ylim = c(0, 1), xaxt = "n")
+lines(sigma2, power_AB_20_mu_n_tf4, col = "pink", lwd = 2)
+lines(sigma2, power_L_20_mu_n_tf4, col = "plum", lwd = 2)
+lines(sigma2, power_KS_20_mu_n_tf4, col = "slateblue", lwd = 2)
+axis(1, at = sigma2, labels = labels)
+
+legend(x = "bottomright", legend = c("W", "AB", "L", "KS"), col = c("lightblue", "pink", "plum", "slateblue"), lty = 1, lwd = 2)
+
+plot(sigma2, power_W_50_mu_n_tf4, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład normalny, n = 50", ylim = c(0, 1), xaxt = "n")
+lines(sigma2, power_AB_50_mu_n_tf4, col = "pink", lwd = 2)
+lines(sigma2, power_L_50_mu_n_tf4, col = "plum", lwd = 2)
+lines(sigma2, power_KS_50_mu_n_tf4, col = "slateblue", lwd = 2)
+axis(1, at = sigma2, labels = labels)
+
+plot(sigma2, power_W_20_mu_l_tf4, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład logistyczny, n = 20", ylim = c(0, 1), xaxt = "n")
+lines(sigma2, power_AB_20_mu_l_tf4, col = "pink", lwd = 2)
+lines(sigma2, power_L_20_mu_l_tf4, col = "plum", lwd = 2)
+lines(sigma2, power_KS_20_mu_l_tf4, col = "slateblue", lwd = 2)
+axis(1, at = sigma2, labels = labels)
+
+plot(sigma2, power_W_50_mu_l_tf4, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład logistyczny, n = 50", ylim = c(0, 1), xaxt = "n")
+lines(sigma2, power_AB_50_mu_l_tf4, col = "pink", lwd = 2)
+lines(sigma2, power_L_50_mu_l_tf4, col = "plum", lwd = 2)
+lines(sigma2, power_KS_50_mu_l_tf4, col = "slateblue", lwd = 2)
+axis(1, at = sigma2, labels = labels)
+
+labels2 <- c("(0.0, 1.0)", " ", "(1.5, 3.0)", " ", "(2.5, 5.0)", " ", "(3.5, 7.0)")
+plot(sigmac2, power_W_20_mu_c_tf4, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład Cauchy'ego, n = 20", ylim = c(0, 1), xaxt = "n")
+lines(sigmac2, power_AB_20_mu_c_tf4, col = "pink", lwd = 2)
+lines(sigmac2, power_L_20_mu_c_tf4, col = "plum", lwd = 2)
+lines(sigmac2, power_KS_20_mu_c_tf4, col = "slateblue", lwd = 2)
+axis(1, at = sigmac2, labels = labels2)
+
+plot(sigmac2, power_W_50_mu_c_tf4, col = "lightblue", type = "l", lwd = 2, xlab = "Wartości parametru", ylab = "Moc testu", main = "Rozkład Cauchy'ego, n = 50", ylim = c(0, 1), xaxt = "n")
+lines(sigmac2, power_AB_50_mu_c_tf4, col = "pink", lwd = 2)
+lines(sigmac2, power_L_50_mu_c_tf4, col = "plum", lwd = 2)
+lines(sigmac2, power_KS_50_mu_c_tf4, col = "slateblue", lwd = 2)
+axis(1, at = sigmac2, labels = labels2)
+```

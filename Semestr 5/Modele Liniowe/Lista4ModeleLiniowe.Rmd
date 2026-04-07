@@ -1,0 +1,463 @@
+---
+title: "Lista 4. ModeleLiniowe"
+author: "Amelia Olejniczak"
+output: 
+  pdf_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Zadanie 1.
+
+```{r, echo=FALSE, warning=FALSE}
+library(mvtnorm)
+set.seed(2)
+```
+
+## Generowanie macierzy $X$ oraz wektora zmiennej odpowiedzi $Y$
+
+Do wykonania tego zadania potrzebujemy biblioteki `mvtnorm`, w której mamy możliwość generowania wielowymiarowych rozkładów normalnych. Poniżej przedstawiam kod, w którym generuję macierz $X$.
+
+```{r}
+sigma <- matrix(c(1, 0.9, 0.9, 1), ncol = 2)
+X <- rmvnorm(100, c(0, 0), sigma/100)
+```
+
+Jak można zauważyć, do wygenerowania macierzy $X$ wykorzystuję funkcję `rmvnorm`, która jest dość intuicyjna w działaniu. Teraz przedstawię sposób generowania wektora zmiennej odpowiedzi $Y = \beta_1 X_1 + \epsilon$, wartości zmiennych jak w poleceniu.
+
+```{r}
+epsilon <- rnorm(100, 0, 1)
+Y <- 3 * X[,1] + epsilon
+```
+
+Jego wygenerowanie jest ponownie dość intuicyjne, podobnie jak poprzednie wygenerowanie macierzy $X$.
+
+## Przedział ufności dla wartości $\beta_1$ oraz t-test
+
+Przedział ufności przy poziomie istotności $\alpha = 0.05$ dla wartości $\beta_1$ oraz t-test przy hipotezie zerowej $H_0: \beta_1 = 0$ wyliczę dwoma sposobami. W każdym z nich wykorzystam wygenerowane wcześniej wartości macierzy $X$ oraz wektora zmiennej odpowiedzi.
+
+### Przy użyciu modelu prostej regresji liniowej $Y = \beta_0 + \beta_1 X_1 + \epsilon$
+
+W pierwszej kolejności użyję modelu prostej regresji liniowej $Y = \beta_0 + \beta_1 X_1 + \epsilon$. Poniżej przedstawiam kod, służący do wyliczenia przedziału ufności dla $\beta_1$ dla tego modelu.
+
+```{r}
+lm_1 <- lm(Y ~ X[,1])
+ci_1 <- confint(lm_1, level = 0.95)[2, ]
+```
+
+Z powyższego kodu wychodzi, że 95% przedział ufności wynosi $\left[ 0.705, 4.74 \right]$.
+
+Teraz zajmę się t-testem. Wyliczę p-wartość i na jej podstawię określę, czy są przesłanki do odrzucenia $H_0$.
+
+```{r}
+p_val_1 <- summary(lm_1)$coefficients[2, 4]
+```
+
+Bazując na p-wartości, która z powyższych kodów wynosi około $0.0087$, możemy odrzucić $H_0$.
+
+### Przy użyciu modelu z dwiema zmiennymi objaśniającymi $Y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \epsilon$
+
+Spróbujmy teraz ponowić obliczenia, korzystając z modelu wielorakiego, z dwiema zmiennymi objaśniającymi. Kody są analogiczne, z różnicą polegającą na zmianie modelu. Tym razem korzystamy z modelu wyznaczonego w kodzie `lm(Y ~ X[,1] + X[,2])`. Ze względu na zmiany jedynie kosmetyczne, w tym przypadku kodu nie będę umieszczać.
+
+```{r, echo = FALSE}
+lm_2 <- lm(Y ~ X[,1] + X[,2])
+ci_2 <- confint(lm_2, level = 0.95)[2,]
+```
+
+Zacznijmy od przedziału ufności, który w tym przypadku wynosi $\left[ -1,92, 7.23 \right]$. Można zauważyć, że jest on znacznie szerszy niż w przypadku prostej regresji liniowej. Jest to związane z wysoką korelacją w macierzy korelacji. $X_1$ oraz $X_2$ są ze sobą skorelowane powoduje wzrost wariancji $\beta_1$.
+
+Zajmijmy się teraz t-testem dla $\beta_1$. Wyliczenie p-wartości zachodzi w analogiczny sposób jak poprzednio, zatem kodu nie umieszczam.
+
+```{r, echo=FALSE}
+p_val_2 <- summary(lm_2)$coefficients[2, 4]
+```
+
+P-wartość dla tego przypadku wynosi $0.2523$, a zatem znacznie więcej niż $\alpha = 0.05$. Tutaj nie można odrzucić $H_0$, a zatem w tym przypadku dodatkowa zmienna objaśniająca wpływa nie tylko na szerokość przedziału ufności, ale również na wynik testu istotności. W poprzednim przypadku wyszło, że $\beta_1$ nie jest istotne, a tutaj nie możemy wysnuć takich wniosków. Jest to spowodowane, ponownie, korelacją w macierzy korelacji, a więc związkiem między $X_1$ oraz $X_2$.
+
+## Odchylenie standardowe estymatora $\beta_1$ oraz moc identyfikacji $X_1$
+
+W tej części, zajmę się obliczeniem odchylenia standardowego estymatora $\beta_1$. Wariancję oblicza się ze wzoru $$Var(\beta_1) = \sigma^2 ( \mathbb{X}' \mathbb{X})^{-1}_{22}$$ Ze względu na to, że $\sigma^2 = 1$ to wzór prezentuje się jako $$Var(\beta_1) = ( \mathbb{X}' \mathbb{X})^{-1}_{22}$$ gdzie $\mathbb{X}$ jest to macierz eksperymentu.
+
+Z kolei moc identyfikacji $X_1$ jest możliwa do wywnioskowania na podstawie mocy poprzedniego testu. Moc testu wyraża się wzorem $$\pi = P_{\beta_1 = 3}(|T| > t_c)$$ gdzie $T$ to statystyka testowa, $t_c$ to kwantyl rozkładu t-studenta o $n - p$ stopniach swobody dla $1 - \frac{\alpha}{2}$.
+
+Poniżej umieszczam kod, w którym krok po kroku obliczam zarówno odchylenie standardowe (będące pierwiastkiem kwadratowym z wariancji) oraz moc testu, z której wywnioskuję moc identyfikacji $X_1$. Kod Dotyczy jedynie modelu prostej regresji liniowej, ponieważ dla regresji liniowej z dwoma zmiennymi objaśniającymi kod jest analogiczny.
+
+```{r}
+mp_1 <- matrix(1, nrow = 100, ncol = 2)
+mp_1[,2] <- X[,1]
+sd_1 <- sqrt(solve(t(mp_1)%*%mp_1)[2,2])
+tc_1 <- qt(1-0.05/2, 100-2)
+delta_1 <- 3/sd_1
+power_1 <- pt(-tc_1, 100-2, delta_1) + 1 - pt(tc_1, 100-2, delta_1)
+```
+
+```{r, echo = FALSE}
+mp_2 <- matrix(1, nrow = 100, ncol = 3)
+mp_2[,2] <- X[,1]
+mp_2[,3] <- X[,2]
+sd_2 <- sqrt(solve(t(mp_2)%*%mp_2)[2,2])
+tc_2 <- qt(1-0.05/2, 100-3)
+delta_2 <- 3/sd_2
+power_2 <- pt(-tc_2, 100-3, delta_2) + 1 - pt(tc_2, 100-3, delta_2)
+```
+
+W pierwszej kolejności spójrzmy na odchylenie standardowe parametru $\beta_1$. Wynosi ono odpowiednio `r round(sd_1, 3)` dla prostej regresji liniowej oraz `r round(sd_2, 3)` dla regresji liniowej z dwoma zmiennymi objaśniającymi. Jak widać, zgodnie z tym, o czym mówiłam wcześniej, odchylenie standardowe w drugim przypadku jest znacznie większe niż w pierwszym przypadku. 
+
+Z kolei moc testu wynosi odpowiednio `r round(power_1, 4) * 100`% oraz `r round(power_2, 4) * 100`%. Widać w tym przypadku, że moc drugiego testu jest znacznie mniejsza niż pierwszego.
+
+W jaki sposób moc testu jest związana z mocą identyfikacji $X_1$? Otóż w przypadku, gdy moc testu jest mała, można wnioskować o tym, że moc identyfikacji $X_1$ również jest niska. Jest to równoznaczne z tym, że trudno jest zidentyfikować wpływ $X_1$ na $Y$ niezależnie od $X_2$. Ponownie, powodem jest wysoka korelacja. 
+
+## 1000 różnych zmiennych odpowiedzi
+
+Na koniec tego zadania powtórzę 1000 razy losowanie wektora błędów losowych $\epsilon$ oraz na jego podstawie wygeneruję 1000 wektorów $Y$. Następnie wyestymuję wartości odchylenia standardowego $\beta_1$ oraz mocy testu. Poniżej przedstawiam stworzoną przeze mnie funkcję z której będę korzystać.
+
+```{r}
+sd_pow <- function(X)
+{
+  epsilon <- rnorm(100, 0, 1)
+  beta1 <- 3
+  Y <- beta1 * X[,1] + epsilon
+  
+  lm_1 <- lm(Y ~ X[,1])
+  lm_2 <- lm(Y ~ X[,1] + X[,2])
+  
+  b1_1 <- lm_1$coefficients[2]
+  b1_2 <- lm_2$coefficients[2]
+    
+  p_val_1 <- summary(lm_1)$coefficients[2, 4]
+  p_val_2 <- summary(lm_2)$coefficients[2, 4]
+  return(c(b1_1, b1_2, p_val_1 < 0.05, p_val_2 < 0.05))
+}
+```
+
+W tej funkcji otrzymujemy 4 wartości - estymowana wartość $\beta_1$ dla obu modeli oraz wartość `TRUE` lub `FALSE` w zależności od tego, czy odrzucone jest $H_0$. Na podstawie tego możemy wyestymować odchylenie standardowe oraz moc testu.
+
+```{r, echo = FALSE}
+sample <- replicate(1000, sd_pow(X))
+sdb_1 <- sqrt(var(sample[1,]))
+sdb_2 <- sqrt(var(sample[2,]))
+p_1 <- mean(sample[3,])
+p_2 <- mean(sample[4,])
+```
+
+Spójrzmy najpierw na odchylenie standardowe. Estymowane wartości tego odchylenia wynoszą odpowiednio `r round(sdb_1, 4)` dla prostego modelu oraz `r round(sdb_2, 4)` dla drugiego z nich. Dla przypomnienia - teoretyczne wartości wynoszą `r round(sd_1, 4)` oraz `r round(sd_2, 4)` zatem bardzo sobie bliskie.
+
+Przyjrzyjmy się teraz mocy testu. Estymowane wartości wynoszą `r round(p_1, 4)` dla prostego modelu oraz `r round(p_2, 4)` dla modelu z dwiema zmiennymi objaśniającymi. Teoretyczne wartości wynoszą tutaj odpowiednio `r round(power_1, 4)` oraz `r round(power_2, 4)`. Ponownie można zobaczyć, że wartości estymowane są bardzo bliskie wartościom teoretycznym.
+
+# Zadanie 2.
+
+## Generowanie macierzy $X$ oraz wektora odpowiedzi $Y$
+
+W tym zadaniu mamy do czynienia z macierzą, której wymiary są dużo większe niż w poprzednim przypadku. Każdy element macierzy $X_{1000 \times 950}$ jest również niezależną od siebie zmienną losową. Wektor zmiennej odpowiedzi z kolei ma postać $Y = X \beta + \epsilon$, gdzie $\beta = (3,3,3,3,3,0,...,0)^T$.
+
+Poniżej w kodzie przedstawiam sposób na generowanie takiej macierzy.
+
+```{r}
+X <- matrix(rnorm(1000*950, 0, 0.1), nrow = 1000, ncol = 950)
+beta <- c(replicate(5, 3), replicate(945, 0))
+epsilon <- rnorm(1000, 0, 1)
+Y <- X%*%beta + epsilon
+```
+
+## Estymacja wartości współczynników regresji, t-testy oraz istotne informacje o modelu zbudowanym z $k$ pierwszych kolumn macierzy planu
+
+W tej części raportu zajmę się estymacją wartości współczynników regresji oraz wykonam t-testy na poziomie istotności $0.05$ w celu zidentyfikowania istotnych regresorów. Będę to powtarzać dla modeli zbudowanych z $k$ pierwszych kolumn macierzy planu, gdzie $k \in \{ 1,2,5,10,50,100,500,950 \}$.
+
+Poniżej prezentuję funkcję, w której wyznaczę:
+
+- sumę kwadratów residiów $SSE = ||Y - \hat{Y}||^2$;
+- błąd średniokwadratowy estymatora wartości oczekiwanej $Y$: $MSE = ||X(\hat{\beta} - \beta)||$;
+- wartość kryterium AIC: $AIC = n \log{(SSE/n)} +2k$;
+- p-wartości dla dwóch pierwszych zmiennych objaśniających;
+- liczbę fałszywych odkryć;
+
+```{r}
+f <- function(X, Y, k, beta){
+  X_k <- X[, 1:k, drop = F]
+  lm_k <- lm(Y ~ X_k - 1)
+  
+  b_hat <- summary(lm_k)$coefficients[,1]
+  p_val <- summary(lm_k)$coefficients[,4]
+  
+  Y_hat <- X_k %*% b_hat
+  SSE <- sum((Y-Y_hat)^2)
+  
+  MSE <- sum((X_k %*% (b_hat - beta[1:k]))^2)
+  
+  AIC <- 1000 * log(SSE/1000) + 2*k
+  
+  if(k==1)
+  {
+    p_val_2 <- c(p_val[1], NA)
+  }
+  else
+  {
+    p_val_2 <- p_val[1:2]
+  }
+  
+  if(k<=5)
+  {
+    fo <- 0
+  }
+  else
+  {
+    fo <- sum(p_val[(6:k)] <= 0.05)
+  }
+  
+  return(c(SSE, MSE, AIC, p_val_2[1], p_val_2[2], fo))
+}
+```
+
+Powyższy kod sprowadza się do wyliczenia wszystkich potrzebnych wartości, o które proszono w zadaniu. Estymatory parametru $\beta$ oraz p-wartość są wyznaczone za pomocą `summary()$coefficients`. Pozostałe wartości zostały wyliczone ze znanych wzorów.
+
+Warto zaznaczyć, czym są fałszywe odkrycia. Jest to równoznaczne z błędem pierwszego rodzaju. Ponieważ naszą hipotezą zerową jest $H_0: \beta_k = 0$ to w pierwszych pięciu przypadkach odrzucenie $H_0$ będzie poprawne (dla przypomnienia - $\beta_k = 3$ dla pierwszych 5 przypadków). Dlatego dla k <= 5 liczba fałszywych odkryć będzie równa 0.
+
+```{r, echo = FALSE}
+k_val <- c(1, 2, 5, 10, 50, 100, 500, 950)
+
+sample_kb <- sapply(k_val, function(k) f(X, Y, k, beta))
+```
+
+Wyniki z funkcji dla $k$ podanych w poleceniu przedstawię w tabeli. Następnie przeanalizuję jej wartości.
+
+|k|SSE|MSE|AIC|p-wartości dla dwóch pierwszych zmiennych objaśniających|Liczba fałszywych odkryć|
+|:-:|:-:|:-:|:-:|:-:|:-:|
+|`r k_val[1]`|`r sample_kb[1, 1]`|`r sample_kb[2, 1]`|`r sample_kb[3, 1]`|`r sample_kb[4, 1]`, brak|`r sample_kb[6, 1]`|
+|`r k_val[2]`|`r sample_kb[1, 2]`|`r sample_kb[2, 2]`|`r sample_kb[3, 2]`|`r sample_kb[4:5, 2]`|`r sample_kb[6, 2]`|
+|`r k_val[3]`|`r sample_kb[1, 3]`|`r sample_kb[2, 3]`|`r sample_kb[3, 3]`|`r sample_kb[4:5, 3]`|`r sample_kb[6, 3]`|
+|`r k_val[4]`|`r sample_kb[1, 4]`|`r sample_kb[2, 4]`|`r sample_kb[3, 4]`|`r sample_kb[4:5, 4]`|`r sample_kb[6, 4]`|
+|`r k_val[5]`|`r sample_kb[1, 5]`|`r sample_kb[2, 5]`|`r sample_kb[3, 5]`|`r sample_kb[4:5, 5]`|`r sample_kb[6, 5]`|
+|`r k_val[6]`|`r sample_kb[1, 6]`|`r sample_kb[2, 6]`|`r sample_kb[3, 6]`|`r sample_kb[4:5, 6]`|`r sample_kb[6, 6]`|
+|`r k_val[7]`|`r sample_kb[1, 7]`|`r sample_kb[2, 7]`|`r sample_kb[3, 7]`|`r sample_kb[4:5, 7]`|`r sample_kb[6, 7]`|
+|`r k_val[8]`|`r sample_kb[1, 8]`|`r sample_kb[2, 8]`|`r sample_kb[3, 8]`|`r sample_kb[4:5, 8]`|`r sample_kb[6, 8]`|
+
+Na podstawie powyższej tabeli można zauważyć, że dla coraz większych wartości $k$, $SSE$ jest coraz mniejsze. Z kolei $MSE$ oraz liczba fałszywych odkryć wzrastają, przeciwnie do wcześniej wspomnianego $SSE$. Warto również się przyjrzeć od razu p-wartości. W znacznej większości przypadków są one dużo mniejsze od $\alpha = 0.05$. Jedynym przypadkiem, w którym p-wartości są znacznie większe od $\alpha = 0.05$ jest w ostatnim wierszu, a zatem dla $k = 950$.
+
+Przeanalizujmy teraz, który model powinniśmy wybrać, na podstawie wartości $AIC$. Najmniejsza wartość tego kryterium jest dla największego $k = 950$. Wynikałoby z tego, że jest to najlepszy wybór modelu. Nie można jednak zignorować przy tym powyższej analizy, gdzie $MSE$ oraz liczba fałszywych odrzuceń jest bardzo duża. Podobnie dwie p-wartości, które w znaczący sposób odbiegają od pozostałych widocznych w tabeli. Wynika z tego, że najlepszym modelem byłby jeden z następnych dwóch, gdy ustawimy je rosnąco względem $AIC$. Byłby to wtedy model z $k = 5$ lub $k = 10$. P-wartości są tutaj niemal identyczne, natomiast problematyczne przy $k = 950$ $MSE$ jest dużo mniejsze (małe w obu przypadkach, jednak minimalnie mniejsze dla $k = 5$). Podobnie z liczbą fałszywych odrzuceń, która w obu przypadkach wynosi 0. 
+
+Wynika z tego, że model, dla którego $k = 5$ byłby najpewniej najlepszym wyborem.
+
+## Powtórzenie gdy modele są konstruowane dla zmiennych o największych estymowanych współczynnikach regresji
+
+W tym przypadku musimy zapomnieć o wszystkim, co robiliśmy wcześniej. Aby wykonać to zadanie w pierwszej kolejności potrzebujemy posortować estymowane współczynniki regresji w kolejności od największego do najmniejszego. Aby to zrobić w pierwszej kolejności tworzę model ze wszystkimi kolumnami macierzy X, a następnie wyznaczę estymowane współczynniki regresji. Na koniec wyznaczam malejącą kolejność ich indeksów. Wszystkie te wyliczenia wykorzystuję później w funkcji, która będzie bardzo podobna do poprzedniej, zatem nie będę jej umieszczać w raporcie. Różnice będą polegała na dodadniu dodatkowej zmiennej do funkcji (`sort_index`, za który będzemy podstawiać indeksy ustawionych w kolejności rosnącej współczynników regresji). Następnie w funkcji określam `X_k` jako macierz $X$, z kolumnami stanowiącymi te, o pierwszych k indeksach zapisanych w `sort_index`.
+
+Zmienia się również sposób wyliczania fałszywych odkryć teraz nie wiemy, na których miejscach znajdują się te wartości $\beta_i$, które wynosiły 3, a gdzie są zera. Wyliczamy zatem w pierwszej kolejności `fałszywe_odkrycia <- which(beta[indexes] == 0 & p_val <= 0.05)`, gdzie dostaniemy wiadomość o tym, w których miejscach znajdują się fałszywe odkrycia, a następnie `fo <- length(fałszywe_odkrycia)`, aby dowiedzieć się ile ich jest.
+
+```{r}
+lm_x <- lm(Y ~ X - 1)
+beta_hat <- summary(lm_x)$coefficients[,1]
+sort_index <- order(abs(beta_hat), decreasing = TRUE)
+```
+
+```{r, echo = FALSE}
+fc <- function(X, Y, k, beta, sort_index){
+  indexes <- sort_index[1:k]
+  X_k <- X[, indexes, drop = F]
+  lm_k <- lm(Y ~ X_k - 1)
+  
+  b_hat <- summary(lm_k)$coefficients[,1]
+  p_val <- summary(lm_k)$coefficients[,4]
+  
+  Y_hat <- X_k %*% b_hat
+  SSE <- sum((Y-Y_hat)^2)
+  
+  MSE <- sum((X_k %*% (b_hat - beta[1:k]))^2)
+  
+  AIC <- 1000 * log(SSE/1000) + 2*k
+  
+  if(k==1)
+  {
+    p_val_2 <- c(p_val[1], NA)
+  }
+  else
+  {
+    p_val_2 <- p_val[1:2]
+  }
+  
+  fałszywe_odkrycia <- which(beta[indexes] == 0 & p_val <= 0.05)
+  fo <- length(fałszywe_odkrycia)
+  
+  return(c(SSE, MSE, AIC, p_val_2[1], p_val_2[2], fo))
+}
+
+sample_kc <- sapply(k_val, function(k) fc(X, Y, k, beta, sort_index))
+```
+
+Poniżej przedstawiam tabelę, wykonaną dla tego samego $X$ oraz $Y$, które wyliczaliśmy w podpunkcie a) tego zadania.
+
+|k|SSE|MSE|AIC|p-wartości dla dwóch pierwszych zmiennych objaśniających|Liczba fałszywych odkryć|
+|:-:|:-:|:-:|:-:|:-:|:-:|
+|`r k_val[1]`|`r sample_kc[1, 1]`|`r sample_kc[2, 1]`|`r sample_kc[3, 1]`|`r sample_kc[4, 1]`, brak|`r sample_kc[6, 1]`|
+|`r k_val[2]`|`r sample_kc[1, 2]`|`r sample_kc[2, 2]`|`r sample_kc[3, 2]`|`r sample_kc[4:5, 2]`|`r sample_kc[6, 2]`|
+|`r k_val[3]`|`r sample_kc[1, 3]`|`r sample_kc[2, 3]`|`r sample_kc[3, 3]`|`r sample_kc[4:5, 3]`|`r sample_kc[6, 3]`|
+|`r k_val[4]`|`r sample_kc[1, 4]`|`r sample_kc[2, 4]`|`r sample_kc[3, 4]`|`r sample_kc[4:5, 4]`|`r sample_kc[6, 4]`|
+|`r k_val[5]`|`r sample_kc[1, 5]`|`r sample_kc[2, 5]`|`r sample_kc[3, 5]`|`r sample_kc[4:5, 5]`|`r sample_kc[6, 5]`|
+|`r k_val[6]`|`r sample_kc[1, 6]`|`r sample_kc[2, 6]`|`r sample_kc[3, 6]`|`r sample_kc[4:5, 6]`|`r sample_kc[6, 6]`|
+|`r k_val[7]`|`r sample_kc[1, 7]`|`r sample_kc[2, 7]`|`r sample_kc[3, 7]`|`r sample_kc[4:5, 7]`|`r sample_kc[6, 7]`|
+|`r k_val[8]`|`r sample_kc[1, 8]`|`r sample_kc[2, 8]`|`r sample_kc[3, 8]`|`r sample_kc[4:5, 8]`|`r sample_kc[6, 8]`|
+
+Jak widać w powyższej tabeli, $MSE$ oraz $SSE$ zachowują się w ten sam sposób co w poprzedniej tabeli. Ważną różnicą, którą można tu jednak spostrzec jest fakt, że $MSE$ jest dość duże nawet dla $k = 1$, a w szczególności znacznie większe niż w przypadku poprzedniej tabeli. P-wartości także mają zupełnie inne wartości, większe niż w przypadku poprzedniego podpunktu (w szczególności - częściej odrzucana jest hipoteza zerowa). Fałszywych odkryć, szczególnie dla $k = 500$ jest dużo więcej niż w poprzednim przypadku.
+
+Wartości kryteruim $AIC$ również się różnią. Na pierwszy rzut oka wydają się być ułożone malejąco. Moglibyśmy więc wybrać ten z najmniejszym $AIC$, zatem ponownie $k = 950$, jednak nie byłoby to optymalne. Mimo, że fałszywych odkryć jest dużo mniej, to $MSE$ jest jeszcze większe niż poprzednio. Druga najmniejsza wartość jest dla $k = 500$, natomiast jest wtedy dużo więcej fałszywych odkryć. Z tego względu, również bym ją wykluczyła. Z kolei trzecie w kolejności największe $AIC$ (dla $k = 100$) zmaga się z tym samym problemem, co dla $k = 950$. Gdy przyjrzymy się wszystkim wierszom w tabeli możemy stwierdzić, że żadna wartość w niej zawarta nie nadaje się zbyt dobrze. Gdybym musiała jednak wybrać jedną to prawdopodobnie byłoby to $k = 2$. Ma ona niestety dość dużą wartość kryterium $AIC$ w porównaniu do pozostałych (czwarta najmniejsza), jednak wszystkie pozostałe parametry są dużo mniejsze.
+
+Warto jednak wziąć pod uwagę, że w tym przypadku, żaden z modeli nie wyróżnia się i nie jest bardzo dobry.
+
+## Powtórzenie rozumowań z poprzednich dwóch podpunktów dla powtórzenia losowania 1000 razy
+
+Tym razem powtórzę powyższe rozumowania, gdy mam do czynienia z tysiącem różnych wektorów $Y$ (stworzonych za pomocą znanych $X$ oraz $\beta$, a także losowanych dla każdego oddzielnie $\epsilon$). Kodu nie będę umieszczać, gdyż będę w nim korzystała z podanych wyżej funkcji.
+
+```{r, echo = FALSE}
+Y_i <- replicate(1000, as.vector(X %*% beta) + rnorm(1000))
+p_val_1dk1b <- c()
+p_val_2dk1b <- c()
+fok1b <- c()
+p_val_1dk2b <- c()
+p_val_2dk2b <- c()
+fok2b <- c()
+p_val_1dk5b <- c()
+p_val_2dk5b <- c()
+fok5b <- c()
+p_val_1dk10b <- c()
+p_val_2dk10b <- c()
+fok10b <- c()
+p_val_1dk50b <- c()
+p_val_2dk50b <- c()
+fok50b <- c()
+p_val_1dk100b <- c()
+p_val_2dk100b <- c()
+fok100b <- c()
+p_val_1dk500b <- c()
+p_val_2dk500b <- c()
+fok500b <- c()
+p_val_1dk950b <- c()
+p_val_2dk950b <- c()
+fok950b <- c()
+aic_b <- c()
+
+p_val_1dk1c <- c()
+p_val_2dk1c <- c()
+fok1c <- c()
+p_val_1dk2c <- c()
+p_val_2dk2c <- c()
+fok2c <- c()
+p_val_1dk5c <- c()
+p_val_2dk5c <- c()
+fok5c <- c()
+p_val_1dk10c <- c()
+p_val_2dk10c <- c()
+fok10c <- c()
+p_val_1dk50c <- c()
+p_val_2dk50c <- c()
+fok50c <- c()
+p_val_1dk100c <- c()
+p_val_2dk100c <- c()
+fok100c <- c()
+p_val_1dk500c <- c()
+p_val_2dk500c <- c()
+fok500c <- c()
+p_val_1dk950c <- c()
+p_val_2dk950c <- c()
+fok950c <- c()
+aic_c <- c()
+
+for (i in 1:1000) {
+  lm_x <- lm(Y_i[,i] ~ X - 1)
+  beta_hat <- summary(lm_x)$coefficients[,1]
+  sort_index <- order(abs(beta_hat), decreasing = TRUE)
+  sample_k1bd <- f(X, Y_i[,i], 1, beta)
+  p_val_1dk1b[i] <- sample_k1bd[4]
+  p_val_2dk1b[i] <- sample_k1bd[5]
+  fok1b[i] <- sample_k1bd[6]
+  sample_k1cd <- fc(X, Y_i[,i], 1, beta, sort_index)
+  p_val_1dk1c[i] <- sample_k1cd[4]
+  p_val_2dk1c[i] <- sample_k1cd[5]
+  fok1c[i] <- sample_k1cd[6]
+  sample_k2bd <- f(X, Y_i[,i], 2, beta)
+  p_val_1dk2b[i] <- sample_k2bd[4]
+  p_val_2dk2b[i] <- sample_k2bd[5]
+  fok2b[i] <- sample_k2bd[6]
+  sample_k2cd <- fc(X, Y_i[,i], 2, beta, sort_index)
+  p_val_1dk2c[i] <- sample_k2cd[4]
+  p_val_2dk2c[i] <- sample_k2cd[5]
+  fok2c[i] <- sample_k2cd[6]
+  sample_k5bd <- f(X, Y_i[,i], 5, beta)
+  p_val_1dk5b[i] <- sample_k5bd[4]
+  p_val_2dk5b[i] <- sample_k5bd[5]
+  fok5b[i] <- sample_k5bd[6]
+  sample_k5cd <- fc(X, Y_i[,i], 5, beta, sort_index)
+  p_val_1dk5c[i] <- sample_k5cd[4]
+  p_val_2dk5c[i] <- sample_k5cd[5]
+  fok5c[i] <- sample_k5cd[6]
+  sample_k10bd <- f(X, Y_i[,i], 10, beta)
+  p_val_1dk10b[i] <- sample_k10bd[4]
+  p_val_2dk10b[i] <- sample_k10bd[5]
+  fok10b[i] <- sample_k10bd[6]
+  sample_k10cd <- fc(X, Y_i[,i], 10, beta, sort_index)
+  p_val_1dk10c[i] <- sample_k10cd[4]
+  p_val_2dk10c[i] <- sample_k10cd[5]
+  fok10c[i] <- sample_k10cd[6]
+  sample_k50bd <- f(X, Y_i[,i], 50, beta)
+  p_val_1dk50b[i] <- sample_k50bd[4]
+  p_val_2dk50b[i] <- sample_k50bd[5]
+  fok50b[i] <- sample_k50bd[6]
+  sample_k50cd <- fc(X, Y_i[,i], 50, beta, sort_index)
+  p_val_1dk50c[i] <- sample_k50cd[4]
+  p_val_2dk50c[i] <- sample_k50cd[5]
+  fok50c[i] <- sample_k50cd[6]
+  sample_k100bd <- f(X, Y_i[,i], 100, beta)
+  p_val_1dk100b[i] <- sample_k100bd[4]
+  p_val_2dk100b[i] <- sample_k100bd[5]
+  fok100b[i] <- sample_k100bd[6]
+  sample_k100cd <- fc(X, Y_i[,i], 100, beta, sort_index)
+  p_val_1dk100c[i] <- sample_k100cd[4]
+  p_val_2dk100c[i] <- sample_k100cd[5]
+  fok100c[i] <- sample_k100cd[6]
+  sample_k500bd <- f(X, Y_i[,i], 500, beta)
+  p_val_1dk500b[i] <- sample_k500bd[4]
+  p_val_2dk500b[i] <- sample_k500bd[5]
+  fok500b[i] <- sample_k500bd[6]
+  sample_k500cd <- fc(X, Y_i[,i], 500, beta, sort_index)
+  p_val_1dk500c[i] <- sample_k500cd[4]
+  p_val_2dk500c[i] <- sample_k500cd[5]
+  fok500c[i] <- sample_k500cd[6]
+  sample_k950bd <- f(X, Y_i[,i], 950, beta)
+  p_val_1dk950b[i] <- sample_k950bd[4]
+  p_val_2dk950b[i] <- sample_k950bd[5]
+  fok950b[i] <- sample_k950bd[6]
+  sample_k950cd <- fc(X, Y_i[,i], 950, beta, sort_index)
+  p_val_1dk950c[i] <- sample_k950cd[4]
+  p_val_2dk950c[i] <- sample_k950cd[5]
+  fok950c[i] <- sample_k950cd[6]
+  aic_b[i] <- k_val[which.min(c(sample_k1bd[3], sample_k2bd[3], sample_k5bd[3], sample_k10bd[3], sample_k50bd[3], sample_k100bd[3], sample_k500bd[3]))]
+  aic_c[i] <- k_val[which.min(c(sample_k1cd[3], sample_k2cd[3], sample_k5cd[3], sample_k10cd[3], sample_k50cd[3], sample_k100cd[3]))]
+}
+```
+
+Poniżej przedstawiam tabelę z wyliczeniami mocy identyfikacji $X_1$ i $X_2$ oraz średnia liczba fałszywych odkryć.
+
+|k|Moc identyfikacji $X_1$||Moc identyfikacji $X_2$||Średnia liczba fałszywych odkryć|
+|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+||**b**|**c**|**b**|**c**|**b**|**c**|**b**|**c**|
+|`r k_val[1]`|`r round(mean(p_val_1dk1b < 0.05), 4)`|`r round(mean(p_val_1dk1c < 0.05), 4)`|`r round(mean(p_val_2dk1b < 0.05), 4)`|`r round(mean(p_val_2dk1c < 0.05), 4)`|`r round(mean(fok1b), 4)`|`r round(mean(fok1c), 4)`|
+|`r k_val[2]`|`r round(mean(p_val_1dk2b < 0.05), 4)`|`r round(mean(p_val_1dk2c < 0.05), 4)`|`r round(mean(p_val_2dk2b < 0.05), 4)`|`r round(mean(p_val_2dk2c < 0.05), 4)`|`r round(mean(fok2b), 4)`|`r round(mean(fok2c), 4)`|
+|`r k_val[3]`|`r round(mean(p_val_1dk5b < 0.05), 4)`|`r round(mean(p_val_1dk5c < 0.05), 4)`|`r round(mean(p_val_2dk5b < 0.05), 4)`|`r round(mean(p_val_2dk5c < 0.05), 4)`|`r round(mean(fok5b), 4)`|`r round(mean(fok5c), 4)`|
+|`r k_val[4]`|`r round(mean(p_val_1dk10b < 0.05), 4)`|`r round(mean(p_val_1dk10c < 0.05), 4)`|`r round(mean(p_val_2dk10b < 0.05), 4)`|`r round(mean(p_val_2dk10c < 0.05), 4)`|`r round(mean(fok10b), 4)`|`r round(mean(fok10c), 4)`|
+|`r k_val[5]`|`r round(mean(p_val_1dk50b < 0.05), 4)`|`r round(mean(p_val_1dk50c < 0.05), 4)`|`r round(mean(p_val_2dk50b < 0.05), 4)`|`r round(mean(p_val_2dk50c < 0.05), 4)`|`r round(mean(fok50b), 4)`|`r round(mean(fok50c), 4)`|
+|`r k_val[6]`|`r round(mean(p_val_1dk100b < 0.05), 4)`|`r round(mean(p_val_1dk100c < 0.05), 4)`|`r round(mean(p_val_2dk100b < 0.05), 4)`|`r round(mean(p_val_2dk100c < 0.05), 4)`|`r round(mean(fok100b), 4)`|`r round(mean(fok100c), 4)`|
+|`r k_val[7]`|`r round(mean(p_val_1dk500b < 0.05), 4)`|`r round(mean(p_val_1dk500c < 0.05), 4)`|`r round(mean(p_val_2dk500b < 0.05), 4)`|`r round(mean(p_val_2dk500c < 0.05), 4)`|`r round(mean(fok500b), 4)`|`r round(mean(fok500c), 4)`|
+|`r k_val[8]`|`r round(mean(p_val_1dk950b < 0.05), 4)`|`r round(mean(p_val_1dk950c < 0.05), 4)`|`r round(mean(p_val_2dk950b < 0.05), 4)`|`r round(mean(p_val_2dk950c < 0.05), 4)`|`r round(mean(fok950b), 4)`|`r round(mean(fok950c), 4)`|
+
+Zacznijmy o analizę mocy identyfikacji w oparciu o powyższą tabelę. Dla podpunktu b wynosi ona 1 dla prawie wszystkich wartości poza $k = 950$ zarówno w przypadku $X_1$ jak i $X_2$. Z kolei dla największej próby jest ona niemal (lub ponad) o połowę mniejsza od wcześniej wspomnianej jedynki. Z kolei dla podpunktu c od $k = 1$ aż do $k = 100$ wartości wynoszą około $0.5$, zatem podobnie jak dla największej wartości w podpunkcie b. Tutaj z kolei $k = 500$ oraz $k = 950$ są bardzo wysokie - wynoszą 1 lub nieco poniżej 1.
+
+Spójrzmy teraz na średnią liczbę fałszywych odkryć. To, że dla podpunktu b w pierwszych 3 przypadkach wynosi ona 0 jest całkowicie spodziewane. Poniższe wartości wzrastają, co również jest efektem, który mogliśmy w pewnym stopniu spostrzec badając jedną próbę. Z kolei w podpunkcie c również możemy zauważyć wzrost, który kończy się jednak w momencie, gdy $k = 500$, potem następuje gwałtowny spadek. Jest to również zgodne z poprzednim rozumowaniem.
+
+W przypadku wyboru $AIC$ podjęłam decyzję, aby nie patrzeć na $k = 950$, gdyż w kilku sprawdzonych przeze mnie przypadkach, za każdym razem to ona była najmniejsza. Wezmę więc pod uwagę wartości $k$ mniejsze od 950 (a dla podpunktu c również dla $k$ innych od 500), gdyż na podstawie poprzednich rozumowań wiemy, że te modele nie są tak naprawdę zbyt dobre.
+
+W przypadku podpunktu b średnia wynosi `r mean(aic_b)`, a dla podpunktu c `r mean(aic_c)`. Wybór $k$ jest więc dużo większy, gdy mamy do czynienia z największymi estymowanymi wartościami $\beta$. Z kolei w podpunkcie b potrzebne są dużo mniejsze wartości.

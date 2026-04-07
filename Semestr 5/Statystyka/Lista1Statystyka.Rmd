@@ -1,0 +1,462 @@
+---
+title: "Lista 1"
+author: "Amelia Olejniczak"
+date: "2024-10-13"
+output:
+  pdf_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Zadanie 1.
+
+Aby obliczyć cztery estymatory opisane w zadaniu, posłużę się czterema funkcjami, które pozwolą szybciej obliczyć potrzebne estymatory. W ten sposób łatwo będzie powtórzyć liczenie tych estymatorów 10000 razy. Utworzę również funkcję, zwracającą oszacowaną wartość wariancji, obciążenia oraz błędu średniokwadratowego. W ten sposób powtarzanie tego manewru wielokrotnie również nie będzie problematyczne. Aby możliwe było porównanie tych estymatorów, przed każdym wykonaniem funkcji `replicate` każdej z utworzonych przeze mnie funkcji wyliczających poszczególne estymatory ustawię ziarno, aby porównywane próby były takie same. Istotność takiego działania wyjaśnię w zadaniu 2.
+
+```{r}
+est1 <- function(n, theta, sigma) {
+  mean(rnorm(n, theta, sigma))
+}
+
+est2 <- function(n, theta, sigma) {
+  median(rnorm(n, theta, sigma))
+}
+
+set.seed(5)
+w <- runif(50, 0, 1)
+wi <- w/sum(w)
+wi1 <- sort(wi[1:25])
+wi2 <- sort(wi[26:50], decreasing = T)
+  
+est3 <- function(n, theta, sigma, wi1, wi2) {
+  xi <- sort(rnorm(n, theta, sigma))
+  sum(wi1*xi[1:ceiling(n/2)]) + sum(wi2*xi[(ceiling(n/2) + 1):n])
+}
+
+est4 <- function(n, theta, sigma) {
+  x <- rnorm(n, theta, sigma)
+  xi <- sort(x)
+  i <- 1:n
+  d1 <- qnorm((i-1)/n, 0, 1)
+  d2 <- qnorm(i/n, 0, 1)
+  wi <- dnorm(d1, 0, 1) - dnorm(d2, 0, 1)
+  sum(wi*xi)
+}
+
+set.seed(1)
+pr1a <- replicate(10000, est1(50, 1, 1))
+pr1b <- replicate(10000, est1(50, 4, 1))
+pr1c <- replicate(10000, est1(50, 1, 2))
+
+set.seed(1)
+pr2a <- replicate(10000, est2(50, 1, 1))
+pr2b <- replicate(10000, est2(50, 4, 1))
+pr2c <- replicate(10000, est2(50, 1, 2))
+
+set.seed(1)
+pr3a <- replicate(10000, est3(50, 1, 1, wi1, wi2))
+pr3b <- replicate(10000, est3(50, 4, 1, wi1, wi2))
+pr3c <- replicate(10000, est3(50, 1, 2, wi1, wi2))
+
+set.seed(1)
+pr4a <- replicate(10000, est4(50, 1, 1))
+pr4b <- replicate(10000, est4(50, 4, 1))
+pr4c <- replicate(10000, est4(50, 1, 2))
+
+szacunek <- function(v, teta) {
+  var <- var(v)
+  ob <- mean(v - teta)
+  MSE <- mean((v - teta)**2)
+  c(var, MSE, ob)
+}
+
+s1a <- szacunek(pr1a, 1)
+s2a <- szacunek(pr2a, 1)
+s3a <- szacunek(pr3a, 1)
+s4a <- szacunek(pr4a, 1)
+
+s1b <- szacunek(pr1b, 4)
+s2b <- szacunek(pr2b, 4)
+s3b <- szacunek(pr3b, 4)
+s4b <- szacunek(pr4b, 4)
+
+s1c <- szacunek(pr1c, 1)
+s2c <- szacunek(pr2c, 1)
+s3c <- szacunek(pr3c, 1)
+s4c <- szacunek(pr4c, 1)
+```
+
+W pierwszej kolejności wyjaśnię mój wybór wag w przypadku $\hat{\theta_{3}}$. Są to wagi losowe między 0 a 1, aby nie narzucać konkretnej ich wartości. Wylosowane są jednak tylko raz, gdyż nie ma powodu, aby ponawiać takie działanie. Dzięki podzieleniu każdej wagi przez sumę wszystkich mam pewność, że suma wag będzie wynosiła 1. Następnie rozdzielam wszystkie wagi na dwa wektory i niezależnie je sortuję - najpierw rosnąco, a następnie malejąco. Dzięki temu mogę dać mniejszą wagę mniej prawdopodobnym wynikom - przede wszystkim wartościom odstającym od normy - oraz większą wagę wartościom, które są bardziej prawdopodobne, zatem tym, znajdującym się bardziej w środku. 
+
+Przedstawię pierwsze pięć losowań dla każdego z podpunktów a, b oraz c, aby można było zrobić wstępną analizę estymatorów. Następnie wykonam tabelę, w której umieszczę oszacowaną wariancję, błąd średniokwadratowy oraz obciążenie każdego z estymatorów na podstawie powtórzonego 10000 razy losowania.
+
+## $n = 50, \theta = 1, \sigma = 1$
+
+|Estymator|Losowanie 1.|Losowanie 2.|Losowanie 3.|Losowanie 4.|Losowanie 5.|
+|:-:|:-:|:-:|:-:|:-:|:-:|
+|$\hat{\theta_{1}}$|`r pr1a[1]`|`r pr1a[2]`|`r pr1a[3]`|`r pr1a[4]`|`r pr1a[5]`|
+|$\hat{\theta_{2}}$|`r pr2a[1]`|`r pr2a[2]`|`r pr2a[3]`|`r pr2a[4]`|`r pr2a[5]`|
+|$\hat{\theta_{3}}$|`r pr3a[1]`|`r pr3a[2]`|`r pr3a[3]`|`r pr3a[4]`|`r pr3a[5]`|
+|$\hat{\theta_{4}}$|`r pr4a[1]`|`r pr4a[2]`|`r pr4a[3]`|`r pr4a[4]`|`r pr4a[5]`|
+
+Jak widać w powyższej tabeli, wszystkie estymatory radzą sobie dość dobrze. Nie występują tutaj żadne większe wartości odstające.
+
+Teraz przyjrzę się oszacowanej wariancji, obciążeniu oraz błędowi kwadratowemu dla każdego z estymatorów w podpunkcie a.
+
+|Estymator|Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$\hat{\theta_{1}}$|`r s1a[1]`|`r s1a[3]`|`r s1a[2]`|
+|$\hat{\theta_{2}}$|`r s2a[1]`|`r s2a[3]`|`r s2a[2]`|
+|$\hat{\theta_{3}}$|`r s3a[1]`|`r s3a[3]`|`r s3a[2]`|
+|$\hat{\theta_{4}}$|`r s4a[1]`|`r s4a[3]`|`r s4a[2]`|
+
+Można zauważyć, że największa oszacowana wariancja jest w przypadku estymatora $\hat\theta_2$, który równy jest medianie, natomiast najmniejsza oszacowana wariancja jest dla estymatora $\hat\theta_4$, czyli średnia ważona, gdzie wagi są wyznaczone ze wzoru $w_i = \varphi( \Phi^{-1} ( \frac{i-1}{n} ) ) - \varphi( \Phi^{-1} ( \frac{i}{n} ) )$. Z kolei można zobaczyć, że mimo tego, że w czwartym z estymatorów wartości są bardzo do ciebie zbliżone, to patrząc na obciążenie nie jest on wcale najlepszy. Obciążenie estymatora $\hat\theta_4$ jest ujemny i dość mały w porównaniu z pozostałymi estymatorami - na tyle, że można stwierdzić, że średnio estymator jest zbyt mały w stosunku do prawdziwej wartości parametru $\theta$. Z kolei najbliżej zera jest estymator $\hat\theta_1$, zatem średnia. Błąd średniokwadratowy jest najmniejszy ponownie dla $\hat\theta_4$. Można więc wywnioskować, że dla rozkładu $N(1, 1)$ i próby rozmiaru 50 najlepiej sprawdził się czwarty z estymatorów, zaraz po nim średnia, a najgorzej mediana, ponieważ miała zarówno największy błąd średniokwadratowy, jak i wariancję.
+
+## $n = 50, \theta = 4, \sigma = 1$
+
+|Estymator|Losowanie 1.|Losowanie 2.|Losowanie 3.|Losowanie 4.|Losowanie 5.|
+|:-:|:-:|:-:|:-:|:-:|:-:|
+|$\hat{\theta_{1}}$|`r pr1b[1]`|`r pr1b[2]`|`r pr1b[3]`|`r pr1b[4]`|`r pr1b[5]`|
+|$\hat{\theta_{2}}$|`r pr2b[1]`|`r pr2b[2]`|`r pr2b[3]`|`r pr2b[4]`|`r pr2b[5]`|
+|$\hat{\theta_{3}}$|`r pr3b[1]`|`r pr3b[2]`|`r pr3b[3]`|`r pr3b[4]`|`r pr3b[5]`|
+|$\hat{\theta_{4}}$|`r pr4b[1]`|`r pr4b[2]`|`r pr4b[3]`|`r pr4b[4]`|`r pr4b[5]`|
+
+W przypadku, gdy $\theta = 4$ przede wszystkim warto zwrócić uwagę, że estymator $\hat\theta_4$ nie estymuje poprawnie parametru $\theta$. Wszystkie wartości dla czwartego estymatora wynoszą około 1, gdzie powinny wynosić około 4.
+
+|Estymator|Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$\hat{\theta_{1}}$|`r s1b[1]`|`r s1b[3]`|`r s1b[2]`|
+|$\hat{\theta_{2}}$|`r s2b[1]`|`r s2b[3]`|`r s2b[2]`|
+|$\hat{\theta_{3}}$|`r s3b[1]`|`r s3b[3]`|`r s3b[2]`|
+|$\hat{\theta_{4}}$|`r s4b[1]`|`r s4b[3]`|`r s4b[2]`|
+
+Patrząc na wariancję, wartości dla estymatora $\hat\theta_4$ są bardzo blisko siebie. Estymator ten ma jednak duże obciążenie i duży błąd średniokwadratowy. Można więc uznać, że jest on bezużyteczny do estymowania $\theta$, co było widać drukując wartości dla pierwszych pięciu losowań. Przyjrzę się więc pozostałym trzem estymatorom. 
+
+Najlepiej radzi sobie średnia, czyli estymator $\hat\theta_1$, który ma najmniejszą wariancję, najmniejszy błąd średniokwadratowy i malutkie obciążenie. Mediana (estymator $\hat\theta_2$) oraz trzeci estymator $\hat\theta_3$ radzą sobie podobnie. Mimo że mediana ma najmniejsze obciążenie, ma ona również największą wariancję i błąd średniokwadratowy (poza czwartym estymatorem). Z kolei estymator trzeci ma wartość obciążenia dość małą, ujemną, świadczącą o tym, że estymuje zbyt małe wartości. Błąd średniokwadratowy i wariancja mają wartości między wariancją i błędem średniokwadratowym dla estymatora $\hat\theta_1$ oraz $\hat\theta_2$.
+
+## $n = 50, \theta = 1, \sigma = 2$
+
+|Estymator|Losowanie 1.|Losowanie 2.|Losowanie 3.|Losowanie 4.|Losowanie 5.|
+|:-:|:-:|:-:|:-:|:-:|:-:|
+|$\hat{\theta_{1}}$|`r pr1c[1]`|`r pr1c[2]`|`r pr1c[3]`|`r pr1c[4]`|`r pr1c[5]`|
+|$\hat{\theta_{2}}$|`r pr2c[1]`|`r pr2c[2]`|`r pr2c[3]`|`r pr2c[4]`|`r pr2c[5]`|
+|$\hat{\theta_{3}}$|`r pr3c[1]`|`r pr3c[2]`|`r pr3c[3]`|`r pr3c[4]`|`r pr3c[5]`|
+|$\hat{\theta_{4}}$|`r pr4c[1]`|`r pr4c[2]`|`r pr4c[3]`|`r pr4c[4]`|`r pr4c[5]`|
+
+W ostatnim podpunkcie zadania również można zauważyć błędne estymowanie parametru $\theta$ przez czwarty estymator $\hat\theta_4$. Tym razem, zamiast wartości równej około 1, mamy około dwa. Bazując na tym i poprzednim podpunkcie, można stwierdzić, że lepiej estymuje on parametr $\sigma$, a nie $\theta$. Z tego względu w następnej tabelce zignoruję wartości wariancji, obciążenia i błędu średniokwadratowego dla czwartego estymatora. Umieszczę je jednak, żeby ponownie było widoczne, że nie jest on dobry dla estymowania $\theta$.
+
+|Estymator|Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$\hat{\theta_{1}}$|`r s1c[1]`|`r s1c[3]`|`r s1c[2]`|
+|$\hat{\theta_{2}}$|`r s2c[1]`|`r s2c[3]`|`r s2c[2]`|
+|$\hat{\theta_{3}}$|`r s3c[1]`|`r s3c[3]`|`r s3c[2]`|
+|$\hat{\theta_{4}}$|`r s4c[1]`|`r s4c[3]`|`r s4c[2]`|
+
+Zarówno błąd średniokwadratowy, jak i wariancja są większe w każdym z trzech estymatorów $\hat\theta_1$, $\hat\theta_2$ oraz $\hat\theta_3$ w porównaniu do poprzednich podpunktów. Można więc założyć, że zmiana parametru $\sigma$ ma wpływ na to, jak dobre są estymatory parametru $\theta$. Ponownie najlepszym estymatorem jest średnia ($\hat\theta_1$), ponieważ ma obciążenie najbliższe zera oraz najmniejszą wariancję i błąd średniokwadratowy. Mediana ($\hat\theta_2$) nie jest zbyt dobrym estymatorem, ponieważ, mimo że obciążenie jest zbliżone do zera, to błąd średniokwadratowy i wariancja są dość duże. Z kolei w estymatorze trzecim $\hat\theta_3$ obciążenie jest ponownie na tyle małe (ujemne), że wpływa na to, że prawdopodobnie zazwyczaj podaje zbyt małe wartości. Z kolei tam błąd średniokwadratowy i wariancja jest bardzo podobna do najlepszego estymatora, którym jest średnia.
+
+\newpage
+
+# Zadanie 2.
+
+Komenda `set.seed(1)` służy do ustawienia "ziarna" losowania. Umożliwia to ponowienie tej samej sekwencji liczb pseudolosowych. Dzięki ustawieniu ziarna przy użyciu funkcji `set.seed(1)` przy ponownym uruchomieniu kodu otrzymamy tę samą sekwencję liczb. 
+
+Jest to przydatne w wielu sytuacjach, między innymi gdy robimy analizę pewnej próby losowej i chcemy, aby przy ponownym włączeniu programu nasze komentarze były dalej trafne, co może się zmienić w momencie kiedy zmieni się wylosowana próba. 
+
+Jest to również przydatne w przypadku takim, jak w zadaniu 1., gdzie porównuję cztery różne estymatory. Aby można było sprawdzić, który będzie najlepiej przybliżał wartość $\theta$ potrzebujemy najpierw sprawdzić to na tej samej próbie losowej. Gdybyśmy nie ustawili ziarna, mogłoby to spowodować, że błędnie określimy najgorszy lub najlepszy estymator, który może bardzo różnić się od pozostałych wyłącznie dlatego, że w losowaniu pojawiło się wiele wartości odstających, które nie pojawiły się w losowaniach dla pozostałych estymatorów. 
+
+Może to również być przydatne, gdy chcemy mieć pewną kontrolę nad próbą losową. Jeśli badamy coś, chcąc porównać to dla próby o bardziej zbliżonych do siebie wartościach oraz próby z wartościami oddalonymi od siebie możemy sprawdzić kilka ziaren, tak, aby móc wybrać te, które pozwolą nam na najlepszą analizę i najlepiej zobrazują różnicę w zachowaniu danych parametrów wyliczanych z próby losowej. 
+
+\newpage
+
+# Zadanie 3.
+
+Do rozwiązania tego zadania wykorzystam sugerowany w poleceniu przykład 6.1.4 z książki "Introduction to Mathematical Statistics" autorstwa Roberta V. Hogga, Josepha W. McKeana oraz Allena T. Craiga.
+
+Rozkład logistyczny ma gęstość: $$f(x;\theta)=\frac{e^{-(x-\theta)}}{(1+e^{-(x-\theta)})^2}, \quad -\infty < x < \infty, \quad -\infty < \theta < \infty$$
+
+
+Z tego wynika, że funkcja logwiarogodności wynosi: $l(\theta)$ wynosi: $$l(\theta)=\sum_{i=1}^{n} \log{f(x_{i}}, \theta) = n\theta - n\bar{x}-2\sum_{i=1}^{n}\log{(1+e^{-x_{i}-\theta})}$$
+
+Z tego możemy wyliczyć pierwszą pochodną: $$l'(\theta) = n-2\sum_{i=1}^{n} \frac{e^{-(x_{i}-\theta)}}{1+e^{-(x_{i}-\theta)}}$$
+
+Gdy przyrównamy ją do zera, otrzymamy równanie: $$\sum_{i=1}^{n} \frac{e^{-(x_{i}-\theta)}}{1+e^{-(x_{i}-\theta)}} = \frac{n}{2}$$
+
+Równanie w powyższej postaci jest trudne do wyliczenia analitycznie, może i jest to wręcz niemożliwe. Zatem jedyną możliwością rozwiązania tego równania jest skorzystanie z metod numerycznych. Postać, którą otrzymujemy jest na tyle skomplikowana, że rozwiązanie za pomocą metod numerycznych, o ile nie jest jedynym sposobem na rozwiązanie powyższego zadania, z pewnością będzie sposobem dużo szybszym.
+
+\newpage
+
+# Zadanie 4.
+
+Jednym z przykładów metod numerycznych, które można wykorzystać do wyznaczenia estymatora największej wiarogodności dla rozkładu logistycznego lub innego, u którego pochodna funkcji logwiarogodności wygląda w podobny sposób (np. rozkład Cauchy'ego) jest metoda Newtona. 
+
+Dla uproszczenia będę używać oznaczenia $f(\theta)$. W przypadku wyliczania estymatora największej wiarogodności $f(\theta)$ najczęściej będzie oznaczać pierwszą pochodną funkcji logwiarogodności $l'(\theta)$. Zaczynamy od wyboru pewnego punktu $\hat{\theta}^{(0)}$. Następnie wybieramy kolejny punkt $\hat{\theta}^{(1)}$ taki, że będzie on miejscem zerowym stycznej do funkcji $f(\theta)$ w punkcie $(\hat{\theta}^{(0)}, f(\hat{\theta}^{(0)})$. Kontynuujemy szukanie takich punktów do momentu, gdy $|\hat\theta^{(k+1)} - \hat\theta^{(k)}| \leq \epsilon$, gdzie $\epsilon$ oznacza pewną przyjętą przez nas dokładność. 
+
+Kolejne punkty przybliżające szukane przez nas miejsce zerowe funkcji $f$ można wyznaczyć rekurencyjnie ze wzoru: $$\hat\theta^{(k+1)} = \hat\theta^{(k)} - \frac{f(\hat\theta^{(k)})}{f'(\hat\theta^{(k)})}, \quad k = 1,2,3,... $$ z czego będę korzystać przy rozwiązywaniu kolejnych zadań.
+
+\newpage
+
+# Zadanie 5.
+
+Aby móc wykonać to zadanie, należy obliczyć pierwszą oraz drugą pochodną funkcji logwiarogodności dla rozkładu logistycznego z parametrem $\theta$ i $\sigma$. Gęstość tego rozkładu ma postać: $$f(x, \theta) = \frac{e^{\frac{-(x-\theta)}{\sigma}}}{\sigma (1 + e^{\frac{-(x-\theta)}{\sigma}})^2}$$
+
+Wpisałam pochodne w funkcje w R, które następnie umieściłam w funkcji korzystającej z metody Newtona aby obliczyć estymator największej wiarogodności dla rozkładu logistycznego, co widać w poniższym kodzie.
+
+```{r}
+poch1 <- function(x, theta, sigma, n) {
+  (n/sigma) - 2 * sum(exp((-x+theta)/sigma)/((1+exp((-x+theta)/sigma))*sigma))
+}
+
+poch2 <- function(x, theta, sigma) {
+  -2 * sum(exp((-x+theta)/sigma)/((1+exp((-x+theta)/sigma))*sigma)**2)
+}
+
+newton <- function(th, sigma, n, epsilon) {
+  x <- rlogis(n, th, sigma)
+  theta <- mean(x)
+  steps <- 0
+  while (TRUE) {
+    thetan <- theta - poch1(x, theta, sigma, n)/poch2(x, theta, sigma)
+    steps <- steps+1
+    if (abs(thetan - theta) < epsilon) {
+      break
+    }
+    theta <- thetan
+  }
+  return(c(theta, steps))
+}
+
+set.seed(1)
+proby5a <- replicate(10000, newton(1, 1, 50, 0.0001)[1])
+proby5b <- replicate(10000, newton(4, 1, 50, 0.0001)[1])
+proby5c <- replicate(10000, newton(1, 2, 50, 0.0001)[1])
+
+set.seed(1)
+kroki5a <-replicate(10000, newton(1, 1, 50, 0.0001)[2])
+kroki5b <- replicate(10000, newton(4, 1, 50, 0.0001)[2])
+kroki5c <- replicate(10000, newton(1, 2, 50, 0.0001)[2])
+
+s5a <- szacunek(proby5a, 1)
+s5b <- szacunek(proby5b, 4)
+s5c <- szacunek(proby5c, 1)
+```
+
+Jako punkt początkowy wybrałam średnią, ze względu na to, że rozkład logistyczny jest dość podobny do rozkładu normalnego. Między innymi ze względu na to, że jest symetryczny. Średnia sprawi, że będzie potrzebne mniej kroków do wyliczenia estymatora największej wiarogodności przy pomocy metody Newtona, gdyż średnia powinna być bliska wartości faktycznej estymatora. Dla każdego z podpunktów a, b oraz c jest średnio kolejno `r mean(kroki5a)`, `r mean(kroki5b)` oraz `r mean(kroki5c)` kroków do uzyskania oczekiwanego wyniku, czyli naprawdę niewiele. Liczone było dla dokładności $\epsilon = 0.0001$.
+
+Aby dokonać analizy, wpiszę kilka losowań dla każdego z podpunktów a, b oraz c do tabeli oraz przeanalizuję ich oszacowaną wariancję, obciążenie oraz błąd średniokwadratowy.
+
+## $n = 50, \theta = 1, \sigma = 1$
+
+|Losowanie 1.|Losowanie 2.|Losowanie 3.|Losowanie 4.|Losowanie 5.|
+|:-:|:-:|:-:|:-:|:-:|
+|`r proby5a[1]`|`r proby5a[2]`|`r proby5a[3]`|`r proby5a[4]`|`r proby5a[5]`|
+
+Po pierwszych pięciu losowaniach, można stwierdzić, że wyliczony za pomocą metody Newtona estymator największej wiarogodności jest dość skuteczny.
+
+|Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|
+|`r s5a[1]`|`r s5a[3]`|`r s5a[2]`|
+
+Wariancja tego estymatora, jak i błąd średniokwadratowy są na tyle niewielkie, że można stwierdzić, że estymator jest skuteczny. Obciązenie wskazuje na to, że zazwyczaj wartości są trochę za małe, natomiast mimo wszystko są one dość blisko faktycznej wartości.
+
+## $n = 50, \theta = 4, \sigma = 1$
+
+|Losowanie 1.|Losowanie 2.|Losowanie 3.|Losowanie 4.|Losowanie 5.|
+|:-:|:-:|:-:|:-:|:-:|
+|`r proby5b[1]`|`r proby5b[2]`|`r proby5b[3]`|`r proby5b[4]`|`r proby5b[5]`|
+
+W drugim podpunkcie dla każdego przykładowego losowania, jak widać, wartości są podobne do faktycznej wartości $\theta = 4$.
+
+|Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|
+|`r s5b[1]`|`r s5b[3]`|`r s5b[2]`|
+
+Pierwsze co można zauważyć, to że obciążenie jest bardziej zbliżone do zera niż w poprzednim podpunkcie. Jest to jednak niewielka różnica i w obu przypadkach są zbliżone do zera. Zarówno wariancja i błąd średniokwadratowy są podobne jak w poprzednim podpunkcie, zatem wystarczająco małe, aby można było stwierdzić, że estymator jest skuteczny.
+
+## $n = 50, \theta = 1, \sigma = 2$
+
+|Losowanie 1.|Losowanie 2.|Losowanie 3.|Losowanie 4.|Losowanie 5.|
+|:-:|:-:|:-:|:-:|:-:|
+|`r proby5c[1]`|`r proby5c[2]`|`r proby5c[3]`|`r proby5c[4]`|`r proby5c[5]`|
+
+W przypadku podpunktu c, widać, że w losowaniu drugim i piątym wartości są bardzo odstające i niezbyt zbliżone do wartości 1. Już na takiej małej próbie widać na pierwszy rzut oka, że nie zawsze jest on skuteczny.
+
+|Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|
+|`r s5c[1]`|`r s5c[3]`|`r s5c[2]`|
+
+W tej tabeli widać dokładnie to, co można było zauważyć już na pierwszych losowaniach. Wariancja elementów jest dość wysoka, co oznacza, że elementy są dość mocno oddalone od siebie. Obciążenie jest podobne jak w podpunkcie a do tego zadania, natomiast błąd średniokwadratowy, w porównaniu do poprzednich również jest dość duży. 
+
+Podobnie jak w zadaniu pierwszym, mamy tu przypadek, gdzie estymator "psuje się", gdy $\sigma$ ma wartość inną od 1.
+
+\newpage
+
+# Zadanie 6.
+
+Podobnie jak w poprzednim zadaniu, aby móc wykonać to zadanie, należy obliczyć pierwszą oraz drugą pochodną funkcji logwiarogodności dla rozkładu Cauchy'ego z parametrem $\theta$ i $\sigma$. Gęstość tego rozkładu ma postać: $$f(x, \theta) = \frac{1}{\pi\sigma}(1+(\frac{x-\theta}{\sigma})^2)^{-1}$$
+
+Podobnie jak w poprzednim zadaniu, wyliczone pochodne wpisałam w funkcje i na ich podtsawie stworzyłam funkcję liczącą estymator największej wiarogodności za pomocą metody Newtona.
+
+```{r}
+poch1c <- function(x, theta, sigma) {
+  2 * sum((x - theta)/(sigma**2 + (x - theta)**2))
+}
+
+poch2c <- function(x, theta, sigma) {
+  -2 * sum((sigma**2 - (x - theta)**2)/(sigma**2 + (x - theta)**2)**2)
+}
+
+newtonc <- function(th, sigma, n, epsilon) {
+  x <- rcauchy(n, th, sigma)
+  theta <- median(x)
+  steps <- 0
+  repeat {
+    thetan <- theta - poch1c(x, theta, sigma)/poch2c(x, theta, sigma)
+    steps <- steps+1
+    if (abs(thetan - theta) < epsilon) {
+      break
+    }
+    theta <- thetan
+  }
+  return(c(theta, steps))
+}
+
+set.seed(1)
+proby6a <- replicate(10000, newtonc(1, 1, 50, 0.001)[1])
+proby6b <- replicate(10000, newtonc(4, 1, 50, 0.001)[1])
+proby6c <- replicate(10000, newtonc(1, 2, 50, 0.001)[1])
+
+set.seed(1)
+kroki6a <- replicate(10000, newtonc(1, 1, 50, 0.001)[2])
+kroki6b <- replicate(10000, newtonc(4, 1, 50, 0.001)[2])
+kroki6c <- replicate(10000, newtonc(1, 2, 50, 0.001)[2])
+
+s6a <- szacunek(proby6a, 1)
+s6b <- szacunek(proby6b, 4)
+s6c <- szacunek(proby6c, 1)
+```
+
+W pierwszej kolejności, ponownie, omówię wybór punktu początkowego. Ponieważ w przypadku rozkładu Cauchy'ego często pojawiają się elementy odstające, dobrym wyborem wydawało się wybranie mediany wylosowanej próby. Dla takiego punktu początkowego średnia liczba kroków wynosi kolejno `r mean(kroki6a)`, `r mean(kroki6b)` oraz `r mean(kroki6c)` dla podpunktów a, b oraz c, zatem bardzo niewiele.
+
+## $n = 50, \theta = 1, \sigma = 1$
+
+|Losowanie 1.|Losowanie 2.|Losowanie 3.|Losowanie 4.|Losowanie 5.|
+|:-:|:-:|:-:|:-:|:-:|
+|`r proby6a[1]`|`r proby6a[2]`|`r proby6a[3]`|`r proby6a[4]`|`r proby6a[5]`|
+
+Dla losowania pierwszego i piątego widać, że wartości estymatora nie są najlepsze i odstają od prawdziwej wartości $\theta$. Nie jest to jednak na tyle duże odstawanie, żeby było problematyczne, jak było na przykład w podpunkcie c w poprzednim zadaniu.
+
+|Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|
+|`r s6a[1]`|`r s6a[3]`|`r s6a[2]`|
+
+Wariancja nie wskazuje na duże oddalenie się od siebie estymatorów. Obciążenie jest bardzo bliskie zera, zatem estymatory nie różnią się bardzo od prawdziwej wartości. Błąd średniokwadratowy również jest niewielki, więc można stwierdzić, że wyliczony estymator parametru $\theta$ skutecznie przybliża prawdziwą wartość parametru.
+
+## $n = 50, \theta = 4, \sigma = 1$
+
+|Losowanie 1.|Losowanie 2.|Losowanie 3.|Losowanie 4.|Losowanie 5.|
+|:-:|:-:|:-:|:-:|:-:|
+|`r proby6b[1]`|`r proby6b[2]`|`r proby6b[3]`|`r proby6b[4]`|`r proby6b[5]`|
+
+W losowaniach dla tego podpunktu nie widać specjalnych wartości odstających, są one zbliżone zarówno do siebie jak i do wartości $\theta = 4$, co chcemy otrzymać.
+
+|Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|
+|`r s6b[1]`|`r s6b[3]`|`r s6b[2]`|
+
+Podobnie jak wcześniej, wartości tych parametrów świadczą o tym, że estymator jest skuteczny w przybliżeniu parametru $\theta$.
+
+## $n = 50, \theta = 1, \sigma = 2$
+
+|Losowanie 1.|Losowanie 2.|Losowanie 3.|Losowanie 4.|Losowanie 5.|
+|:-:|:-:|:-:|:-:|:-:|
+|`r proby6c[1]`|`r proby6c[2]`|`r proby6c[3]`|`r proby6c[4]`|`r proby6c[5]`|
+
+W tym przypadku mamy dwie wartości, które bardzo odstają od tego, co powinniśmy otrzymać. Jest to losowanie drugie i losowanie czwarte, w których wartości są bliższe zera niż jedynki. 
+
+|Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|
+|`r s6c[1]`|`r s6c[3]`|`r s6c[2]`|
+
+Wartość wariancji świadczy o tym, że estymatory wylosowanych prób ponownie są bardziej oddalone niż w poprzednich przykładach. Obciążenie jest wciąż podobne, natomiast błąd średniokwadratowy jest ponownie duży.
+
+Bazując na wiedzy z zadania 1., 5. oraz 6. można stwierdzić, że wartość parametru $\sigma$ ma wpływ na dokładność estymatora parametru $\theta$.
+
+\newpage
+
+# Zadanie 7. 
+
+Przeanalizuję jedynie dla rozkładu normalnego $\theta = 1, \sigma = 1$, ponieważ dla pozostałych po sprawdzeniu wnioski są takie same. W przypadku tego zadania nie będę robić tabeli dla pięciu pierwszych losowań, ponieważ nie powie nam to zbyt wiele na temat tego, jak te estymatory zachowują się dla mniejszej próby. Nawet porównując do siebie pierwsze 5 losowań dla $n = 20$, $n = 50$ oraz $n = 100$ nie da nam zbyt wiele, gdyż wszędzie występują wartości odstające. Ważniejsze jest dla nas zobczyć jaka jest wariancja, obciążenie i błąd średniokwadratowy dla poszczególnych wartości n, gdyż wtedy będziemy w stanie zobaczyć, gdzie wartości odstają od siebie najbardziej i czy ma to wpływ na to, jak dobry jest estymator.
+
+```{r}
+set.seed(1)
+pr7a1 <- replicate(10000, est1(20, 1, 1))
+pr7b1 <- replicate(10000, est1(100, 1, 1))
+
+set.seed(1)
+pr7a2 <- replicate(10000, est2(20, 1, 1))
+pr7b2 <- replicate(10000, est2(100, 1, 1))
+
+set.seed(5)
+
+wa <- runif(20, 0, 1)
+wia <- wa/sum(wa)
+wi1a <- sort(wia[1:10])
+wi2a <- sort(wia[11:20], decreasing = T)
+
+set.seed(5)
+
+wb <- runif(100, 0, 1)
+wib <- wb/sum(wb)
+wi1b <- sort(wib[1:50])
+wi2b <- sort(wib[51:100], decreasing = T)
+
+set.seed(1)
+pr7a3 <- replicate(10000, est3(20, 1, 1, wi1a, wi2a))
+pr7b3 <- replicate(10000, est3(100, 1, 1, wi1b, wi2b))
+
+set.seed(1)
+pr7a4 <- replicate(10000, est4(20, 1, 1))
+pr7b4 <- replicate(10000, est4(100, 1, 1))
+
+s7a1 <- szacunek(pr7a1, 1)
+s7b1 <- szacunek(pr7b1, 1)
+
+s7a2 <- szacunek(pr7a2, 1)
+s7b2 <- szacunek(pr7b2, 1)
+
+s7a3 <- szacunek(pr7a3, 1)
+s7b3 <- szacunek(pr7b3, 1)
+
+s7a4 <- szacunek(pr7a4, 1)
+s7b4 <- szacunek(pr7b4, 1)
+```
+
+## $n = 20$
+
+|Estymator|Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$\hat{\theta_{1}}$|`r s7a1[1]`|`r s7a1[3]`|`r s7a1[2]`|
+|$\hat{\theta_{2}}$|`r s7a2[1]`|`r s7a2[3]`|`r s7a2[2]`|
+|$\hat{\theta_{3}}$|`r s7a3[1]`|`r s7a3[3]`|`r s7a3[2]`|
+|$\hat{\theta_{4}}$|`r s7a4[1]`|`r s7a4[3]`|`r s7a4[2]`|
+
+Jak widać, w porównaniu do $n = 50$ wyniki dla każdego z czterech estymatorów są ponad dwa razy gorsze. W szczególności widać to po wariancji i błędzie średniokwadratowym. Przykładowo dla średniej (estymatora $\hat\theta_1$) wartość wariancji dla $n = 50$ wynosiła około `r s1a[1]`, z kolei tutaj wynosi ona `r s7a1[1]`, co wynosi dokładnie `r s7a1[1]/s1a[1]` razy więcej dla $n = 20$ niż dla $n = 50$. Można więc stwierdzić, że estymatory są gorzej przybliżane, gdy próba jest mniejsza. 
+
+## $n = 100$
+
+|Estymator|Wariancja|Obciążenie|Błąd średniokwadratowy|
+|:-:|:-:|:-:|:-:|
+|$\hat{\theta_{1}}$|`r s7b1[1]`|`r s7b1[3]`|`r s7b1[2]`|
+|$\hat{\theta_{2}}$|`r s7b2[1]`|`r s7b2[3]`|`r s7b2[2]`|
+|$\hat{\theta_{3}}$|`r s7b3[1]`|`r s7b3[3]`|`r s7b3[2]`|
+|$\hat{\theta_{4}}$|`r s7b4[1]`|`r s7b4[3]`|`r s7b4[2]`|
+
+W przypadku $n = 100$, a zatem próby 2 razy większej niż początkowe $n = 50$, można zobaczyć, że wszystkie parametry są ponad 2 razy mniejsze od początkowych parametrów dla $n = 50$. Ponownie biorąc przykład wariancji, wynosi ona `r s1a[1]/s7b1[1]` razy więcej dla $n = 50$ niż dla $n = 100$. Zatem tym razem można stwierdzić, że dla większej próby parametry są lepiej przybliżone.
+
+Warto jednak zauważyć również, że nie ma dużej różnicy między obciążeniami w żadnej z rozmarów prób. Oznacza to, że na oszacowane obciążenia nie ma wpływu rozmiar próby, z której losowaliśmy. Takie same wnioski wychodzą z badania pozostałych rozkładów, zatem opuszczę ich umieszczanie w tym sprawozdaniu.

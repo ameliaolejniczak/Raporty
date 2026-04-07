@@ -1,0 +1,717 @@
+---
+title: "Lista 3. Statystyka"
+author: "Amelia Olejniczak"
+date: "2024-11-12"
+output: 
+  pdf_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Przedział ufności dla średniej ze znaną wariancją
+
+Jako pierwszy wezmę na tapet przedział ufności dla średniej ze znaną wariancją. Dla poziomu istotności $\alpha$ ma on postać: $$\bar{X} \pm z_{1 - \frac{\alpha}{2}} \frac{\sigma}{\sqrt{n}}$$ Funkcję wyliczającą prawą i lewą stronę przedziału ufności przy poziomie ufnośc 95% przedstawiam poniżej.
+
+```{r}
+puszw <- function(pr, sigma) {
+  X <- mean(pr)
+  n <- length(pr)
+  z <- qnorm(0.975)
+  left <- X - z * sigma / sqrt(n)
+  right <- X + z * sigma / sqrt(n)
+  return(c(left, right, right - left))
+}
+```
+
+Działanie powyższego przedziału ufności przedstawię na przykładzie rozkładu normalnego, rozkładu Cauchy'ego (do którego umieszczę również krótki komentarz) oraz rozkładu wykładniczego. Przebadam również jak na przedział ufności wpływają różne rozmiary prób, jednak zrobię to jedynie dla rozkładu normalnego.
+
+## Rozkład normalny
+
+Analizę rozpocznę dla rozkładu normalnego o parametrach $\mu = 0$ oraz kolejno $\sigma = 1$, $\sigma = 2$, $\sigma = 3$. Powtórzę to dla trzech różnych rozmiarów próby - $n = 50$, $n = 20$ oraz $n = 100$. Wytworzone przedziały ufności zaprezentuję w tabeli.
+
+```{r, include = FALSE}
+set.seed(1)
+confint_1_50 <- puszw(rnorm(50, 0, 1), 1)
+confint_2_50 <- puszw(rnorm(50, 0, 2), 2)
+confint_3_50 <- puszw(rnorm(50, 0, 3), 3)
+
+confint_1_20 <- puszw(rnorm(20, 0, 1), 1)
+confint_2_20 <- puszw(rnorm(20, 0, 2), 2)
+confint_3_20 <- puszw(rnorm(20, 0, 3), 3)
+
+confint_1_100 <- puszw(rnorm(100, 0, 1), 1)
+confint_2_100 <- puszw(rnorm(100, 0, 2), 2)
+confint_3_100 <- puszw(rnorm(100, 0, 3), 3)
+```
+
+|              |                  $n = 50$                  |                  $n = 20$                  |                  $n = 100$                   |
+|:------------:|:------------------------------------------:|:------------------------------------------:|:--------------------------------------------:|
+| $\sigma = 1$ | [`r confint_1_50[1]`, `r confint_1_50[2]`] | [`r confint_1_20[1]`, `r confint_1_20[2]`] | [`r confint_1_100[1]`, `r confint_1_100[2]`] |
+| $\sigma = 2$ | [`r confint_2_50[1]`, `r confint_2_50[2]`] | [`r confint_2_20[1]`, `r confint_2_20[2]`] | [`r confint_2_100[1]`, `r confint_2_100[2]`] |
+| $\sigma = 3$ | [`r confint_3_50[1]`, `r confint_3_50[2]`] | [`r confint_3_20[1]`, `r confint_3_20[2]`] | [`r confint_3_100[1]`, `r confint_3_100[2]`] |
+
+Na pierwszy rzut oka można zauważyć, że wszystkie z powyższych przedziałów ufności zawierają w sobie prawdziwą wartość średniej dla badanego rozkładu normalnego, zatem 0. Można więc stwierdzić, że każdy z przedziałów spełnia swoją zadaną funkcję.
+
+Przyjrzę się teraz tabeli z długościami przedziałów. W ten sposób będziemy w stanie określić, który z tych przedziałów ufności jest najlepszy, gdyż patrząc jedynie na te przedziały nie możemy jednoznacznie stwierdzić, czy któreś z nich nadają się lepiej lub gorzej. Z tego względu przebadam, kiedy długość przedziału jest najmniejsza, a zatem kiedy przedział jest najdokładniejszy.
+
+|              |      $n = 50$       |      $n = 20$       |      $n = 100$       |
+|:------------:|:-------------------:|:-------------------:|:--------------------:|
+| $\sigma = 1$ | `r confint_1_50[3]` | `r confint_1_20[3]` | `r confint_1_100[3]` |
+| $\sigma = 2$ | `r confint_2_50[3]` | `r confint_2_20[3]` | `r confint_2_100[3]` |
+| $\sigma = 3$ | `r confint_3_50[3]` | `r confint_3_20[3]` | `r confint_3_100[3]` |
+
+Patrząc na wartości zawarte w tym miejscu można zauważyć, że długości przedziałów zmniejszają się wraz ze wzrostem próby i zwiększają wraz ze wzrostem parametru $\sigma$. Oczywiście jest to zrozumiałe, gdyż długość przedziału zależy jedynie od $n$ i $\sigma$. Oznacza to, że aby uzyskać największą dokładność przedziału ufności, potrzebujemy większej próby. Jest również mniejsza dokładność dla większej znanej wariancji, którą możemy poprawić jedynie zwiększając próbę.
+
+Na koniec sprawdzę pokrycie dla 10000 prób dla każdego z trzech rozmiarów oraz każdej z trzech wartości parametru $\sigma$. Pokrycie oznacza prawdopodobieństwo tego, że prawdziwa wartość estymowanego parametru znajduje się w wyliczonym przedziale. Oczekuję, że pokrycie powinno stanowić około 95%, aby uznać utworzone przedziały ufności za "dobre", ponieważ taki jest poziom istotności. Z tego względu przedstawione w tabeli wyniki będą przedstawione jako wartość procentowa, a nie ułamek, aby zbliżenie do 95% było lepiej zauważalne.
+
+```{r, include = FALSE}
+nor_1_50 <- replicate(10000, puszw(rnorm(50, 0, 1), 1))
+pok_nor_1_50 <- mean(nor_1_50[1, ] <= 0 & nor_1_50[2, ] >= 0)
+
+nor_2_50 <- replicate(10000, puszw(rnorm(50, 0, 2), 2))
+pok_nor_2_50 <- mean(nor_2_50[1, ] <= 0 & nor_2_50[2, ] >= 0)
+
+nor_3_50 <- replicate(10000, puszw(rnorm(50, 0, 3), 3))
+pok_nor_3_50 <- mean(nor_3_50[1, ] <= 0 & nor_3_50[2, ] >= 0)
+
+nor_1_20 <- replicate(10000, puszw(rnorm(20, 0, 1), 1))
+pok_nor_1_20 <- mean(nor_1_20[1, ] <= 0 & nor_1_20[2, ] >= 0)
+
+nor_2_20 <- replicate(10000, puszw(rnorm(20, 0, 2), 2))
+pok_nor_2_20 <- mean(nor_2_20[1, ] <= 0 & nor_2_20[2, ] >= 0)
+
+nor_3_20 <- replicate(10000, puszw(rnorm(20, 0, 3), 3))
+pok_nor_3_20 <- mean(nor_3_20[1, ] <= 0 & nor_3_20[2, ] >= 0)
+
+nor_1_100 <- replicate(10000, puszw(rnorm(100, 0, 1), 1))
+pok_nor_1_100 <- mean(nor_1_100[1, ] <= 0 & nor_1_100[2, ] >= 0)
+
+nor_2_100 <- replicate(10000, puszw(rnorm(100, 0, 2), 2))
+pok_nor_2_100 <- mean(nor_2_100[1, ] <= 0 & nor_2_100[2, ] >= 0)
+
+nor_3_100 <- replicate(10000, puszw(rnorm(100, 0, 3), 3))
+pok_nor_3_100 <- mean(nor_3_100[1, ] <= 0 & nor_3_100[2, ] >= 0)
+```
+
+|              |        $n = 50$         |        $n = 20$         |        $n = 100$         |
+|:------------:|:-----------------------:|:-----------------------:|:------------------------:|
+| $\sigma = 1$ | `r pok_nor_1_50 * 100`% | `r pok_nor_1_20 * 100`% | `r pok_nor_1_100 * 100`% |
+| $\sigma = 2$ | `r pok_nor_2_50 * 100`% | `r pok_nor_2_20 * 100`% | `r pok_nor_2_100 * 100`% |
+| $\sigma = 3$ | `r pok_nor_3_50 * 100`% | `r pok_nor_3_20 * 100`% | `r pok_nor_3_100 * 100`% |
+
+Gdy przyjrzymy się dokładniej wartościom w tabeli można zobaczyć, że następuje oczekiwana przeze mnie sytuacja. Nie ma żadnej zasady co do tego, kiedy pokrycie jest najbliższe 95%, jednak dla każdej wartości $n$ oraz $\sigma$ jest ono niemal idealne.
+
+Można więc stwierdzić, że gdy mamy do czynienia z rozkładem normalnym to przedział ufności dla średniej ze znaną wariancją jest bardzo dobry, jeśli chodzi o oszacowanie średniej.
+
+## Rozkład Cauchy'ego
+
+W przypadku rozkładu Cauchy'ego i badanego przedziału musimy przyjąć pewne założenia, które mogą być pewnym nadużyciem. Dla tego rozkładu zarówno średnia jak i wariancja są nieokreślone. Z tego powodu stworzenie przedziału ufności dla średniej ze znaną wariancją jest niemożliwe. Nie jest spełnione tutaj również Centralne Twierdzenie Graniczne (CTG). Przyjmę więc podane paramery przesunięcia i skali (kolejno $\mu$ oraz $\sigma$) za znaną średnią oraz wariancję, aby mimo wszystko stworzyć przedziały ufności. Utworzone w ten sposób przedziały, z powodów podanych wyżej, mogą się okazać bezużyteczne, jednak przebadamy je, aby się tego upewnić.
+
+Do przebadania skuteczności przedziałów ufności umieszczę jedynie tabele z przykładowymi przedziałamy dla różnych wartości $\sigma$, a także ten z pokryciem. Długość przedziałów (w przypadku znanej wariancji) będzie taka sama jak w przypadku rozkładu normalnego dla $n = 50$, ponieważ wartości $\sigma$ są takie same jak w poprzednim podpunkcie.
+
+```{r, include = FALSE}
+set.seed(1)
+cauchy_confint_1 <- puszw(rcauchy(50, 0, 1), 1)
+cauchy_confint_2 <- puszw(rcauchy(50, 0, 2), 2)
+cauchy_confint_3 <- puszw(rcauchy(50, 0, 3), 3)
+```
+
+|              |                 Przedział ufności                  |
+|:------------:|:--------------------------------------------------:|
+| $\sigma = 1$ | [`r cauchy_confint_1[1]`, `r cauchy_confint_1[2]`] |
+| $\sigma = 2$ | [`r cauchy_confint_2[1]`, `r cauchy_confint_2[2]`] |
+| $\sigma = 3$ | [`r cauchy_confint_3[1]`, `r cauchy_confint_3[2]`] |
+
+Jak można zauważyć w powyższej tabeli - do żadnego z przedziałów nie trafia prawdziwa wartość parametru $\mu$. Wynika więc z tego, że żaden z przedziałów nie nadaje się dobrze do oszacowania wartości parametru $\mu$. Jest to najpewniej spowodowane przyjętymi przeze mnie założeniami na początku tego zadania. Wynika z tego, że mimo małej długości przedziału, nie przybliża od dobrze prawdziwej wartości parametru $\mu$, ponieważ parametr nie znajduje się w przedziale. Czasem nawet (tak jak w przedziale dla $\sigma = 1$) wartości są dość mocno oddalone od oczekiwanego $0$.
+
+Sprawdźmy jednak pokrycie dla próby rozmiaru 10000, aby zobaczyć, czy nie jest to przypadkiem spowodowane źle wylosowanymi próbami. Jeśli pokrycie będzie wynosiło około 95%, będziemy mogli uznać, że powyższa próba nie jest reprezentatywna. Jeśli natomiast będzie ono dużo mniejsze to możemy uznać, że ten przedział ufności nie nadaje się do przybliżania wartości parametru $\mu$ w przypadku rozkładu Cauchy'ego.
+
+```{r, include = FALSE}
+cauchy_1 <- replicate(10000, puszw(rcauchy(50, 0, 1), 1))
+pok_cauchy_1 <- mean(cauchy_1[1, ] <= 0 & cauchy_1[2, ] >= 0)
+cauchy_2 <- replicate(10000, puszw(rcauchy(50, 0, 2), 2))
+pok_cauchy_2 <- mean(cauchy_2[1, ] <= 0 & cauchy_2[2, ] >= 0)
+cauchy_3 <- replicate(10000, puszw(rcauchy(50, 0, 3), 3))
+pok_cauchy_3 <- mean(cauchy_3[1, ] <= 0 & cauchy_3[2, ] >= 0)
+```
+
+|              |        Pokrycie         |
+|:------------:|:-----------------------:|
+| $\sigma = 1$ | `r pok_cauchy_1 * 100`% |
+| $\sigma = 2$ | `r pok_cauchy_2 * 100`% |
+| $\sigma = 3$ | `r pok_cauchy_3 * 100`% |
+
+Powyższa tabela potwierdza wnioski, które wyniosłam mając jedną próbę. Można zauważyć, że tylko około 20% utworzonych w ten sposób przedziałów ufności zawiera 0, a zatem prawdziwą wartość parametru $\mu$. Jest to więc zupełnie bezużyteczny przedział ufności i nie ma sensu go używać w praktyce.
+
+Takie wnioski mają sens, gdy weźmie się pod uwagę to, co wspomniałam na początku tej części. Przez przyjęte przeze mnie uproszczenie, przedział ufności wyszedł bezużyteczny, a bez niego jest niemożliwy do skonstruowania.
+
+## Rozkład wykładniczy
+
+Na koniec zajmę się rozkładem wykładniczym z parametrem $\lambda$. Dla tego rozkładu jest jednoznacznie wyznaczona wartość oczekiwana, inaczej średnia ($E(X) = \frac{1}{\lambda}$) oraz wariancja ($Var(X) = \frac{1}{\lambda^2}$). W poleceniu mamy podane trzy wartości $\lambda$: 1, $\frac{1}{2}$ oraz $\frac{1}{3}$. Dla tych wartości parametry średniej (którą oznaczę dla ułatwienia jako $\mu$) oraz wariancji (którą dla ułatwienia oznaczę jako $\sigma^2$) wynoszą kolejno: $$\mu = 1, \ \sigma^2 = 1 \quad dla \ \lambda = 1$$ $$\mu = 2, \ \sigma^2 = 4 \quad dla \ \lambda = \frac{1}{2}$$ $$\mu = 3, \ \sigma^2 = 9 \quad dla \ \lambda = \frac{1}{3}$$
+
+Wykorzystam powyższe wyliczenia do stworzenia przedziałów ufności dla tego przedziału dla poszczególnych wartości $\lambda$. Ponieważ wartości $\sigma$ (będącej odchyleniem standardowym, pierwiastkiem kwadratowym z wariancji) są takie same jak w pierwszym przypadku, ominę długość przedziału i przejdę od razu do wyliczania pokrycia tego przedziału.
+
+```{r, include = FALSE}
+set.seed(1)
+exp_confint_1 <- puszw(rexp(50, 1), 1)
+exp_confint_2 <- puszw(rexp(50, 1/2), 2)
+exp_confint_3 <- puszw(rexp(50, 1/3), 3)
+```
+
+|                         |              Przedział ufności               |
+|:-----------------------:|:--------------------------------------------:|
+|      $\lambda = 1$      | [`r exp_confint_1[1]`, `r exp_confint_1[2]`] |
+| $\lambda = \frac{1}{2}$ | [`r exp_confint_2[1]`, `r exp_confint_2[2]`] |
+| $\lambda = \frac{1}{3}$ | [`r exp_confint_3[1]`, `r exp_confint_3[2]`] |
+
+Powyższa tabela z przykładowymi przedziałami ufności wskazuje na dobre ich działanie. W każdym przedziale znajdują się prawdziwe wartości parametru $\mu$ (dla przypomnienia - tym razem nie jest to 0, a kolejno 1, 2 oraz 3). Znając również szerokość, która jest taka sama jak w normalnym, można stwierdzić, że ten przedział ufności działa odpowiednio. Aby upewnić się, że nie wynika to z wyjątkowo "dobrych" prób potwierdzających tezę spojrzę na tabelę dla pokrycia przy 10000 losowań.
+
+```{r, include = FALSE}
+exp_1 <- replicate(10000, puszw(rexp(50, 1), 1))
+pok_exp_1 <- mean(exp_1[1, ] <= 1 & exp_1[2, ] >= 1)
+exp_2 <- replicate(10000, puszw(rexp(50, 1/2), 2))
+pok_exp_2 <- mean(exp_2[1, ] <= 2 & exp_2[2, ] >= 2)
+exp_3 <- replicate(10000, puszw(rexp(50, 1/3), 3))
+pok_exp_3 <- mean(exp_3[1, ] <= 3 & exp_3[2, ] >= 3)
+```
+
+|                         |       Pokrycie       |
+|:-----------------------:|:--------------------:|
+|      $\lambda = 1$      | `r pok_exp_1 * 100`% |
+| $\lambda = \frac{1}{2}$ | `r pok_exp_2 * 100`% |
+| $\lambda = \frac{1}{3}$ | `r pok_exp_3 * 100`% |
+
+Jak można zauważyć powyżej, te przedziały ufności działają bardzo dobrze. Wartości pokrycia wynoszą około 95%, a zatem tyle ile powinniśmy oczekiwać w przypadku tego przedziału ufności. Nie można również zauważyć wyraźnie gorszego zastosowania dla różnych wartości parametru $\lambda$.
+
+Na tej podstawie można stwierdzić, że ten przedział ufności, w przeciwieństwie do rozkładu Cauchy'ego, nadaje się bardzo dobrze do przybliżenia prawdziwej wartości średniej.
+
+# Przedział ufności dla średniej z nieznaną wariancją
+
+Częściej niż z sytuacją podaną powyżej spotykamy się jednak z potrzebą przybliżenia średniej przy pomocy przedziału ufności, gdy nie znamy żadnego z parametrów - zarówno średniej, jak i wariancji. W takim przypadku korzystamy z innego typu przedziałów, czyli przedziału ufności dla średniej z nieznaną wariancją. Dla poziomu istotności $\alpha$ tworzy się go w następujący sposób: $$\bar{X} \pm t_{(t - \frac{\alpha}{2}, n - 1)} \frac{S}{\sqrt{n}}$$ gdzie $t_{(t - \frac{\alpha}{2}, n - 1)}$ to kwantyl stopnia $\frac{\alpha}{2}$ rozkładu t-studenta z $n - 1$ stopniami swobody, a $S$ to wyliczone próbkowe odchylenie standardowe (pierwiastek kwadratowy z wariancji). Kod przedstawiający obliczanie tego przedziału przy 95% poziomie ufności dla pewnej próbki `pr` wygląda w następujący sposób:
+
+```{r}
+pusnw <- function(pr) {
+  X <- mean(pr)
+  n <- length(pr)
+  s <- sqrt(var(pr))
+  t <- qt(0.975, n - 1)
+  left <- X - t * s / sqrt(n)
+  right <- X + t * s / sqrt(n)
+  return(c(left, right))
+}
+```
+
+Wykonam ten przedział ufności dla rozkładu normalnego, Cauchy'ego oraz wykładniczego. Jedynie dla rozkładu normalnego powtórzę to dla różnych rozmiarów prób ($n = 50$, $n = 20$ oraz $n = 100$).
+
+## Rozkład normalny
+
+Rozpocznę od umieszczenia w tabeli przykładowych przedziałów ufności dla różnych rozmiarów $n$ oraz $\sigma$.
+
+```{r, include=FALSE}
+set.seed(1)
+nor_confint_nw_1_50 <- pusnw(rnorm(50, 0, 1))
+nor_confint_nw_2_50 <- pusnw(rnorm(50, 0, 2))
+nor_confint_nw_3_50 <- pusnw(rnorm(50, 0, 3))
+
+nor_confint_nw_1_20 <- pusnw(rnorm(20, 0, 1))
+nor_confint_nw_2_20 <- pusnw(rnorm(20, 0, 2))
+nor_confint_nw_3_20 <- pusnw(rnorm(20, 0, 3))
+
+nor_confint_nw_1_100 <- pusnw(rnorm(100, 0, 1))
+nor_confint_nw_2_100 <- pusnw(rnorm(100, 0, 2))
+nor_confint_nw_3_100 <- pusnw(rnorm(100, 0, 3))
+```
+
+|              |                         $n = 50$                         |                         $n = 20$                         |                         $n = 100$                          |
+|:------------:|:--------------------------------------------------------:|:--------------------------------------------------------:|:----------------------------------------------------------:|
+| $\sigma = 1$ | [`r nor_confint_nw_1_50[1]`, `r nor_confint_nw_1_50[2]`] | [`r nor_confint_nw_1_20[1]`, `r nor_confint_nw_1_20[2]`] | [`r nor_confint_nw_1_100[1]`, `r nor_confint_nw_1_100[2]`] |
+| $\sigma = 2$ | [`r nor_confint_nw_2_50[1]`, `r nor_confint_nw_2_50[2]`] | [`r nor_confint_nw_2_20[1]`, `r nor_confint_nw_2_20[2]`] | [`r nor_confint_nw_2_100[1]`, `r nor_confint_nw_2_100[2]`] |
+| $\sigma = 3$ | [`r nor_confint_nw_3_50[1]`, `r nor_confint_nw_3_50[2]`] | [`r nor_confint_nw_3_20[1]`, `r nor_confint_nw_3_20[2]`] | [`r nor_confint_nw_3_100[1]`, `r nor_confint_nw_3_100[2]`] |
+
+Gdyby porównać powyższe przedziały ufności do tych wyliczonych, gdy wariancja jest znana, to różnica nie jest duża. W obu przypadkach można zauważyć, że prawdziwa wartość $\mu$ znajduje się w tych przedziałach.
+
+W tym przypadku długość przedziału nie jest stała, więc powtórzę jej wyliczenie 10000 razy oraz przedstawię je na wykresach gęstościowych.
+
+```{r include = FALSE}
+nor_nw_1_50 <- replicate(10000, pusnw(rnorm(50, 0, 1)))
+dł_nor_nw_1_50 <- nor_nw_1_50[2, ] - nor_nw_1_50[1, ]
+pok_nor_nw_1_50 <- mean(nor_nw_1_50[1, ] <= 0 & nor_1_50[2, ] >= 0)
+
+nor_nw_2_50 <- replicate(10000, pusnw(rnorm(50, 0, 2)))
+dł_nor_nw_2_50 <- nor_nw_2_50[2, ] - nor_nw_2_50[1, ]
+pok_nor_nw_2_50 <- mean(nor_nw_2_50[1, ] <= 0 & nor_2_50[2, ] >= 0)
+
+nor_nw_3_50 <- replicate(10000, pusnw(rnorm(50, 0, 3)))
+dł_nor_nw_3_50 <- nor_nw_3_50[2, ] - nor_nw_3_50[1, ]
+pok_nor_nw_3_50 <- mean(nor_nw_3_50[1, ] <= 0 & nor_3_50[2, ] >= 0)
+
+nor_nw_1_20 <- replicate(10000, pusnw(rnorm(20, 0, 1)))
+dł_nor_nw_1_20 <- nor_nw_1_20[2, ] - nor_nw_1_20[1, ]
+pok_nor_nw_1_20 <- mean(nor_nw_1_20[1, ] <= 0 & nor_1_20[2, ] >= 0)
+
+nor_nw_2_20 <- replicate(10000, pusnw(rnorm(20, 0, 2)))
+dł_nor_nw_2_20 <- nor_nw_2_20[2, ] - nor_nw_2_20[1, ]
+pok_nor_nw_2_20 <- mean(nor_nw_2_20[1, ] <= 0 & nor_2_20[2, ] >= 0)
+
+nor_nw_3_20 <- replicate(10000, pusnw(rnorm(20, 0, 3)))
+dł_nor_nw_3_20 <- nor_nw_3_20[2, ] - nor_nw_3_20[1, ]
+pok_nor_nw_3_20 <- mean(nor_nw_3_20[1, ] <= 0 & nor_3_20[2, ] >= 0)
+
+nor_nw_1_100 <- replicate(10000, pusnw(rnorm(100, 0, 1)))
+dł_nor_nw_1_100 <- nor_nw_1_100[2, ] - nor_nw_1_100[1, ]
+pok_nor_nw_1_100 <- mean(nor_nw_1_100[1, ] <= 0 & nor_1_100[2, ] >= 0)
+
+nor_nw_2_100 <- replicate(10000, pusnw(rnorm(100, 0, 2)))
+dł_nor_nw_2_100 <- nor_nw_2_100[2, ] - nor_nw_2_100[1, ]
+pok_nor_nw_2_100 <- mean(nor_nw_2_100[1, ] <= 0 & nor_2_100[2, ] >= 0)
+
+nor_nw_3_100 <- replicate(10000, pusnw(rnorm(100, 0, 3)))
+dł_nor_nw_3_100 <- nor_nw_3_100[2, ] - nor_nw_3_100[1, ]
+pok_nor_nw_3_100 <- mean(nor_nw_3_100[1, ] <= 0 & nor_3_100[2, ] >= 0)
+```
+
+```{r, echo = FALSE}
+plot(density(dł_nor_nw_1_50), xlim = c(0, 4.5), lwd = 2, col = "pink3", main = "Wykres gęstości długości przedziału dla n = 50", xlab = "Długość przedziału", ylab = "Gęstość")
+lines(density(dł_nor_nw_2_50), lwd = 2, col = "plum3")
+lines(density(dł_nor_nw_3_50), lwd = 2, col = "lightblue3")
+legend("bottomright", legend = c(expression(sigma == 1), expression(sigma == 2), expression(sigma == 3)), col = c("pink3", "plum3", "lightblue3"), lty = 1, lwd = 2)
+```
+
+```{r, echo = FALSE, fig.height=5, fig.width=9}
+par(mfrow = c(1, 2))
+
+plot(density(dł_nor_nw_1_20), xlim = c(0, 4.5), lwd = 2, col = "pink", main = "Wykres dla n = 20", xlab = "Długość przedziału", ylab = "Gęstość")
+lines(density(dł_nor_nw_2_20), lwd = 2, col = "plum1")
+lines(density(dł_nor_nw_3_20), lwd = 2, col = "lightblue1")
+legend("bottomright", legend = c(expression(sigma == 1), expression(sigma == 2), expression(sigma == 3)), col = c("pink", "plum1", "lightblue1"), lty = 1, lwd = 2)
+
+plot(density(dł_nor_nw_1_100), xlim = c(0, 4.5), lwd = 2, col = "pink4", main = "Wykres dla n = 100", xlab = "Długość przedziału", ylab = "Gęstość")
+lines(density(dł_nor_nw_2_100), lwd = 2, col = "plum4")
+lines(density(dł_nor_nw_3_100), lwd = 2, col = "lightblue4")
+legend("bottomright", legend = c(expression(sigma == 1), expression(sigma == 2), expression(sigma == 3)), col = c("pink4", "plum4", "lightblue4"), lty = 1, lwd = 2)
+```
+
+W pierwszej kolejności warto się przyjrzeć jak wartość parametru $\sigma$ wpływa na długość przedziału. Można to zrobić na podstawie jedynie jednego z wykresów, na przykład $n = 50$, ponieważ dla pozostałych wnioski będą analogiczne.
+
+Można zauważyć, że im większy jest ten parametr, tym dłuższy jest przedział ufności. Warto również zauważyć, że krzywa gęstościowa jest wtedy szersza, zatem długości różnych przedziałów ufności bardziej się różnią od siebie, niż w przypadku mniejszego $\sigma$. Dla $\sigma = 1$ widoczne jest, że wartości są dość zbliżone do siebie.
+
+Spójrzmy teraz na wszystkie trzy wykresy, aby zobaczyć, jak na długość przedziału wpływa rozmiar próby. Każdy wykres ma takie same granice osi x (od 0 do 4.5), aby widoczne było, jak dokładnie rozkłądają się gęstości. Gdy spojrzymy na wykres dla $n = 20$ można zauważyć, że jest on rozciągnięty na całą długość osi X. W przypadku większych od niego rozmiarów prób, wykresy są dużo bardziej "ściśnięte". Zatem im większy rozmiar próby, tym bliżej siebie są wartości długości przedziału.
+
+Spojrzę teraz na tabelę z pokryciem dla różnych rozmiarów $n$ oraz $\sigma$.
+
+|              |          $n = 50$          |          $n = 20$          |          $n = 100$          |
+|:------------:|:--------------------------:|:--------------------------:|:---------------------------:|
+| $\sigma = 1$ | `r pok_nor_nw_1_50 * 100`% | `r pok_nor_nw_1_20 * 100`% | `r pok_nor_nw_1_100 * 100`% |
+| $\sigma = 2$ | `r pok_nor_nw_2_50 * 100`% | `r pok_nor_nw_2_20 * 100`% | `r pok_nor_nw_2_100 * 100`% |
+| $\sigma = 3$ | `r pok_nor_nw_3_50 * 100`% | `r pok_nor_nw_3_20 * 100`% | `r pok_nor_nw_3_100 * 100`% |
+
+Jak można zauważyć, bez względu na wartości $n$ oraz $\sigma$ wartość pokrycia wynosi około 95%. Oczekujemy takiej wartości, ponieważ przedział tworzymy na poziomie ufności 95%. Nie widać dużego pogorszenia w stosunku do przedziału ufności ze znaną wariancją.
+
+Na podstawie powyższych wnioskowań można przyjąć, że przedział ufności dla średniej z nieznaną wariancją na poziomie 95% bardzo dobrze przybliża prawdziwą wartość średniej.
+
+## Rozkład Cauchy'ego
+
+W przypadku rozkładu Cauchy'ego można już było spostrzec pewne problemy przy przedziale ufności dla średniej ze znaną wariancją. W tym przypadku, nie będzie problemu nieistniejącej wariancji, ponieważ wariancję możemy wyliczyć z próby. Zatem będę mogła wykorzystać próbkową wariancję oraz próbkową średnią do utworzenia tego przedziału dla średniej z nieznaną wariancją o poziomie ufności 95%. Ponownie jednak uznam parametr przesunięcia $\mu$ za prawdziwą wartość średniej, aby zbadać pokrycie tych przedziałów.
+
+Tym razem, zgodnie z przedziałem ufności ze znaną wariancją, dla rozkładu Cauchy'ego przebadam działanie przedziału ufności jedynie dla $n = 50$.
+
+```{r, include = FALSE}
+set.seed(1)
+cauchy_nw_confint_1 <- pusnw(rcauchy(50, 0, 1))
+cauchy_nw_confint_2 <- pusnw(rcauchy(50, 0, 2))
+cauchy_nw_confint_3 <- pusnw(rcauchy(50, 0, 3))
+```
+
+|              |                    Przedział ufności                     |
+|:------------:|:--------------------------------------------------------:|
+| $\sigma = 1$ | [`r cauchy_nw_confint_1[1]`, `r cauchy_nw_confint_1[2]`] |
+| $\sigma = 2$ | [`r cauchy_nw_confint_2[1]`, `r cauchy_nw_confint_2[2]`] |
+| $\sigma = 3$ | [`r cauchy_nw_confint_3[1]`, `r cauchy_nw_confint_3[2]`] |
+
+Można zobaczyć, że każdy z powyższych przedziałów zawiera wartość $\mu$. Wydają się one jednak na pierwszy rzut oka stosunkowo długie. Gdy 95% przedział ufności jest tak długi, również nie nadaje się do dobrej estymacji parametru średniej, ponieważ nie jesteśmy w stanie stwierdzić, jaka ta wartość w przybliżeniu jest, jeśli mówimy o liczbach oddalonych od siebie o 20.
+
+Spójrzmy więc na wykres gęstości długości przedziału ufności dla średniej z nieznaną wariancją, aby określić, czy takie długości przedziałów wynikają ze źle wylosowanej próby, czy faktycznie wszystkie z nich są tak długie.
+
+```{r, include = FALSE}
+cauchy_nw_1 <- replicate(10000, pusnw(rcauchy(50, 0, 1)))
+pok_cauchy_nw_1 <- mean(cauchy_nw_1[1, ] <= 0 & cauchy_nw_1[2, ] >= 0)
+dł_cauchy_nw_1 <- cauchy_nw_1[2, ] - cauchy_nw_1[1, ]
+
+cauchy_nw_2 <- replicate(10000, pusnw(rcauchy(50, 0, 2)))
+pok_cauchy_nw_2 <- mean(cauchy_nw_2[1, ] <= 0 & cauchy_nw_2[2, ] >= 0)
+dł_cauchy_nw_2 <- cauchy_nw_2[2, ] - cauchy_nw_2[1, ]
+
+cauchy_nw_3 <- replicate(10000, pusnw(rcauchy(50, 0, 3)))
+pok_cauchy_nw_3 <- mean(cauchy_nw_3[1, ] <= 0 & cauchy_nw_3[2, ] >= 0)
+dł_cauchy_nw_3 <- cauchy_nw_3[2, ] - cauchy_nw_3[1, ]
+```
+
+```{r, echo = FALSE}
+options(scipen=999)
+plot(density(dł_cauchy_nw_3), lwd = 2, col = "pink3", main = "Wykres gęstości długości przedziału w rozkładzie Cauchy'ego", xlab = "Długość przedziału", ylab = "Gęstość")
+lines(density(dł_cauchy_nw_2), lwd = 2, col = "plum3")
+lines(density(dł_cauchy_nw_1), lwd = 2, col = "lightblue3")
+legend("bottomright", legend = c(expression(sigma == 1), expression(sigma == 2), expression(sigma == 3)), col = c("lightblue3", "plum3", "pink3"), lty = 1, lwd = 2)
+```
+
+Jak można zauważyć, powyższy wykres jest zupełnie nieczytelny. Można z tego wnioskować, że utworzone w ten sposób przedziały ufności są bardzo długie. Największe wartości długości przedziału wynoszą około `r round(max(dł_cauchy_nw_1), 2)` dla $\sigma = 1$, `r round(max(dł_cauchy_nw_2), 2)` dla $\sigma = 2$ oraz `r round(max(dł_cauchy_nw_3), 2)` dla $\sigma = 3$, zatem bardzo duże. O wiele zbyt duże, żeby zbiory stworzone w ten sposób działały dobrze. Średnio długości są mniejsze (`r round(mean(dł_cauchy_nw_1), 2)`, `r round(mean(dł_cauchy_nw_2), 2)`, `r round(mean(dł_cauchy_nw_3), 2)` odpowiednio dla $\sigma = 1$, $\sigma = 2$ oraz $\sigma = 3$), jednak wciąż zbyt długie na dobry przedział ufności. W szczególności, jeśli jest szansa na tak wysokie długości przedziałów jak widzieliśmy powyżej.
+
+Spójrzmy teraz na tabelę dla pokrycia w rozkładzie Cauchy'ego.
+
+|              |          Pokrycie          |
+|:------------:|:--------------------------:|
+| $\sigma = 1$ | `r pok_cauchy_nw_1 * 100`% |
+| $\sigma = 2$ | `r pok_cauchy_nw_2 * 100`% |
+| $\sigma = 3$ | `r pok_cauchy_nw_3 * 100`% |
+
+Jak można zauważyć w powyższej tabeli - wartości są znacząco większe od wielkości oczekiwanego 95%. To, że wartość parametru $\mu$ tak często znajduje się w skonstruowanym przedziale ufności jest spowodowane faktem, który przedstawiałam wcześniej. Przedziały ufności dla średniej dla rozkładu Cauchy'ego są na tyle długie, że trudno by było, żeby prawdziwa wartość $\mu$ nie znajdowała się w tym przedziale.
+
+Można więc stwierdzić, że ponownie dla rozkładu Cauchy'ego badany przedział ufności zupełnie się nie nadaje. Jest to zrozumiałe biorąc pod uwagę fakty, o których mówiłam na początku raportu. Średnia i wariancja nie są zdefiniowane dla tego rozkładu, więc próba stworzenia przedziału ufności bazując na nieistniejących parametrach nie będzie działającym sposobem.
+
+## Rozkład wykładniczy
+
+Jeśli chodzi o rozkład wykładniczy, to w pierwszej kolejności zaprezentuję tabelę dla przykładowych przedziałów ufności dla średniej z nieznaną wariancją.
+
+```{r, include = FALSE}
+set.seed(1)
+exp_confint_nw_1 <- pusnw(rexp(50, 1))
+exp_confint_nw_2 <- pusnw(rexp(50, 1/2))
+exp_confint_nw_3 <- pusnw(rexp(50, 1/3))
+```
+
+|                         |                 Przedział ufności                  |
+|:-----------------------:|:--------------------------------------------------:|
+|      $\lambda = 1$      | [`r exp_confint_nw_1[1]`, `r exp_confint_nw_1[2]`] |
+| $\lambda = \frac{1}{2}$ | [`r exp_confint_nw_2[1]`, `r exp_confint_nw_2[2]`] |
+| $\lambda = \frac{1}{3}$ | [`r exp_confint_nw_3[1]`, `r exp_confint_nw_3[2]`] |
+
+Dla przypomnienia - prawdziwe wartości średniej w tych przypadkach wynoszą odpowiednio $\mu = 1$, $\mu = 2$ oraz $\mu = 3$. Zatem, podobnie jak w poprzednim przedziale ufności, prawdziwe wartości parametru znajdują się w przedziale ufności.
+
+Powyższe przykładowe przedziały wyglądają również, jakby nie mały bardzo dużej długości. Bazując jedynie na tych przykładach można stwierdzić, że są one dobrze skonstruowane i dobrze przybliżają prawdziwą wartość średniej.
+
+Spójrzmy teraz na wykres gęstości długości przedziału.
+
+```{r, include = FALSE}
+exp_nw_1 <- replicate(10000, pusnw(rexp(50, 1)))
+pok_exp_nw_1 <- mean(exp_nw_1[1, ] <= 1 & exp_nw_1[2, ] >= 1)
+dł_exp_nw_1 <- exp_nw_1[2, ] - exp_nw_1[1, ]
+
+exp_nw_2 <- replicate(10000, pusnw(rexp(50, 1/2)))
+pok_exp_nw_2 <- mean(exp_nw_2[1, ] <= 2 & exp_nw_2[2, ] >= 2)
+dł_exp_nw_2 <- exp_nw_2[2, ] - exp_nw_2[1, ]
+
+exp_nw_3 <- replicate(10000, pusnw(rexp(50, 1/3)))
+pok_exp_nw_3 <- mean(exp_nw_3[1, ] <= 3 & exp_nw_3[2, ] >= 3)
+dł_exp_nw_3 <- exp_nw_3[2, ] - exp_nw_3[1, ]
+```
+
+```{r, echo = FALSE}
+plot(density(dł_exp_nw_1), xlim = c(0, 3.2), ylim = c(0, 4), lwd = 2, col = "pink3", main = "Wykres gęstości długości przedziału w rozkładzie wykładniczym", xlab = "Długość przedziału", ylab = "Gęstość")
+lines(density(dł_exp_nw_2), lwd = 2, col = "plum3")
+lines(density(dł_exp_nw_3), lwd = 2, col = "lightblue3")
+legend("bottomright", legend = c(expression(mu == 1), expression(mu == 2), expression(mu == 3)), col = c("pink3", "plum3", "lightblue3"), lty = 1, lwd = 2)
+```
+
+Jak można zauważyć na powyższym wykresie, dla coraz większych wartości $\mu$ (a zatem coraz mniejszych $\lambda$) możemy spostrzec coraz większą szerokość wykresu, a także większe wartości długości przedziału. Dla $\mu = 1$ ($\lambda = 1$) wykres jest bardzo wąski i długości przedziału są bardzo niewielkie (dla tej wartości $\lambda$ maksymalna długość przedziału z badanych prób wynosi około 1.35). Z kolei maksymalna długość przedziału dla $\lambda = \frac{1}{3}$ lub $\mu = 3$ to około 3.2. Jest to więc wciąż bardzo niewielka długość przedziału, bardzo dobra do przybliżania wartości średniej tego rozkładu.
+
+Sprawdźmy pokrycie tych przedziałów. Jeśli będzie ono zbliżone do 95% będzie można stwierdzić, że te przedziały bardzo dobrze nadają się do przybliżenia wartości średniej za pomocą przedziału ufności przy nieznanej wariancji.
+
+|                         |        Pokrycie         |
+|:-----------------------:|:-----------------------:|
+|      $\lambda = 1$      | `r pok_exp_nw_1 * 100`% |
+| $\lambda = \frac{1}{2}$ | `r pok_exp_nw_2 * 100`% |
+| $\lambda = \frac{1}{3}$ | `r pok_exp_nw_3 * 100`% |
+
+Można zauważyć, że pokrycie jest nieco gorsze niż oczekiwane 95%, ale wciąż bardzo bliskie, około 93,5% lub 94%. Jest to więc wciąż bardzo dobry przedział ufności dla średniej.
+
+Można więc zatem założyć, że przedział ufności dla średniej z nieznaną wariancją radzi sobie dobrze w celu przybliżenia średniej dla rozkładu wykładniczego. Jest jedynie nieco gorszy niż dla rozkładu normalnego.
+
+# Przedział ufności dla wariancji ze znaną średnią
+
+Zajmijmy się teraz przybliżaniem wariancji przy pomocy 95% przedziału ufności ze znaną średnią. Ma on postać: $$\left[  \frac{n\hat{\sigma}^2}{\chi_{1 - \frac{\alpha}{2};n}}, \frac{n\hat{\sigma}^2}{\chi_{\frac{\alpha}{2};n}} \right]$$ gdzie $\hat{\sigma}^2 = \frac{1}{n} \sum^n_{i=1}{(X_i-\mu)^2}$ to estymator wariancji, gdzie $\mu$ to znana teoretyczna średnia, a $\chi_{1 - \frac{\alpha}{2};n}$ oraz $\chi_{\frac{\alpha}{2};n}$ to odpowiednie kwantyle z rozkładu chi kwadrat.
+
+Kod wyliczający prawą i lewą stronę tego przedziału ufności prezentuje się następująco:
+
+```{r}
+puwzs <- function(pr, mu) {
+  n <- length(pr)
+  sig2 <- (1/n)*sum((pr - mu)**2)
+  left <- (n*sig2)/(qchisq(1-(0.05/2), n))
+  right <- (n*sig2)/(qchisq(0.05/2, n))
+  return(c(left, right))
+}
+```
+
+Ten przedział ufności przeanalizuję jedynie dla rozkładu normalnego oraz rozkładu wykładniczego. Dla obu będzie to jedynie dla rozmiaru próby $n = 50$, ponieważ zmiana rozmiaru próby doprowadzi nas do tych samych wniosków co w poprzednim przypadku - im większa próba, tym lepszy przedział ufności. Dla analizy ponownie pokażę przykładowy przedział ufności dla każdej wielkości $\mu$ oraz $\sigma$, następnie przebadam długości przedziałów oraz procent pokrycia.
+
+## Rozkład normalny
+
+Tabela dla przykładowych przedziałów ufności w rozkładzie normalnym dla $\mu = 0$ oraz odchyleniu standardowemu równemu kolejno $\sigma = 1$, $\sigma = 2$ oraz $\sigma = 3$ prezentuje się następująco:
+
+```{r, include = FALSE}
+set.seed(1)
+confint_zs_1 <- puwzs(rnorm(50, 0, 1), 0)
+confint_zs_2 <- puwzs(rnorm(50, 0, 2), 0)
+confint_zs_3 <- puwzs(rnorm(50, 0, 3), 0)
+```
+
+||Przedział ufności|
+|:-:|:-:|
+|$\sigma = 1$|[`r confint_zs_1[1]`, `r confint_zs_1[2]`]|
+|$\sigma = 2$|[`r confint_zs_2[1]`, `r confint_zs_2[2]`]|
+|$\sigma = 3$|[`r confint_zs_3[1]`, `r confint_zs_3[2]`]|
+
+Warto przypomnieć, że wartości, które oczekujemy znaleźć w danych przedziałach ufności to $\sigma^2$, nie podane w poleceniu $\sigma$. Zatem przyglądając się przedziałom można zauważyć, że każdy z nich zawiera prawdziwą wartość wariancji (kolejno 1, 4, 9). Nie wydają się również bardzo długie, zatem można stwierdzić, że dobrze nadają się do przybliżenia wartości wariancji.
+
+Spójrzmy teraz na długości przedziałów ufności. Zaprezentuję je ponownie na wykresie gęstości.
+
+```{r, include = FALSE}
+nor_zs_1 <- replicate(10000, puwzs(rnorm(50, 0, 1), 0))
+dł_nor_zs_1 <- nor_zs_1[2, ] - nor_zs_1[1, ]
+pok_nor_zs_1 <- mean(nor_zs_1[1, ] <= 1 & nor_zs_1[2, ] >= 1)
+
+nor_zs_2 <- replicate(10000, puwzs(rnorm(50, 0, 2), 0))
+dł_nor_zs_2 <- nor_zs_2[2, ] - nor_zs_2[1, ]
+pok_nor_zs_2 <- mean(nor_zs_2[1, ] <= 4 & nor_zs_2[2, ] >= 4)
+
+nor_zs_3 <- replicate(10000, puwzs(rnorm(50, 0, 3), 0))
+dł_nor_zs_3 <- nor_zs_3[2, ] - nor_zs_3[1, ]
+pok_nor_zs_3<- mean(nor_zs_3[1, ] <= 9 & nor_zs_3[2, ] >= 9)
+```
+
+```{r, echo = FALSE}
+plot(density(dł_nor_zs_1), lwd = 2, xlim = c(0, 14.5), col = "pink3", main = "Wykres gęstości długości przedziału w rozkładzie normalnym", xlab = "Długość przedziału", ylab = "Gęstość")
+lines(density(dł_nor_zs_2), lwd = 2, col = "plum3")
+lines(density(dł_nor_zs_3), lwd = 2, col = "lightblue3")
+legend("bottomright", legend = c(expression(sigma == 1), expression(sigma == 2), expression(sigma == 3)), col = c("pink3", "plum3", "lightblue3"), lty = 1, lwd = 2)
+```
+
+Można zauważyć, że przedziały są krótsze dla mniejszych wartości wariancji. Im większa wariancja, tym bardziej zwiększa się długość przedziału. Jest to zmiana dość znacząca. Największa długość przedziału dla $\sigma = 3$ wynosi aż `r round(max(dł_nor_zs_3), 2)`. Na wykresie można również zauważyć, że dla większych wartości parametru $\sigma$ wykresy są bardziej rozłożone na długości osi X. Oznacza to, że długości przedziałów są wtedy bardziej zróżnicowane. 
+
+Można z tego wnioskować, że przedziały ufności robią się dość długie, gdy mamy do czynienia z większą wariancją i może to wpływać na użyteczność tego przedziału. 
+
+Na koniec zaprezentuję tabelę dla pokrycia.
+
+||Pokrycie|
+|:-:|:-:|
+|$\sigma = 1$|`r pok_nor_zs_1 * 100`%|
+|$\sigma = 2$|`r pok_nor_zs_2 * 100`%|
+|$\sigma = 3$|`r pok_nor_zs_3 * 100`%|
+
+Jak widać, pokrycie jest takie jak oczekiwalibyśmy po 95% przedziale ufności. Wszystkie wartości plasują się w okolicach poziomu ufności. Pokrycie jest więc odpowiednie do tworzonego przedziału ufności.
+
+Bazując na powyższej analizie można uznać, że ten przedział ufności jest odpowiedni do przybliżenia prawdziwej wariancji $\sigma^2$ w rozkładzie normalnym, jednak pogarsza się on niego, gdy mamy do czynienia z większą prawdziwą wariancją.
+
+## Rozkład wykładniczy
+
+Przejdźmy więc do analizy rozkładu wykładniczego. Teoretyczne wartości są takie same jak wyliczone dla przedziału ufności dla średniej ze znaną wariancją. Przyjrzyjmy się więc teraz przykładowym przedziałom ufności dla wariancji ze znaną srednią w tym rozkładzie dla równych wartości parametru $\lambda$.
+
+```{r, include = FALSE}
+set.seed(1)
+exp_confint_zs_1 <- puwzs(rexp(50, 1), 1)
+exp_confint_zs_2 <- puwzs(rexp(50, 1/2), 2)
+exp_confint_zs_3 <- puwzs(rexp(50, 1/3), 3)
+```
+
+||Przedział ufności|
+|:-:|:-:|
+|$\lambda = 1$|[`r exp_confint_zs_1[1]`, `r exp_confint_zs_1[2]`]|
+|$\lambda = \frac{1}{2}$|[`r exp_confint_zs_2[1]`, `r exp_confint_zs_2[2]`]|
+|$\lambda = \frac{1}{3}$|[`r exp_confint_zs_3[1]`, `r exp_confint_zs_3[2]`]|
+
+Jak można zauwazyć, dwa pierwsze zbiory zawierają prawdziwą wartość $\sigma^2$ (1 oraz 4), natomiast trzeci nie zawiera tej wartości. Może to być spowodowane konkretną próbą, dka której wartość jest nieodpowiednio przybliżona, niekoniecznie powoduje to bezużyteczność przedziału, szczególnie biorąc pod uwagę, że bardzo dobrze przybliża on wariancję dla $\lambda = 1$ oraz $\lambda = \frac{1}{2}$.
+
+Spójrzmy więc na długości przedziałów przedstawione na wykresie gęstości długości przedziałów.
+
+```{r, include = FALSE}
+exp_zs_1 <- replicate(10000, puwzs(rexp(50, 1), 1))
+dł_exp_zs_1 <- exp_zs_1[2, ] - exp_zs_1[1, ]
+pok_exp_zs_1 <- mean(exp_zs_1[1, ] <= 1 & exp_zs_1[2, ] >= 1)
+
+exp_zs_2 <- replicate(10000, puwzs(rexp(50, 1/2), 2))
+dł_exp_zs_2 <- exp_zs_2[2, ] - exp_zs_2[1, ]
+pok_exp_zs_2 <- mean(exp_zs_2[1, ] <= 4 & exp_zs_2[2, ] >= 4)
+
+exp_zs_3 <- replicate(10000, puwzs(rexp(50, 1/3), 3))
+dł_exp_zs_3 <- exp_zs_3[2, ] - exp_zs_3[1, ]
+pok_exp_zs_3<- mean(exp_zs_3[1, ] <= 9 & exp_zs_3[2, ] >= 9)
+```
+
+```{r, echo = FALSE}
+plot(density(dł_exp_zs_1), lwd = 2, xlim = c(0, 39.2), col = "pink3", main = "Wykres gęstości długości przedziału w rozkładzie wykładniczym", xlab = "Długość przedziału", ylab = "Gęstość")
+lines(density(dł_exp_zs_2), lwd = 2, col = "plum3")
+lines(density(dł_exp_zs_3), lwd = 2, col = "lightblue3")
+legend("bottomright", legend = c(expression(mu == 1), expression(mu == 2), expression(mu == 3)), col = c("pink3", "plum3", "lightblue3"), lty = 1, lwd = 2)
+```
+
+Powyższy wykres przedstawia gęstość długości przedziałów dla różnych parametrów $\lambda$ w rozkładzie wykładniczym. Można zauważyć tę samą zależność, co w przypadku rozkładu normalnego - im większa wariancja, tym dłuższy przedział ufności, a także bardziej oddalone od siebie długości przedziałów w zależności od próby, na podstawie której tworzony jest przedział. 
+
+Zaprezentuję teraz tabelę pokrycia dla różnych wartości $\lambda$ rozkładu wykładniczego.
+
+||Pokrycie|
+|:-:|:-:|
+|$\lambda = 1$|`r pok_exp_zs_1 * 100`%|
+|$\lambda = \frac{1}{2}$|`r pok_exp_zs_2 * 100`%|
+|$\lambda = \frac{1}{3}$|`r pok_exp_zs_3 * 100`%|
+
+Jak widać powyżej, pokrycie dla tego przedziału ufności, gdy badamy inny rozkład niż normalny wynosi około 70%, zamiast oczekiwanych 95%. Jest to więc niekoniecznie dobry przedział ufności w praktyce. Długości przedziału sugerowałyby, że przedział jest w porządku (o ile parametr $\sigma$ nie jest zbyt duży), jednak gdy spojrzymy na powyższe pokrycie nie wydaje się on zbyt dobry. Nie można powiedzieć, że 70% to w tym przypadku mało, jednak jest to zbyt mało, gdy patrzymy na to, czego byśmy oczekiwali przy tym przedziale ufności.
+
+Można więc uznać, że gdy mamy do czynienia z rozkładem innym niż normalny ten przedział ufności może nie nadawać się najlepiej do przybliżenia wariancji. Powiedzenie, że zupełnie nie nadaje się on dla rozkładu wykładniczego będzie nadużyciem, jednak trzeba mieć w pamięci, że prawdziwa wartość nie będzie się znajdować w przedziale ufności częściej niż powinniśmy się tego spodziewać.
+
+# Przedział ufności dla wariancji z nieznaną średnia
+
+Przedział ufności dla wariancji z nieznaną średnią jest bardzo podobny do badanego przez nas przed chwilą przedziału, gdzie średnia była nam znana. Tym razem wygląda on w następujący sposób: $$\left[ \frac{(n-1)s^2}{\chi_{1 - \frac{\alpha}{2};n - 1}}, \frac{(n-1)s^2}{\chi_{\frac{\alpha}{2};n - 1}} \right]$$ gdzie $s^2 = \frac{1}{n - 1} \sum^n_{i=1}{(X_i-\bar{X})^2}$ to estymator wariancji $\sigma^2$ dla nieznanej średniej $\mu$, którą przybliżamy średnią próbkową $\bar{X}$. Z kolei $\chi_{\frac{\alpha}{2};n - 1}$ oraz $\chi_{1 - \frac{\alpha}{2};n - 1}$ to odpowiednie kwantyle z rozkładu chi kwadrat.
+
+Wyliczenie tego przedziału ufności można zaobserwować w poniszym kodzie:
+
+```{r}
+puwns <- function(pr) {
+  n <- length(pr)
+  s2 <- var(pr)
+  left <- ((n-1)*s2)/(qchisq(1-(0.05/2), n-1))
+  right <- ((n-1)*s2)/(qchisq(0.05/2, n-1))
+  return(c(left, right))
+}
+```
+
+Jak widać, w powyższym kodzie używam funkcji wbudowanej `var` zamiast wyliczać wariancję z próby ze wzoru. Wynik wychodzi identyczny, a w ten sposób jest to szybsze do zapisania.
+
+Ten przypadek rozpatrzę jedynie dla rozkładu normalnego o rozmiarze próby $n = 50$ i każdej z podanych wartości parametrów $\mu$ oraz $\sigma$.
+
+## Rozkład normalny
+
+Zacznijmy analizę od przykładowego przedziału ufności utworzonego w ten sposób.
+
+```{r, include = FALSE}
+set.seed(1)
+confint_ns_1 <- puwns(rnorm(50, 0, 1))
+confint_ns_2 <- puwns(rnorm(50, 0, 2))
+confint_ns_3 <- puwns(rnorm(50, 0, 3))
+```
+
+||Przedział ufności|
+|:-:|:-:|
+|$\sigma = 1$|[`r confint_ns_1[1]`, `r confint_ns_1[2]`]|
+|$\sigma = 2$|[`r confint_ns_2[1]`, `r confint_ns_2[2]`]|
+|$\sigma = 3$|[`r confint_ns_3[1]`, `r confint_ns_3[2]`]|
+
+Można zobaczyć, że w każdym przypadku prawdziwa wartość wariancji $\sigma^2$ "wpada" do przedziału ufności. Stworzone w ten sposób przedziały wydają się więc, ponownie, dobre do przybliżenia wariancji w rozkładzie normalnym. Są one tylko minimalnie gorsze niż w przypadku, gdy średnia była znana, natomiast niezauważalnie i nieznacząco.
+
+Spójrzmy teraz na wykres gęstości długości przedziału ufności. 
+
+```{r, include = FALSE}
+nor_ns_1 <- replicate(10000, puwns(rnorm(50, 0, 1)))
+dł_nor_ns_1 <- nor_ns_1[2, ] - nor_ns_1[1, ]
+pok_nor_ns_1 <- mean(nor_ns_1[1, ] <= 1 & nor_ns_1[2, ] >= 1)
+
+nor_ns_2 <- replicate(10000, puwns(rnorm(50, 0, 2)))
+dł_nor_ns_2 <- nor_ns_2[2, ] - nor_ns_2[1, ]
+pok_nor_ns_2 <- mean(nor_ns_2[1, ] <= 4 & nor_ns_2[2, ] >= 4)
+
+nor_ns_3 <- replicate(10000, puwns(rnorm(50, 0, 3)))
+dł_nor_ns_3 <- nor_ns_3[2, ] - nor_ns_3[1, ]
+pok_nor_ns_3<- mean(nor_ns_3[1, ] <= 9 & nor_ns_3[2, ] >= 9)
+```
+
+```{r, echo = FALSE}
+plot(density(dł_nor_ns_1), lwd = 2, xlim = c(0, 15), col = "pink3", main = "Wykres gęstości długości przedziału w rozkładzie normalnym", xlab = "Długość przedziału", ylab = "Gęstość")
+lines(density(dł_nor_ns_2), lwd = 2, col = "plum3")
+lines(density(dł_nor_ns_3), lwd = 2, col = "lightblue3")
+legend("bottomright", legend = c(expression(sigma == 1), expression(sigma == 2), expression(sigma == 3)), col = c("pink3", "plum3", "lightblue3"), lty = 1, lwd = 2)
+```
+
+Wykres wygląda łudząco podobnie do tego, który prezentowałam dla przedziałów ufności dla wariancji ze znaną średnią. Zatem wnioski również są takie same. Warto również zauważyć, że nieznana średnia nie pogarsza w znaczący sposób prezentowanych przedziałów ufności.
+
+Przyjrzyjmy się, czy to samo wynika z tabeli dla pokrycia przedziału ufności.
+
+||Pokrycie|
+|:-:|:-:|
+|$\sigma = 1$|`r pok_nor_ns_1 * 100`%|
+|$\sigma = 2$|`r pok_nor_ns_2 * 100`%|
+|$\sigma = 3$|`r pok_nor_ns_3 * 100`%|
+
+Ponownie wszystkie wartości pokrycia są bardzo bliskie 95%, a zatem oczekiwanej wartości. Potwierdza to, że ten przedział jest to bardzo dobre przybliżenie dla wariancji w rozkładzie normalnym. Zarówno w przypadku, gdy średnia jest znana, jak i gdy średnia jest nieznana przedział ufności jest bardzo dobrze skonstruowany. Nie ma między nimi znaczącej różnicy i oba świetnie nadają się do przybliżenia wariancji w tym rozkładzie.
+
+# Przedział ufności dla proporcji
+
+Na koniec, przedział ufności dla proporcji. Prezentuje się on w następujący sposób: $$\left[ \bar{Y} - z_{1 - \frac{\alpha}{2}} \sqrt{\frac{\bar{Y}(1-\bar{Y})}{n}}, \bar{Y} + z_{1 - \frac{\alpha}{2}} \sqrt{\frac{\bar{Y}(1-\bar{Y})}{n}} \right]$$ gdzie $Y$ to zmienna losowa o rozkładzie 0-1, a $z_{1 - \frac{\alpha}{2}}$ to odpowiedni kwantyl rozkładu normalnego.
+
+Kod służący do 95% przedziału ufności, gdy chcemy sprawdzić proporcję dodatnich obserwacji dla pewnej próby prezentuję poniżej.
+
+```{r}
+pup <- function(pr) {
+  srY = mean(pr > 0)
+  n <- length(pr)
+  z <- qnorm(0.975)
+  left <- srY - z * sqrt((srY*(1 - srY))/n)
+  right <- srY + z * sqrt((srY*(1 - srY))/n)
+  return(c(left, right))
+}
+```
+
+Ten przedział zaprezentuję jedynie dla rozkładu normalnego o różnych wartościach $\sigma$ i $n = 50$.
+
+## Rozkład normalny
+
+Ponieważ rozkład normalny jest symetryczny, a średnia w tym poleceniu ma wartość $\mu = 0$, to prawdziwa wartość $p = \frac{1}{2}$. Zatem tę wartość próbujemy przybliżyć tym przedziałem ufności.
+
+W pierwszej kolejności sprawdźmy przykładowe przedziały ufności.
+
+```{r, include=FALSE}
+set.seed(1)
+confint_p_1 <- pup(rnorm(50, 0, 1))
+confint_p_2 <- pup(rnorm(50, 0, 2))
+confint_p_3 <- pup(rnorm(50, 0, 3))
+```
+
+||Przedział ufności|
+|:-:|:-:|
+|$\sigma = 1$|[`r confint_p_1[1]`, `r confint_p_1[2]`]|
+|$\sigma = 2$|[`r confint_p_2[1]`, `r confint_p_2[2]`]|
+|$\sigma = 3$|[`r confint_p_3[1]`, `r confint_p_3[2]`]|
+
+Można zobaczyć, że jedynie dla $\sigma = 3$ prawdziwa wartość pokrycia nie znajduje się w przedziale ufności. Jest ona jednak na tyle blisko, że może to być spowodowane konkretną próbą. Nie oznacza to, że ten parametr nie będzie dobrze przybliżony tym przedziałem ufności.
+
+Spójrzmy teraz na wykres gęstości długości przedziału ufności.
+
+```{r, include = FALSE}
+nor_p_1 <- replicate(10000, pup(rnorm(50, 0, 1)))
+dł_nor_p_1 <- nor_p_1[2, ] - nor_p_1[1, ]
+pok_nor_p_1 <- mean(nor_p_1[1, ] <= 1/2 & nor_p_1[2, ] >= 1/2)
+
+nor_p_2 <- replicate(10000, pup(rnorm(50, 0, 2)))
+dł_nor_p_2 <- nor_p_2[2, ] - nor_p_2[1, ]
+pok_nor_p_2 <- mean(nor_p_2[1, ] <= 1/2 & nor_p_2[2, ] >= 1/2)
+
+nor_p_3 <- replicate(10000, pup(rnorm(50, 0, 3)))
+dł_nor_p_3 <- nor_p_3[2, ] - nor_p_3[1, ]
+pok_nor_p_3 <- mean(nor_p_3[1, ] <= 1/2 & nor_p_3[2, ] >= 1/2)
+```
+
+```{r, echo = FALSE}
+plot(density(dł_nor_p_1), lwd = 2, col = "pink3", main = "Wykres gęstości długości przedziału w rozkładzie normalnym", xlab = "Długość przedziału", ylab = "Gęstość")
+lines(density(dł_nor_p_2), lwd = 2, col = "plum3")
+lines(density(dł_nor_p_3), lwd = 2, col = "lightblue3")
+legend("bottomright", legend = c(expression(sigma == 1), expression(sigma == 2), expression(sigma == 3)), col = c("pink3", "plum3", "lightblue3"), lty = 1, lwd = 2)
+```
+
+Po raz pierwszy ze wszystkich badanych przedziałów możemy zobaczyć, że wszyskie trzy wykresy nakładają się na siebie. Wykres gęstości przypomina "schodki". Można również zauważyć, że długości plasują się między wartościami 0.23 i 0.28. Można więc stwierdzić, że wszystkie długości wykresu dla 10000 losowań są sobie bardzo bardzo bliskie. 
+
+Poniżej prezentuję tabelę dla pokrycia w przedziale ufności dla proporcji.
+
+||Pokrycie|
+|:-:|:-:|
+|$\sigma = 1$|`r pok_nor_p_1 * 100`%|
+|$\sigma = 2$|`r pok_nor_p_2 * 100`%|
+|$\sigma = 3$|`r pok_nor_p_3 * 100`%|
+
+Jak widać, w każdym z tych punktów prawdopodobieństwo tego, że prawdziwa wartość proporcji będzie się znajdowała w tym przedziale ufności to około 93%. Jest to bardzo blisko oczekiwanych 95%, więc możemy uznać, że wyżej pokazany przykład nie był typowy dla konstrukcji tego przedziału i tylko wyjątkowo nie udało się go stworzyć tak, żeby zawierał szukaną wartość.
+
+Zatem ten przedział ufności bardzo dobrze radził sobie dla rozkładu normalnego. 
