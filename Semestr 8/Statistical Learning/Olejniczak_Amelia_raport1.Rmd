@@ -1,0 +1,363 @@
+---
+title: "Analysis of the unconditional data concerning newborns' weight and length, compared to the conditional data with additional information about parents' heights"
+author: "Amelia Olejniczak"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(car)
+library(ggplot2)
+library(gridExtra)
+library(knitr)
+library(kableExtra)
+library(GGally)
+library(ellipse)
+setwd("C:\\Users\\ameli\\Documents\\R\\statistical learning")
+```
+
+# Introduction
+
+This report presents an analysis of the data about newborns from an unspecified hospital. We analyze the data concerning their weight and length. Based on that we are going to assign the scores - 0, 1 and 2 and show, how they change if we take into consideration the parents' heights. The main objective is to compare the conditional and unconditional distribution.
+
+# Analysis of the newborn children data
+
+```{r, include=FALSE}
+WL <- read.delim("WeightLength.txt")
+```
+
+First, we examine the table with the data concerning only the newborn children. The table contains the information about weights and lengths of `r length(WL$Length)` newborn children (singleton and not prematurely born) from a certain region. Based on the data we can say that the values for the weight are between `r min(WL$Weight)` and `r max(WL$Weight)`, while the length values range between `r min(WL$Length)` and `r max(WL$Length)`. Since the unit of the values is not specified, we can assume (based on those values) that the weight is given in grams and the length in centimeters.
+
+Let us start the analysis from estimating the means for both parameters we are interested in, as well as the covariance matrix for this table. The results are going to be a vector containing the mean of the weight and length (in this exact order). Similarly the estimated covariance matrix is going to have the variance of the weight and length of the children on the diagonal in this order, and the covariance off-diagonal. The calculated values, rounded to 4 decimal places, are:
+
+```{r, echo=FALSE}
+mu_w <- mean(WL$Weight)
+mu_l <- mean(WL$Length)
+
+var_w <- var(WL$Weight)
+var_l <- var(WL$Length)
+cov_wl <- cov(WL$Weight, WL$Length)
+
+mu <- c(mu_w, mu_l)
+sigma <- matrix(c(var_w, cov_wl, cov_wl, var_l), nrow = 2, ncol = 2)
+```
+
+$$\hat{\mu} = \begin{pmatrix} 3233.5451 \\ 49.2376 \end{pmatrix}, \qquad \hat{\Sigma} = \begin{pmatrix} 220276.6577 & 915.2955 \\ 915.2955 & 4.4433 \end{pmatrix}$$ 
+
+Now, we shall determine the normality of the data. We should start from looking at the variables individually and checking the normality using the qqplots.
+
+```{r, echo = FALSE, fig.height=4}
+p1 <- ggplot(WL, aes(sample = Weight)) +
+  stat_qq_line(color = "plum3") +
+  stat_qq(color = "skyblue1") +
+  labs(title = "QQplot for weight") +
+  theme_minimal()
+
+p2 <- ggplot(WL, aes(sample = Length)) +
+  stat_qq_line(color = "plum1") +
+  stat_qq(color = "skyblue3") +
+  labs(title = "QQplot for length") + 
+  theme_minimal()
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+As we can see above, pretty clearly, the points align almost perfectly with the blue lines on both of the plots. Therefore we can say, that they have approximately normal distribution. Therefore, we can see, if they have also the bivariate normal distribution. For that, we are going to see, if the scatter plot of the data has a shape similar to an ellipsoid.  
+
+```{r, echo=FALSE, fig.height=4}
+ggplot(WL, aes(Weight, Length, color = factor(score))) +
+  geom_point(size = 2, color = "skyblue3") +
+  labs(title = "Scatter plot of newborns' weight and length") +
+  theme_minimal()
+```
+
+If we look at the scatter plot, we can see that it has somewhat an ellipsoid shape. That means, that we can assume, that the weight and length of the children have bivariate normal distribution. Based on the scatter plot we can also say, that weight and length are positively correlated.
+
+The main reason for this analysis is to suggest a score for newborn children to indicate, which children would require additional medical attention. In this case we are going to assign scores based on the typical values of the population. The values that fall outside of 95% of the typical values are given score zero. Then, for the parameters that are falling in the category between 75% and 95% the score is one. In any other circumstance, the score is two. 
+
+To determine the score of a child we need to calculate the confidence ellipsoids. Since the data has bivariate normal distribution (or at least we can approximate it by such) the region can be calculated using the Mahalanobis distance between the vector $\mathbf{x}$ and the mean. So the confidence ellipsoid for the probability $\alpha$ is $$\left\{ \mathbf{x} \in \mathbb{R}^d; (\mathbf{x} - \mu)^T\Sigma^{-1}(\mathbf{x} - \mu) \leq \chi^2_p(\alpha) \right\}$$ Based on that, we can calculate and show the ellipsoids on the scatter plot using the estimated values for $\Sigma$ and $\mu$.
+
+```{r, echo = FALSE, fig.height=4}
+WL_mat <- as.matrix(WL)
+fun <- mahalanobis(WL, mu, sigma)
+alpha_95 <- qchisq(0.95, 2)
+alpha_75 <- qchisq(0.75, 2)
+score2 <- sum(fun <= alpha_75)
+score1 <- sum(fun <= alpha_95 & fun > alpha_75)
+score0 <- sum(fun > alpha_95)
+
+score <- ifelse(fun < alpha_75, 2,
+                ifelse(fun < alpha_95, 1, 0))
+
+WL$score <- score
+
+ggplot(WL, aes(Weight, Length, color = factor(score))) +
+  geom_point(size = 2) +
+  stat_ellipse(color = "plum4", level = 0.95, type = "norm", linewidth = 1, linetype = "dashed") +
+  stat_ellipse(color = "plum1", level = 0.75, type = "norm", linewidth = 1, linetype = "dashed") +
+  scale_color_manual(values = c("0"="skyblue1","1"="skyblue3","2"="skyblue4")) +
+  labs(color = "Score", title = "Scatterplot with confidence ellipsoids") +
+  theme_minimal()
+```
+
+On the plot we can now see both the classification regions and the scores assigned to the children based on them. Looking at it, we can see, that most of the children has score 2, which makes sense, since we wanted it to be the norm. Only a few values are given the score 0, which is also good, since we wanted only the values falling outside the 95% of the population to be assigned that score. 
+
+Now, we can also calculate the number of children each score is assigned to. The number of children who scored each of the numbers is presented in a table below.
+
+```{r, echo = FALSE}
+score1_df <- data.frame(
+  "Score 2" = score2,
+  "Score 1" = score1,
+  "Score 0" = score0
+)
+
+kable(score1_df, align = "ccc", format = "latex", caption = "Number of children for each score") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+As we can see, the numbers are as expected - most of the children scored 2 and only a few newborns has been assigned the score 0.
+
+Now, let us perform the spectral decomposition of the estimated covariance matrix $\hat{\Sigma}$. Then, we are going to use matrix $\mathbf{P}$ whose columns are eigenvectors to transform the primary data as $\mathbf{P}^T\mathbf{X}$.
+
+Let us recall, what is spectral decomposition. For a square, symmetric matrix $\mathbf{A}$ the eigenvectors corresponding to different eigenvalues are orthogonal ($\mathbf{e}_j^T\mathbf{e}_i = 0$, where $\mathbf{e}_i, \mathbf{e}_j$ are eigenvectors of length 1). In that case, we can write the matrix $\mathbf{A}$ as: $$\mathbf{A} = \mathbf{P} \mathbf{\Lambda} \mathbf{P}^T$$ where $\mathbf{P}$ is a matrix of eigenvectors $\mathbf{e}$ for which $\mathbf{P}^T\mathbf{P} = \mathbf{PP}^T = \mathbf{I}$ and $\mathbf{\Lambda}$ is a diagonal matrix where on the diagonal are eigenvalues corresponding to each eigenvector on the columns of the matrix $\mathbf{P}$. 
+
+Now, let us look at the scatter plot of the transformed data.
+
+```{r, echo = FALSE, fig.height=4}
+P <- eigen(sigma)$vectors
+len_P <- apply(P, 2, function(v) sqrt(sum(v^2))) #1 so it is ok
+
+WL_new <- apply(WL_mat, 1, function(x) t(P) %*% x)
+
+WL_new_df <- as.data.frame(t(WL_new))
+colnames(WL_new_df) <- c("Z1","Z2")
+
+mean_WL_new <- c(mean(WL_new_df$Z1), mean(WL_new_df$Z2))
+sigma_WL_new <- cov(WL_new_df)
+
+fun <- mahalanobis(WL_new_df, mean_WL_new, sigma_WL_new)
+
+score <- ifelse(fun <= alpha_75, 2,
+                ifelse(fun <= alpha_95, 1, 0))
+
+score2 <- sum(fun <= alpha_75)
+score1 <- sum(fun <= alpha_95 & fun > alpha_75)
+score0 <- sum(fun > alpha_95)
+
+WL_new_df$score <- score
+
+ggplot(WL_new_df, aes(Z1, Z2, color = factor(score))) +
+  geom_point(size = 2) +
+  stat_ellipse(color = "plum4", level = 0.95, type = "norm", linewidth = 1, linetype = "dashed") +
+  stat_ellipse(color = "plum1", level = 0.75, type = "norm", linewidth = 1, linetype = "dashed") +
+  scale_color_manual(values = c("0"="skyblue1","1"="skyblue3","2"="skyblue4")) +
+  labs(color = "Score", title = "Scatterplot of the transformed data with confidence ellipsoids", x = "Weight", y = "Length") +
+  theme_minimal()
+```
+
+As we can see, after transforming the data we have a plot that is centered on a specific value and the points spread relatively even in every direction. It loses the positive correlation now, visible really well before the transformation. We can also see, that the scores look similar as before - most of the points are dark blue and there are only a few newborns, who scored 0. 
+
+This is because if the matrix $\mathbf{A}$ is a constant matrix, and $\Sigma$ is the covariance matrix of $X$, then the covariance matrix $\Sigma_{\mathbf{AX}}$ is as follows: $$\Sigma_{\mathbf{AX}} = \mathbf{A}\Sigma\mathbf{A}^T$$ Therefore, when we multiply by $\mathbf{P}^T$ we get just the diagonal matrix of eigenvalues as the covariance - we lose the correlation between each of the values.
+
+# Analysis of the conditional data
+
+```{r, echo=FALSE}
+PWL <- read.delim("ParentsWeightLength.txt")
+```
+
+Here, we are going to look at the data table containing the information about the height of mother and father, additionally to the weight and length of the child. Based on that, we can perform the analysis of the newborns' parameters with additional information.
+
+Let us start from looking at the information in the new table. It contains four columns - father's height, mother's height and the two columns which are the same as previously - weight and length of a newborn. The values for father's height range between `r min(PWL$FatherHeight)` and `r max(PWL$FatherHeight)`. Similarly, for mother's height it is between `r min(PWL$MotherHeight)` and `r max(PWL$MotherHeight)`. The values for the children are the same as previously.
+
+Firstly, before analyzing the conditional parameters, we are going to look at the estimated values of the mean vector $\mu$ and the covariance matrix $\Sigma$ for the data in the table. The order of the values are the same as the order of the columns stated above. The calculated values are shown below.
+
+```{r, echo = FALSE}
+mu_fh <- mean(PWL$FatherHeight)
+mu_mh <- mean(PWL$MotherHeight)
+mu_w2 <- mean(PWL$Weight)
+mu_l2 <- mean(PWL$Length)
+
+mu <- c(mu_fh, mu_mh, mu_w2, mu_l2)
+sigma2 <- cov(PWL)
+```
+
+$$\hat{\mu} = \begin{pmatrix} 177.4160 \\ 166.9196 \\ 3233.5451 \\ 49.2376 \end{pmatrix}, \qquad \hat{\Sigma} = \begin{pmatrix} 12.6121 & 0.6310 & 931.8590 & 3.2895 \\ 0.6310 & 9.7721 & 827.2878 & 2.8521 \\ 931.8590 & 827.2878 & 220276.6577 & 915.2955 \\ 3.2895 & 2.8521 & 915.2955 & 4.4433 \end{pmatrix}$$
+
+Now, since we have four parameters in the table, the mean vector contains values of four means (two of them same as before, since these are the same parameters as before) and the covariance matrix is of size $4 \times 4$. 
+
+Now, let us see, if parameters have normal distribution. At first, let us analyze the qqplots, so that we can determine if each of the parameters individually has normal distribution.
+
+```{r, echo = FALSE, fig.height=4}
+p1 <- ggplot(PWL, aes(sample = FatherHeight)) +
+  stat_qq_line(color = "plum1") +
+  stat_qq(color = "skyblue4") +
+  labs(title = "QQplot for father's height") +
+  theme_minimal()
+
+p2 <- ggplot(PWL, aes(sample = MotherHeight)) +
+  stat_qq_line(color = "plum2") +
+  stat_qq(color = "skyblue3") +
+  labs(title = "QQplot for mother's height") + 
+  theme_minimal()
+
+p3 <- ggplot(PWL, aes(sample = Weight)) +
+  stat_qq_line(color = "plum3") +
+  stat_qq(color = "skyblue2") +
+  labs(title = "QQplot for weight") +
+  theme_minimal()
+
+p4 <- ggplot(PWL, aes(sample = Length)) +
+  stat_qq_line(color = "plum4") +
+  stat_qq(color = "skyblue1") +
+  labs(title = "QQplot for length") + 
+  theme_minimal()
+
+grid.arrange(p1, p2, p3, p4, ncol = 2, nrow = 2)
+```
+
+We can see, that for all of the parameters, the points align almost perfectly with the theoretical quantiles. That means we can pretty confidently say, that the individual variables have normal distribution.
+
+As next form of checking the normality, let us look at the scatter plots for all the data. We are going to show them in a form of a matrix, where we can see all of the pairs possible, to confirm, that each of the pairs would have the bivariate normal distribution.
+
+```{r, echo=FALSE, fig.height=4}
+ggpairs(PWL, 
+        title = "Scatterplot Matrix for Parents and Children Data",
+        lower = list(continuous = wrap("points", size = 1, color = "skyblue3")),
+        diag = list(continuous = "blankDiag")) +
+  theme_minimal()
+```
+
+We can see, again, that all of the pairs form some type of cloud, with shape similar to an ellipsoid. We can also see, that most of the values are positively correlated, only the parents' height looks centered, which makes sense, since the height of one parent does not have much to do with the height of the other parent.
+
+```{r, include = FALSE}
+child_mu <- c(mu_w2, mu_l2)
+parent_mu <- c(mu_fh, mu_mh)
+sigma22 <- sigma2[1:2, 1:2]
+sigma11 <- sigma2[3:4, 3:4]
+sigma21 <- sigma2[1:2, 3:4]
+sigma12 <- sigma2[3:4, 1:2]
+
+mu_cond <- t(apply(PWL[, 1:2],1,function(x){
+  child_mu + sigma12 %*% solve(sigma22) %*% (x - parent_mu)
+}))
+
+sigma_cond <- sigma11 - sigma12 %*% solve(sigma22) %*% sigma21
+```
+
+Let us now calculate the conditional mean and covariance. If we denote the information about the parents as $\mathbf{X}_2$ and the information about newborns as $\mathbf{X}_1$ then we can write the conditional distribution of $\mathbf{X}_1 | \mathbf{X}_2$ as $$\mathbf{X}_1 | \mathbf{X}_2 = \mathbf{x}_2 \sim N(\mu_1 + \Sigma_{12}\Sigma^{-1}_{22}(\mathbf{x}_2 - \mu_2), \Sigma_{11} - \Sigma_{12}\Sigma^{-1}_{22}\Sigma_{21})$$ Where $\mu_1$ and $\mu_2$ are the means of each of the subvectors and the matrices $\Sigma_{11}, \Sigma_{12}, \Sigma_{21}$ and $\Sigma_{22}$ are representing submatrices of the covariance matrix, such that $\Sigma = \begin{pmatrix} \Sigma_{11} & \Sigma_{12} \\ \Sigma_{21} & \Sigma_{22} \end{pmatrix}$. Since the conditional mean is dependent on the value $\mathbf{x}_2$, so the height of parents, while for the calculation of the covariance matrix the value of $\mathbf{x}_2$ does not matter. Therefore, we can determine a definite value of the covariance matrix and compare it to previously obtained matrix. The conditional matrix is: $$\Sigma_{cond} = \begin{pmatrix} 88857.9955 & 456.8461 \\ 456.8461 & 2.8438 \end{pmatrix}$$ If we compare the values to the other matrix we can see, that all of the values are significantly smaller than the ones which did not take the parents' heights into consideration.
+
+Let us now think a bit about the ellipsoids. Since the conditional mean is dependent on the parents' heights the situation is a bit more difficult. In the situation before, we had only one mean, so therefore only one ellipsoid. Now, we have hundreds of ellipsoids, all dependent on the heights of the parents. We can confidently say, that the ellipsoids are smaller, since the covariance matrix is smaller. That means, that each child has their own confidence ellipsoid. To see the shape difference, we can look at the ellipsoids centered around zero. That way, we can see only the way the $\Sigma$ matrix changes the shape of it.
+
+```{r, echo = FALSE, fig.height = 3.5}
+library(ellipse)
+
+df_uncond <- as.data.frame(ellipse(sigma, draw = FALSE))
+colnames(df_uncond) <- c("x", "y")
+df_cond   <- as.data.frame(ellipse(sigma_cond, draw = FALSE))
+colnames(df_cond) <- c("x", "y")
+
+ggplot() +
+  geom_path(data = df_uncond, aes(x = x, y = y, color = "Unconditional covariance"), linewidth = 1, linetype = "dashed") +
+  geom_path(data = df_cond, aes(x = x, y = y, color = "Conditional covariance"), linewidth = 1, linetype = "dashed") +
+  scale_color_manual(values = c("Unconditional covariance" = "plum1", 
+                                "Conditional covariance" = "plum3")) +
+  labs(title = "Ellipsoids",
+       x = NULL, 
+       y = NULL,
+       color = "Legend") +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+
+As we can see, the ellipsoid for the conditional covariance matrix is smaller than the one for the unconditional one. As we know, it is because additional information gives us more certainty for the data and, therefore, it reduces the variance. 
+
+Let us now give scores based on them. The numbers are going to be assigned similarly as before, with the only difference being that instead of using one value $\mu$ and the unconditional $\Sigma$, we are going to calculate them using the conditional matrix $\mu$ and conditional $\Sigma$. But again, we are going to use the Mahalanobis distance. The result is shown below.
+
+```{r, echo = FALSE, fig.height=3.5}
+fun2 <- numeric(nrow(PWL))
+
+for(i in 1:nrow(PWL)){
+  fun2[i] <- mahalanobis(PWL[i, 3:4], mu_cond[i,], sigma_cond)
+}
+
+score2 <- sum(fun2 <= alpha_75)
+score1 <- sum(fun2 <= alpha_95 & fun2 > alpha_75)
+score0 <- sum(fun2 > alpha_95)
+
+score <- ifelse(fun2 <= alpha_75,2,
+                ifelse(fun2 <= alpha_95,1,0))
+
+PWL_mat <- as.matrix(PWL)
+PWL$score <- score
+
+ggplot(PWL, aes(Weight, Length, color=factor(score)))+
+  geom_point(size=2) +
+  scale_color_manual(values = c("0"="skyblue1","1"="skyblue3","2"="skyblue4")) +
+  labs(color = "Score", title = "Scatter plot with scores based on conditional distribution") +
+  theme_minimal()
+```
+
+In this plot, we observe, that the scores are not assigned as neatly as before. We can see light blue dots (indicating the score 0) in the middle, and the dark dots (assigned to the score 2) really far away from it. It makes sense, since a child can be above average overall, but if we know the parents are taller, bigger child is not anything surprising. Most of the points that were darkest blue on the unconditional plot, are still assigned the same score, since most of the parents are average size, so we expect average children. Let us now look at how many newborns were assigned each of the scores.
+
+```{r, echo = FALSE}
+score1_df <- data.frame(
+  "Score 2" = score2,
+  "Score 1" = score1,
+  "Score 0" = score0
+)
+
+kable(score1_df, align = "ccc", format = "latex", caption = "Number of children for each score based on the conditional distribution") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+Comparing the values here, to the values received in the unconditional distribution we can see, that the numbers are similar, but not the same as before. The difference is the biggest in the middle section, where the value is now smaller. The difference does not seem significant in the larger scheme of things.
+
+Now, let us look at the example confidence ellipsoid for the parents, where the father is 185 cm tall and the mother is 178 cm tall. When we see those values we can already see, that they are on the upper side of the parents' heights contained in the table. That is why we can expect the ellipsoid to be in the top right corner of the scatter plot. Below we can see the scatter plot with the drawn ellipsoids and the conditional mean, drawn on the plot as a black X.
+
+```{r, echo = FALSE, warning = FALSE, fig.height=3.5}
+mu_spec <- child_mu + sigma12 %*% solve(sigma22) %*% (c(185, 178) - parent_mu)
+mu_spec_vector <- as.vector(mu_spec)
+
+ell2_95 <- as.data.frame(ellipse(sigma_cond, centre = as.vector(mu_spec), t = sqrt(alpha_95), draw = FALSE))
+ell2_75 <- as.data.frame(ellipse(sigma_cond, centre = as.vector(mu_spec), t = sqrt(alpha_75), draw = FALSE))
+colnames(ell2_95) <- c("Weight", "Length")
+colnames(ell2_75) <- c("Weight", "Length")
+
+ggplot(PWL, aes(x = Weight, y = Length)) +
+  geom_point(size = 2, color = "skyblue2") + 
+  geom_path(data = ell2_95, color = "plum4", linewidth = 1, linetype = "dashed") +  
+  geom_path(data = ell2_75, color = "plum1", linewidth = 1, linetype = "dashed") + 
+  geom_point(aes(x = mu_spec_vector[1], y = mu_spec_vector[2]), 
+             color = "black", shape = 4, size = 5) + 
+  labs(title = "Classification Ellipsoids for Parents (185cm, 178cm)",
+       subtitle = "Cross marks the predicted (conditional mean) weight and length") +
+  theme_minimal()
+```
+
+We can see above, that the plot looks as expected. The ellipsoid is located on the right top corner of the plot. There are not many points, that fall into the score 2 for those parents and it is because, as discussed earlier, these parents' heights are in the upper range of observed heights.
+
+At last, let us find the spectral decomposition of the estimated covariance matrix (the one for all the data) and use it to transform the data as $\mathbf{P}^T\mathbf{X}$. We are going to do it the same way as before. Below, we can see the scatter plots of the transformed data, also in pairs, as before.
+
+```{r, echo = FALSE, fig.height=3.5}
+sigma2_P <- eigen(sigma2)$vectors
+len_sigma2_P <- apply(sigma2_P, 2, function(v) sqrt(sum(v^2))) #1 so it is ok
+
+PWL_new <- apply(PWL_mat, 1, function(x) t(sigma2_P) %*% x)
+PWL_new_df <- as.data.frame(t(PWL_new))
+colnames(PWL_new_df) <- c("FatherHeight", "MotherHeight", "Weight", "Length")
+
+ggpairs(PWL_new_df, 
+        title = "Scatterplot Matrix for Transformed Parents and Children Data",
+        lower = list(continuous = wrap("points", size = 1, color = "skyblue3")),
+        diag = list(continuous = "blankDiag")) +
+  theme_minimal()
+```
+
+We observe that the points are uncorrelated. The clouds go almost evenly in every direction, not diagonally as before. Therefore, we can see the same changes as before, when looking only at the data concerning the newborns. The reasoning is the same as shown before.
+
+# Conclusion
+
+In this report, we analyzed the relationship between newborns' weight and length using both the conditional and unconditional data. The results showed, that the additional data can result in more individualized evaluation of newborn characteristics, while also giving more accurate statistical interference. 
