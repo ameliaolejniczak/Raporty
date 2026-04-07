@@ -1,0 +1,294 @@
+---
+title: "Lista 2."
+author: "Amelia Olejniczak"
+output: 
+  pdf_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Wprowadzenie
+
+W tym raporcie zajmę się analizą danych na temat klientów pewnego sklepu w okresie około 3 miesięcy. Mamy tam informacje, ile klientów przychodziło do sklepu o danej godzinie, jaki był dzień tygodnia oraz czy danego dnia odbywało się jakieś wydarzenie sportowe. Przeanalizuję te dane przy pomocy regresji Poissona, gdzie liczba klientów jest zmienną objaśniającą, a pozostałe to potencjalne predyktory.
+
+Dane wezmę z pliku *sklep*, którego pierwsze pięć wierszy wygląda w następujący sposób:
+
+```{r, warning = FALSE, message = FALSE, echo = FALSE}
+library(knitr)
+library(kableExtra)
+setwd("C:\\Users\\ameli\\Documents\\R\\zaawansowane modele liniowe")
+shop <- read.csv("sklep")
+colnames(shop) <- c("ID", "hour", "day", "events", "no.clients")
+kable(shop[1:5, 2:5])
+```
+
+Wyjaśnijmy zatem sobie co znajduje się w każdej kolumnie:
+
+- **hour**: godzina, przyjmuje wartości między 8 a 23
+- **day**: dzień tygodnia, przyjmuje wartości Monday, Tuesday, ..., Sunday
+- **events**: informacja o ewentualnym wydarzeniu sportowym, przyjmuje wartości $1$, jeśli jakieś wydarzenie sportowe miało miejsce lub $0$ jeśli było inaczej.
+
+# Wykresy
+
+W pierwszej kolejności zajmę się wstępną analizą danych w postaci różnich wykresów (przede wszystkim qqplot oraz boxplot). Opiszę, czy można zobaczyć jakiś wpływ poszczególnych zmiennych na liczbę klientów odwiedzających sklep.
+
+## Analiza wykresów typu *boxplot*
+
+W pierwszej kolejności zajmę się analizą wykresów typu boxplot dla każdej ze zmiennych objaśniających.
+
+```{r, echo = FALSE, fig.height = 3.2}
+library(ggplot2) 
+
+shop$day_factor <- factor(shop$day, levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"))
+
+ggplot(shop, aes(x = day_factor, y = no.clients, fill = day_factor)) +
+  geom_boxplot() +
+  labs(title = "Liczba klientów w zależności od dnia tygodnia", legend = "Dzień tygodnia", fill = "Dzień tygodnia") +
+  xlab("Dzień tygodnia") +
+  ylab("Liczba klientów") +
+  theme_minimal()
+```
+
+Jako pierwszy na tapet wezmę umieszczony na poprzedniej stornie wykres, gdzie widzimy zależność liczby klientów od dnia tygodnia. W pierwszej kolejności rzuca się od razu w oczy, że w weekend sklep ma o wiele mniej klientów, niż w tygodniu. Na podstawie tego wykresu można stwierdzić, że największy rozstrzał w liczbie klientów jest w środy, jednak nie jest to bardzo duża różnica w porównaniu do innych dni w tygodniu. Z kolei różnica w liczbie klientów w weekendy, a w tygodniu jest znacząca.
+
+```{r, echo = FALSE, fig.height = 3.2}
+ggplot(shop, aes(x = as.factor(hour), y = no.clients, fill = as.factor(hour))) +
+  geom_boxplot() +
+  labs(title = "Liczba klientów w zależności od godziny", fill = "Godzina") + 
+  xlab("Godzina") +
+  ylab("Liczba klientów") +
+  theme_minimal()
+```
+
+Kolejny z wykresów pudełkowych pokazuje liczbę klientów w zależności od godziny. Jak widać, znów można zobaczyć znaczące różnice między pewnymi przedziałami godzinowymi. Najmniej klientów jest w godzinach między 12:00, a 15:00, co jest zrozumiałe, ponieważ są to typowe godziny pracy lub szkoły, więc jest to typowe, że w takich godzinach liczba klientów będzie mniejsza. Z kolei najwięcej klientów (również największy rozstrzał liczby klientów) jest w godzinach między 16:00, a 19:00. Pozostałe przedziały godzinowe (20:00 - 23:00 oraz 8:00 - 11:00) nie mają zbyt dużej różnicy między sobą, znajdują się pomiędzy dwoma pozostałymi przedziałami godzinowymi jeśli chodzi o liczbę klientów. Jest ich niewiele więcej niż w przypadku przedziału godzinowego 12:00 - 15:00, ale dużo mniej niż dla przedziału 16:00 - 19:00. 
+
+```{r, echo = FALSE, fig.height = 3.2}
+ggplot(shop, aes(x = as.factor(events), y = no.clients, fill = as.factor(events))) +
+  geom_boxplot() +
+  labs(title = "Liczba klientów w zależności od wystąpienia wydarzeń sportowych") + 
+  scale_fill_discrete(name = "Czy odbyło się wydarzenie sportowe?", breaks=c("0", "1"), labels=c("Nie", "Tak")) +
+  xlab("Wydarzenie sportowe") +
+  ylab("Liczba klientów") +
+  theme_minimal()
+```
+
+Spójrzmy teraz na ostatni wykres (znajdujący się na poprzedniej stronie), w którym mamy przedstawienie, jak wystąpienie wydarzenia sportowego wpływa na liczbę klientów. Jak widać, oba boxploty niewiele różnią się między sobą. Nieco większe wartości znajdują się dla drugiego z wykresów, zatem sytuacji, gdy odbyło się wydarzenie sportowe, jednak nie jest to znacząco większa wartość.
+
+## Analiza wykresów typu *Qplot*
+
+Zajmę się teraz wykresami stworzonymi przy pomocy komendy `qplot` z biblioteki `ggplot2`. 
+
+Pierwszy wykres, znajdujący się poniżej przedstawia zależność liczby klientów od godziny, w rozbiciu na dzień tygodnia (przedstawiony przez różne kolory) oraz wydarzenie sportowe (przedstawione przez różne kształty punktów).
+
+```{r, echo = FALSE, fig.height = 3.2, warning = FALSE, message = FALSE}
+qplot(hour, no.clients, shape = as.factor(events), col = day_factor, data = shop) +
+  xlab("Godzina") +
+  ylab("Liczba klientów") +
+  scale_color_discrete(name = "Dzień Tygodnia") +
+  scale_shape_discrete(name = "Wydarzenie sportowe", breaks=c("0", "1"), labels=c("Nie", "Tak")) +
+  theme_minimal()
+```
+
+Zacznijmy analizę powyższego wykresu od kolorów. Można zauważyć wyjaśnienie, dlaczego rozrzut wykresu pudełkowego dla godzin między 16:00 i 19:00 był tak duży. Jest wtedy dość dużo klientów między poniedziałkiem a piątkiem, jendak nie było znaczącej liczby klientów w weekendy, co miało wpływ na tak duży rozmiar wykresu pudełkowego. W pozostałych godzinach (poza przedziałem między 12:00, a 15:00, do którego przejdę za chwilę) można również zobaczyć wyraźną granicę między dniami w tygodniu, a weekendami. Nie jest ona tak wyraźna, jak dla przedziału z największymi wartościami, ale również widoczna. Z kolei dla ostatniego przedziału godzinowego, ta granica się nieco bardziej zaciera, ze względu na to, że w tych godzinach mało klientów przychodzi nawet w tygodniu, więc różnica nie rzuca się w oczy.
+
+Z kolei jeśli patrzymy na liczbę klientów w zależności od wydarzenia sportowego, to nie można zauważyć, aby była jakaś struktura. Trójkąty i okręgi znajdują się zarówno w przypadku bardzo dużej liczby klientów, jak i bardzo małej liczby klientów i nie rzuca się w oczy, aby w którychś miejscach było któregoś z kształtów znacznie więcej.
+
+Kolejne wykresy są to rozbicia wykresów ze względu na wydarzenie sportowe (oś pionowa) oraz dzień tygodnia (oś pozioma). 
+
+```{r, echo = FALSE, message=FALSE, warning = FALSE, fig.height = 3.2}
+qplot(hour, no.clients, facets = events ~ day_factor, data = shop) +
+  xlab("Godzina") +
+  ylab("Liczba klientów") + 
+  theme_minimal()
+```
+
+Jak widać powyżej, godzina ma wpływ na to, ilu mamy klientów w środku tygodnia, jednak nie widać takiej zależności w weekendy. W weekendy do sklepu idzie znacząco mniej osób niż w tygodniu. Potwierdza więc to wszystkie wnioski, które można wyciągnąć również po poprzednich wykresach. Przede wszystkim jednak wyraźnie widać, że to, czy odbywają się jakieś wydarzenia sportowe nie ma żadnego znaczenia jeśli chodzi o liczbę klientów. Oba rzędy wyglądają niemal identycznie.
+
+Ostatnie dwa wykresy są przedstawieniem zależności liczby klientów od godziny w rozbiciu na dzień tygodnia.
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE, fig.height = 3.2}
+require(gridExtra)
+p1 <- qplot(hour, no.clients, color = day_factor, data = shop) +
+  labs(fill = "Dzień tygodnia") +
+  xlab("Godzina") +
+  ylab("Liczba klientów") +
+  theme_minimal()
+p2 <- qplot(hour, no.clients, facets = ~day_factor, data = shop) +
+  xlab("Godzina") +
+  ylab("Liczba klientów") +
+  theme_minimal()
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Oba te wykresy potwierdzają to, co pisałam wyżej, zatem w weekendy mniej mamy klientów niż w tygodniu. W tygodniu znaczna większość klientów jest w godzinach między 16:00, a 19:00, a najmniej między 12:00, a 15:00. Natomiast w weekendy cała liczba klientów jest mała bez względu na godzinę. Wykresy dla każdego dnia w tygodniu są bardzo do siebie podobne, podobnie jak dla weekendu. Są to zatem wnioski zgodne z poprzednimi wykresami.
+
+# Konstrukcja pierwszego modelu
+
+Po wstępnej analizie możemy się zająć sporządzeniem modelu Poissona z interakcją pomiędzy wszystkimi regresorami, traktując je jako faktory. Wykorzystam do tego funkcję `glm` gdzie między zmiennymi umieszczę znak `*`, co pozwoli na dodanie interakcji między każdym regresorem.
+
+```{r, echo = FALSE}
+m <- glm(no.clients ~ as.factor(hour) * day_factor * as.factor(events), family = "poisson", data = shop)
+```
+
+Spójrzmy teraz na liczbę zmiennych powyższego modelu. Jest ich `r length(summary(m)$coefficients[, 1])`. Widać, że liczba jest duża, jednak oczekiwamy takiego wyniku, biorąc pod uwagę konstrukcję naszych danych. Mamy zmienne, które są faktorami, zatem każdy faktor jest oddzielnym regresorem. Dochodzą do tego interakcje, cztli połączenie w konkretny sposób dwóch czy trzech regresorów ze sobą. Trzeba jednak pamiętać, że pierwsza z wartości każdego faktora (tj. godzina 8, poniedziałek i `events` = 1) znajduje się w intercepcie i nie będzie oddzielną zmienną objaśniającą. Otrzymujemy w ten sposób:
+
+- `hour`: 15 zmiennych
+- `day`: 6 zmiennych
+- `events`: 1 zmienna
+- interakcja `hour:day`: $15 \times 6 = 90$ zmiennych
+- interakcja `hour:events`: $15 \ times 1 = 15$ zmiennych
+- interakcja `day:events`: $6 \times 1 = 6$ zmiennych
+- interakcja `hour:day:events`: $15 \times 6 \times 1 = 90$
+
+Zatem łącznie mamy $15 + 6 + 1 + 90 + 15 + 6 + 90 = 223$ zmiennych oraz intercept, co zgadza nam się z otrzymanym w R wynikiem. 
+
+W takim wypadku od regresora `events` zależy $1 + 15 + 6 + 90 = 112$ zmienne.
+
+## Test istotności zmiennej *wydarzenie sportowe*
+
+Aby się dowiedzieć, czy ta zmienna jest istotna, uwtorzę inny model, w którym jedynymi zmiennymi są zmienne `day` oraz `hour`, a także interakcje między nimi i przeprowadzę test $\chi^2$ na poziomie istotności $\alpha = 0.05$ bazujący na statystyce deviance obu modeli. Wykonamy zatem test $$H_0: \forall i \in A : \beta_i = 0 \qquad vs \qquad H_1: \exists i \in A: \beta_i \neq 0$$ Statystyka dla tego testu ma postać $$\chi^2 = D(M_0) - D(M_1)$$ gdzie w naszym przypadku $D(M_0)$ będzie statystyką deviance dla modelu bez zmiennej objaśniającej `events`, natomiast $D(M_1)$ tą samą statystyką dla pełnego modelu. Przy założeniu prawdziwości $H_0$ powyższa zmienna ma rozkład $\chi^2(|A|)$ z $|A|$ stopniami swobody, zatem w naszym przypadku jest to $112$. Odrzucamy $H_0$ gdy statystyka tesotwa jest większa od kwantyla rzędu $1 - \alpha$ z rozkładu $\chi^2(|A|)$
+
+```{r, echo = FALSE}
+m0 <- glm(no.clients ~ as.factor(hour) * day_factor, family = "poisson", data = shop)
+
+dm1 <- m$deviance
+dm0 <- m0$deviance
+chi2 <- dm0 - dm1
+quant <- qchisq(1 - 0.05, 112)
+```
+
+Mamy zatem $$\chi^2 = 1475.74 - 1359.60 = 116.14 < 137.70$$ nie możemy zatem odrzucić hipotezy zerowej. Wynika z tego, że nie możemy wykluczyć tego, że odbywające się wydarzenia sportowe nie mają wpływu na liczbę klientów w sklepie. Jest to zgodne ze wstępną analizą
+
+## Test istotności interakcji
+
+Kolejny test przeprowadzę w analogiczny sposób, korzystając teraz z modelu, w którym mamy jedynie zmienne bez interakcj. Interakcji w powyższym modelu jest $90 + 15 + 6 + 90 = 201$, zatem tyle stopni swobody będzie miał rozkład $chi^2$ statystyki testowej.
+
+```{r, echo = FALSE}
+m0 <- glm(no.clients ~ as.factor(hour) + day_factor + as.factor(events), family = "poisson", data = shop)
+
+dm1 <- m$deviance
+dm0 <- m0$deviance
+chi2 <- dm0 - dm1
+quant <- qchisq(1 - 0.05, 201)
+
+k <- which(summary(m)$coefficients[, 4] <= 0.05)
+```
+
+W takim przypadku statystyka testowa wynosi $$\chi^2 = 2411.17 - 1359.60 = 1051.57 > 235.08$$ Możemy zatem odrzucić hipotezę zerową na rzecz hipotezy alternatywnej i uznać, że interakcje są w zadanym modelu istotne.
+
+Możemy teraz na podstawie zawartych w modelu p-wartości sprawdzić, które konkretnie interakcje są statystycznie istotne. Gdy ograniczymy zmienne do tych, których p-wartości są mniejsze lub równe $\alpha = 0.05$ okazuje się, że jedynie 20 interakcji jest istotna.
+
+# Konstrukcja drugiego modelu
+
+Stworzę teraz inny model, w którym ponownie zmienne będą faktorami, jednak teraz stworzę je w nieco inny sposób. Przede wszystkim zamiast traktować każdą godzinę za oddzielną zmienną podzielę je na czterogodzinne bloki (nazwę je dla ułatwienia *morning*, *noon*, *afternoon* oraz *evening*). W przypadku dni tygodnia rozdzielę je na dni w środku tygodnia i w weekend (zatem *weekday* oraz *weekend*). Odrzucę zmienną `events` ponieważ okazała się ona nieistotna.
+
+```{r, echo = FALSE}
+shop$day_factor <- factor(shop$day, levels = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"), labels = c("Weekday", "Weekday", "Weekday", "Weekday", "Weekday", "Weekend", "Weekend"))
+
+shop$hour_factor <- factor(shop$hour, levels <- 8:23, labels <- c("Morning", "Morning", "Morning", "Morning", "Noon", "Noon", "Noon", "Noon", "Afternoon", "Afternoon", "Afternoon", "Afternoon", "Evening", "Evening", "Evening", "Evening"))
+
+m1 <- glm(no.clients ~ hour_factor * day_factor, family = "poisson", data = shop)
+m1d <- m1$deviance
+quant <- qchisq(1 - 0.05, 216)
+```
+
+W takim przypadku liczba regresorów wynosi `r length(summary(m1)$coefficients[, 1])`. Tym razem mamy:
+
+- `hour`: 3 zmienne
+- `day`: 1 zmienna
+- `hour:day`: $3 \times 1 = 3$ zmienne
+
+Wychodzi z tego $3 + 1 + 3 = 7$ i do tego intercept. Jest to więc model, który jest mniejszy, zatem łatwiejszy do analizy w stosunku do poprzedniego. Sprawdźmy czy ten model różni się statystycznie od "najbogatszego" z poprzedniego podpunktu (zatem tego, gdzie były 224 regresory). Aby to zrobić przeprowadzę test $\chi^2$, gdzie statystyka będzie miała $224 - 8 = 216$ stopni swobody. Spójrzmy na obliczoną statystykę testową: $$\chi^2 = 1552.45 - 1359.60 = 192.85 < 251.28$$ Nie możemy zatem odrzucić hipotezy zerowej, co świadczy o tym, że nie ma zbyt dużej różnicy między modelami. Świadczy to o tym, że model jest dobrze skonstruowany i nie tracimy informacji przez usunięcie zmiennych.
+
+# Analiza tabeli
+
+Teraz zajmę się analizą tabeli w oparciu o poprzedni model.
+
+W kolejnych wierszach tabeli dla danych dni i przedziałów godzinowych umieszczę kolejno:
+
+- średnią liczbę klientów,
+- skrótową postać predyktora liniowego,
+- wartość danego predyktora liniowego.
+
+Pierwszy wiersz tabeli jest dość intuicyjnie zrozumiały, więc wyjaśnienie zacznę od drugiego z nich. Prezentujemy tam postać predyktora $\eta_i$, jednak aby ułatwić zapisanie potrzebnych wartości w tabeli użyję skrótowych form. Litera i oznacza intercept, litera W - weekend, a poszczególne przedziały godzinowe oznaczam jako p2, p3 oraz p4. Nie potrzebuję oznaczenia dla dni w tygodniu oraz pierwszego przedziału godzinowego, gdyż tworząc model w R te wartości są pomijane. Z kolei wartości oznaczone w tabeli jako int() to interakcje między poszczególnymi elementami. Z kolei wartości danego predyktora to po prostu suma konkretnych parametrów $\beta$, ponieważ elementy macierzy planu przyjmują jedynie wartości 0 lub 1.
+
+|**W tygodniu rano**|**W tygodniu w południe**|**W tygodniu popołudniu**|**W tygodniu wieczorem**|**W weekend rano**|**W weekend w południe**|**W weekend popołudniu**|**W weekend wieczorem**|
+|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+|`r round(mean(shop$no.clients[which(shop$day_factor == 'Weekday' & shop$hour_factor == 'Morning')]), 3)`|`r round(mean(shop$no.clients[which(shop$day_factor == 'Weekday' & shop$hour_factor == 'Noon')]), 3)`|`r round(mean(shop$no.clients[which(shop$day_factor == 'Weekday' & shop$hour_factor == 'Afternoon')]), 3)`|`r round(mean(shop$no.clients[which(shop$day_factor == 'Weekday' & shop$hour_factor == 'Evening')]), 3)`|`r round(mean(shop$no.clients[which(shop$day_factor == 'Weekend' & shop$hour_factor == 'Morning')]), 3)`|`r round(mean(shop$no.clients[which(shop$day_factor == 'Weekend' & shop$hour_factor == 'Noon')]), 3)`|`r round(mean(shop$no.clients[which(shop$day_factor == 'Weekend' & shop$hour_factor == 'Afternoon')]), 3)`|`r round(mean(shop$no.clients[which(shop$day_factor == 'Weekend' & shop$hour_factor == 'Evening')]), 3)`|
+|i|i + p2|i + p3|i + p4|i + W|i + W + p2 + int(W, p2)|i + W + p3 + int(W, p3)|i + W + p4 + int(W, p4)|
+|`r round(summary(m1)$coefficients[1,1], 3)`|`r round(summary(m1)$coefficients[1,1] + summary(m1)$coefficients[2, 1], 3)`|`r round(summary(m1)$coefficients[1,1] + summary(m1)$coefficients[3, 1], 3)`|`r round(summary(m1)$coefficients[1,1] + summary(m1)$coefficients[4, 1], 3)`|`r round(summary(m1)$coefficients[1,1] + summary(m1)$coefficients[5, 1], 3)`|`r round(summary(m1)$coefficients[1,1] + summary(m1)$coefficients[5, 1] + summary(m1)$coefficients[2, 1] + summary(m1)$coefficients[6, 1], 3)`|`r round(summary(m1)$coefficients[1,1] + summary(m1)$coefficients[5, 1] + summary(m1)$coefficients[3, 1] + summary(m1)$coefficients[7, 1], 3)`|`r round(summary(m1)$coefficients[1,1] + summary(m1)$coefficients[5, 1] + summary(m1)$coefficients[4, 1] + summary(m1)$coefficients[8, 1], 3)`|
+
+Przyglądając się tej tabeli możemy zauważyć rzeczy, które potwierdzają wyniki z poprzednich zadań. Można zauważyć, że w weekendy, bez względu na porę dnia, średnio w przeciągu godziny przychodzi około 14-15 osób, co jest liczbą mniejszą od najmniejszej średniej w tygodniu. W przypadku gdy patrzymy na dni robocze, to widzimy, że najmniejsza średnia to około 20, a największa to prawie 60. Oznacza to, że gdy nie patrzymy na weekendy jest dużo większa różnica w średniej liczbie klientów między godzinami, podczas gdy w weekendy ich liczba jest bardzo zbliżona do siebie. 
+
+Warto również zauważyć, że $e^{\eta}$ jest wartością bardzo zbliżoną do średniej dla każdego z przedziałów. Przykładowo, dla pierwszej grupy (w tygodniu rano) jest to $e^{\eta} = 2.99$, a dla ostatniej $e^{\eta} = 14.37$. Dla pozostałych wartości wyniki są bardzo do siebie zbliżone. 
+
+# Czy predykcje odpowiadające podgrupom godzin weekendowych są takie same?
+
+Z poprzednich analiz można zauważyć, że średnio w weekendy klienci do sklepu przychodzą z tą samą częstotliwością. Sprawdzimy to przy pomocy testu Walda. Dokładniej - będziemy testować równość wyżej liczonych predyktorów $\eta$. Hipotezy testowe w tym przypadku prezentują się następująco: $$H_0: \beta_i + \beta_W = \beta_i + \beta_W + \beta_{p2} + \beta_{int(p2, W)} = \beta_i + \beta_W + \beta_{p3} + \beta_{int(p3, W)} = \beta_i + \beta_W + \beta_{p4} + \beta_{int(p4, W)}$$ Możemy jednak uprościć ten zapis do $$H_0: 0 = \beta_{p2} + \beta_{int(p2, W)} = \beta_{p3} + \beta_{int(p3, W)} = \beta_{p4} + \beta_{int(p4, W)}$$ $$H_1: \beta_{p2} + \beta_{int(p2, W)} \neq 0 \ \vee \ \beta_{p3} + \beta_{int(p3, W)} \neq 0 \ \vee \ \beta_{p4} + \beta_{int(p4, W)} \neq 0$$
+
+Wyjaśnię teraz, w jaki sposób skonstruować statystykę $W$. Warunek z hipotezy zerowej możemy zapisać jako $A \beta = B$, gdzie $\beta$ jest wektorem współczynników beta (prawdziwych), natomiast $B$ jest to wektor zerowy. Macierz $A$ ma zatem w naszym przypadku postać: 
+
+$$
+A = \begin{pmatrix}
+0 & 1 & 0 & 0 & 0 & 1 & 0 & 0 \\
+0 & 0 & 1 & 0 & 0 & 0 & 1 & 0 \\
+0 & 0 & 0 & 1 & 0 & 0 & 0 & 1
+\end{pmatrix}
+$$
+
+Jeśli $\hat{\beta} \rightarrow N(\beta, J^{-1}$ jest wektorem estymatorów $\beta$, to statystyka $W$ wyraża się jako: $$W = (A \hat{\beta} - B)' (AJ^{-1}A')^{-1}(A\hat{\beta} - B) = (A \hat{\beta})'(A J^{-1} A')^{-1} (A \hat{\beta})$$
+
+Przy $H_0$ statystyka wyliczona powyżej ma rozkład $\chi^2$ z 3 stopniami swobody. Macierz $J^{-1}$ możemy wyznaczyć z polecenia `vcov`, co da nam wszystkie potrzebne informacje do wyliczenia statystyki W.
+
+```{r, echo = FALSE}
+J_inv <- vcov(m1)
+beta_hat <- summary(m1)$coefficients[,1]
+A <- matrix(c(0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0,0, 0, 0, 1, 0, 0, 0, 1), nrow = 3, byrow = TRUE)
+
+W <- t(A %*% beta_hat) %*% solve(A %*% J_inv %*% t(A)) %*% (A %*% beta_hat)
+quant <- qchisq(1 - 0.05, 3)
+```
+
+Statystyka Walda wynosi w tym przypadku $W \approx 1.383$. Z kolei wartość krytyczna dla $\alpha = 0.05$ wynosi $7.815$, zatem $W = 1.383 < 7.815$, co oznacza, że nie możemy odrzucić $H_0$. W praktyce oznacza to, że liczba klientów w weekendy nie zależy od pory dnia. 
+
+# Przykładowy grafik
+
+Aby sporządzić przykładowy grafik na podstawie powyższych danych należy dodać pewne założenia. Jednym z nich, podanym w poleceniu, jest to, że jeden pracownik jest w stanie obsłużyć do 20 klientów w ciągu godziny. Dodałabym do tego jeszcze jedno założenie, mianowicie, że dany pracownik ma co najwyżej ośmiogodzinne zmiany. 
+
+Przeanalizujmy najpierw ilu potrzebujemy pracowników na dane pory dnia, bazując na danych z poprzedniej tabeli, gdzie widzieliśmy średnią liczbę klientów w ciągu godziny. Widać tam, że w weekendy potrzebujemy jedynie jednego pracownika na sklepie przez cały dzień. Z kolei w tygodniu jest różna liczba pracowników w różnych godzinach. Poniżej przedstawiam w tabeli, ilu pracowników jest potrzebnych na każdą z ośmiogodzinnych zmian:
+
+||Dzień roboczy|Weekend|
+|:-:|:-:|:-:|
+|$8:00-11:59$|2|1|
+|$12:00-15:59$|1|1|
+|$16:00-19:59$|3|1|
+|$20:00-23:59$|2|1|
+
+Jak widać, w takim przypadku możemy w weekendy wziąć dwóch pracowników na ośmiogodzinne zmiany $8:00-15:59$ oraz $16:00-13:59$, z kolei w tygodniu możemy dać trzem pracownikom zmiany ośmiogodzinne (jeden $8:00-15:59$ oraz dwóch pozostałych $16:00-23:59$). Poza tym, o ile nie mamy maksymalnej liczby godzin, jaką pracownik może przepracować w tygodniu, ani nie mamy zastrzeżeń co do pewnej przerwy w pracy, możemy dać jednemu pracownikowi dwie zmiany $8:00-11:59$ oraz $16:00-19:59$. W takiej sytuacji optymalna liczba pracowników to $4$. Jeśli któreś z założeń podanych powyżej nie będzie spełnione, to będziemy potrzebowali $5$ pracowników (oddzielnych dla dwóch czterogodzinnych zmian). 
+
+W pierwszym przypadku grafik na tydzień dla pracowników "A", "B", "C" i "D" może wyglądać w następujący sposób (weekendowe zmiany mają różnych pracowników co tydzień, tj. pracownik "A" zamienia się na pracownika "B" i pracownik "C" na pracownika "D", jeśli to możliwe):
+
+|Zmiana|**Pon**|**Wt**|**Śr**|**Czw**|**Pt**|**Sob**|**Ndz**|
+|:-|:-|:-|:-|:-|:-|:-|:-|
+|$8:00-11:59$|A, B|A, B|A, B|A, B|A, B|A|A|
+|$12:00-15:59$|B|B|B|B|B|A|A|
+|$16:00-19:59$|C, D, A|C, D, A|C, D, A|C, D, A|C, D, A|C|C|
+|$20:00-23:59$|C, D|C, D|C, D|C, D|C, D|C|C|
+
+W drugim przypadku mamy pracowników "A", "B", "C", "D" oraz "E" i zakładamy, że w tygodniu mogą pracować maksymalnie 40 godzin (można zauważyć, że część pracowników pracuje mniej niż 40 godzin):
+
+|Zmiana|**Pon**|**Wt**|**Śr**|**Czw**|**Pt**|**Sob**|**Ndz**|
+|:-|:-|:-|:-|:-|:-|:-|:-|
+|$8:00-11:59$|A, B|A, B|C, B|C, B|A, B|A|A|
+|$12:00-15:59$|B|B|B|B|B|A|A|
+|$16:00-19:59$|C, D, E|C, D, E|E, D, A|A, D, E|C, D, E|E|E|
+|$20:00-23:59$|C, D|C, D|E, D|A, D|C, D|E|E|
+
+Przy tworzeniu obu grafików trzeba będzie jednak wziąć pod uwagę jaką pracownicy mają dyspozycyjność. To jest jedynie przykład, gdy mamy do czynienia z pracownikami dyspozycyjnymi całą dobę. W innym przypadku można modyfikować powyższy grafik do odpowiedniej dyspozycyjności pracowników. Zakładamy również w miarę możliwości zmienianie zmian, aby jeden pracownik nie miał cały miesiąc zmiany porannej lub popołudniowej i tak dalej. 

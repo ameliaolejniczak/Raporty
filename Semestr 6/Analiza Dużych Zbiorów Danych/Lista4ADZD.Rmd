@@ -1,0 +1,991 @@
+---
+title: "Analiza metod regulacyjnych dla różnych macierzy planu"
+author: "Amelia Olejniczak"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Wprowadzenie
+
+Poniższy raport dotyczy analizy metod regulacyjnych. Skupimy się w nim na regresji grzbietowej oraz na estymatorze LASSO, a następnie również adaptacyjnym LASSO, w którym parametry wyznaczymy przy użyciu dwóch różnych wag. Zobaczymy, która z tych metod minimalizuje MSE, a następnie, korzystając dodatkowo również z techniki knockoffów, przyjrzymy się w jaki sposób kontrolują one FDR oraz moc tych procedur w każdym przypadku, porównując z pozostałymi wyliczonymi estymatorami. Przebadamy przypadek ortonormalny, a także taki, gdzie elementy macierzy planu pochodzą z rozkładu normalnego.
+
+# Analiza dla ortonormalnej macierzy planu
+
+W pierwszej kolejności przeanalizujemy, jak zachowuje się estymator uzyskany przy pomocy regresji grzbietowej oraz LASSO dla macierzy ortonormalnej. Przedstawię teoretyczne wzory na wyliczenie wariancji, obciążenia, oraz błędu średniokwadratowego w przypadku regresji grzbietowej. Poźniej przedstawię sposób na wyliczenie wartości $\gamma$ oraz $\lambda$ minimalizujących $MSE$ (wraz z ich wartościami), a następnie porównam błędy średniokwadratowe dla metod regulacyjnych z tymi uzyskanymi dla estymatora najmniejszych kwadratów. Na koniec przedstawię uzyskaną teoretycznie liczbę fałszywych odkryć wraz z mocą identyfikacji zmiennych dla LASSO.
+
+## Symulacja danych
+
+Aby przygotować dane do tego zadania, w pierwszej kolejności wygeneruję ortonormalną macierz planu $X$ o wymiarach $500 \times 500$ przy pomocy funkcji `randortho()` z biblioteki `pracma`. Następnie wygeneruję takie wektory $Y = X\beta + \epsilon$, że $\epsilon \sim N(0, I_{500 \times 500})$, natomiast wektory $\beta$ wyglądają następująco: 
+
+- $\beta_1 = ... = \beta_k = 4,$ $\beta_{k+1} = ... = \beta_{500} = 0$
+- $\beta_1 = ... = \beta_k = \sqrt{\frac{80}{k}},$ $\beta_{k+1} = ... = \beta_{500} = 0$
+
+gdzie $k \in \{ 5, 20, 100 \}$.
+
+Otrzymamy w ten sposób sześć różnych wektorów zmiennej odpowiedzi, na podstawie których przeprowadzę analizę. 
+
+## Teoretyczne wyliczenia
+
+Mając przygotowane dane, zajmijmy się teoretycznymi wyliczeniami obciążenia, wariancji i błędu średniokwadratowego estymatora $\hat{\beta}_i$ uzyskanego przy pomocy regresji grzbietowej z parametrem wygładzającym $\gamma$. Jest to nam niezbędne, aby móc jak najlepiej porównać wartości $MSE$, dla każdego estymatora $\beta$
+
+Wiemy, że $\hat{\beta}_{RR} \sim N\left( (X'X + \gamma I)^{-1} X'X \beta, \sigma^2 (X'X + \gamma I)^{-1} X'X (X'X + \gamma I)^{-1} \right)$ dzięki czemu od razu możemy wyznaczyć wariancję tego estymatora. W naszym przypadku macierz $X$ jest ortonormalna, zatem $X'X = I$ oraz $\sigma^2 = 1$. Z tego wynika, że dla $$Var(\hat{\beta}_{RRi}) = (1 + \gamma)^{-1} \cdot 1 \cdot (1 + \gamma)^{-1} = \frac{1}{(1 + \gamma)^2}$$
+
+Obciążenie również możemy wyliczyć bez większego problemu. Wiemy, że jest ono różnicą między wartością oczekiwaną estymatora, a prawdziwą wartością parametru. Zatem możemy zapisać, że jest to: $$\mathbb{E}(\hat{\beta}_{RRi}) - \beta_i = \frac{1}{1 + \gamma}\beta_i - \beta_i = -\frac{\gamma}{1 + \gamma} \beta_i$$
+
+Na koniec wyznaczmy teoretyczny wzór do wyliczenia $MSE$. Będzie to suma wartości błędu średniokwadratowego dla i-tych współrzędnej wektora beta, które wiemy, że jest sumą wariancji i kwadratu obciążenia dla tego estymatora. Zatem $$MSE_i = \left( -\frac{\gamma}{1 + \gamma} \beta_i \right)^2 + \frac{1}{(1 + \gamma)^2} = \frac{\gamma^2}{(1 + \gamma)^2} \beta_i^2 + \frac{1}{(1 + \gamma)^2}$$ $$MSE(\hat{\beta}_{RR}) = \frac{\gamma^2 ||\beta||^2 + p}{(1 + \gamma)^2}$$ 
+
+## Parametry $\gamma$ oraz $\lambda$ minimalizujące $MSE$
+
+Zajmijmy się w pierwszej kolejności wyznaczeniem parametrów minimalizujących $MSE$ dla regresji grzbietowej oraz LASSO. 
+
+Zaczynając od pierwszego z nich, możemy zobaczyć, że w celu wyznaczenia odpowiedniego $MSE$ wystarczy znaleźć minimum funkcji $MSE(\hat{\beta}_{RR})$ wyznaczonej wyżej. Różniczkując powyższe równanie wzgędem parametru $\gamma$ otrzymujemy $$\frac{2 \gamma ||\beta||^2 (1 + \gamma)^2 + 2(p + \gamma^2 ||\beta||^2)(1 + \gamma)}{(1 + \gamma)^4}$$ Co po przyrównaniu do zera i odpowiednich przekształceniach daje nam $$\gamma = \frac{p}{||\beta||^2}$$ Nietrudno sprawdzić, że w tym miejscu jest minimum. Dla potwierdzenia, poniższe wykresy pokazują MSE policzone dla parametrów $\gamma$ między $0.01$ a $50$. Pionowa linia wskazuje wyliczone z powyższego wzoru $\gamma$. Oczekujemy zatem, że pionowa linia będzie przechodziła przez minimalną wartość na wykresie. 
+
+```{r, include = FALSE, warning = FALSE, message = FALSE}
+library(ggplot2)
+library(knitr)
+library(patchwork)
+library(grid)
+library(gridExtra)
+library(kableExtra)
+
+k <- c(5, 20, 100)
+beta <- setNames(lapply(k, function(k) {
+  beta1 <- c(rep(4, k), rep(0, 500 - k))
+  beta2 <- c(rep(sqrt(80/k), k), rep(0, 500 - k))
+  return(list(beta1 = beta1, beta2 = beta2))
+}), paste0("k", k))
+
+gamma <- seq(0.01, 50, 0.01)
+data1 <- readRDS("data1.rds")
+
+p1 <- ggplot(data.frame(y = data1[["k5"]][["MSE_ridge_beta1"]], x = gamma), aes(x = x, y = y)) +
+  geom_line(color = "red") +
+  geom_vline(xintercept = data1[["k5"]][["gamma_opt_beta1"]]) +
+  theme_minimal() +
+  xlab("Gamma") +
+  ylab("MSE")
+
+p2 <- ggplot(data.frame(y = data1[["k20"]][["MSE_ridge_beta1"]], x = gamma), aes(x = x, y = y)) +
+  geom_line(color = "orange") +
+  geom_vline(xintercept = data1[["k20"]][["gamma_opt_beta1"]]) +
+  theme_minimal() +
+  xlab("Gamma") +
+  ylab("MSE")
+
+p3 <- ggplot(data.frame(y = data1[["k100"]][["MSE_ridge_beta1"]], x = gamma), aes(x = x, y = y)) +
+  geom_line(color = "yellow3") +
+  geom_vline(xintercept = data1[["k100"]][["gamma_opt_beta1"]]) +
+  theme_minimal() +
+  xlab("Gamma") +
+  ylab("MSE")
+
+p4 <- ggplot(data.frame(y = data1[["k5"]][["MSE_ridge_beta2"]], x = gamma), aes(x = x, y = y)) +
+  geom_line(color = "green") +
+  geom_vline(xintercept = data1[["k5"]][["gamma_opt_beta2"]]) +
+  theme_minimal() +
+  xlab("Gamma") +
+  ylab("MSE")
+
+p5 <- ggplot(data.frame(y = data1[["k20"]][["MSE_ridge_beta2"]], x = gamma), aes(x = x, y = y)) +
+  geom_line(color = "blue") +
+  geom_vline(xintercept = data1[["k20"]][["gamma_opt_beta2"]]) +
+  theme_minimal() +
+  xlab("Gamma") +
+  ylab("MSE")
+
+p6 <- ggplot(data.frame(y = data1[["k100"]][["MSE_ridge_beta2"]], x = gamma), aes(x = x, y = y)) +
+  geom_line(color = "purple") +
+  geom_vline(xintercept = data1[["k100"]][["gamma_opt_beta2"]]) +
+  theme_minimal() +
+  xlab("Gamma") +
+  ylab("MSE")
+
+full_plot <- wrap_elements(
+  grid.arrange(
+    textGrob("", gp = gpar()),
+    textGrob("k = 5", gp = gpar(fontface = "bold")), 
+    textGrob("k = 20", gp = gpar(fontface = "bold")), 
+    textGrob("k = 100", gp = gpar(fontface = "bold")),
+    textGrob("beta1", rot = 90, gp = gpar(fontface = "bold")),
+    ggplotGrob(p1), ggplotGrob(p2), ggplotGrob(p3),
+    textGrob("beta2", rot = 90, gp = gpar(fontface = "bold")),
+    ggplotGrob(p4), ggplotGrob(p5), ggplotGrob(p6),
+    ncol = 4,
+    widths = unit(c(1.2, 4, 4, 4), "null"),
+    heights = unit(c(0.8, 4, 4), "null")
+  )
+)
+```
+
+```{r, echo = FALSE, fig.height = 4}
+
+final_plot <- full_plot + plot_annotation(
+  title = "Wartości MSE w zależności od gamma (dla różnych k i beta)",
+  theme = theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"))
+)
+final_plot
+```
+
+Gdy przyjrzymy się tym wykresom widać, że jest dokładnie tak, jak oczekiwaliśmy. Wartości wyliczonego $\gamma$ znajdują się w miejscu, gdzie MSE jest minimalne. Poniżej w tabeli umieszczam zatem wartości $\gamma$ dla poszczególnych $k$ oraz typów $\beta$.
+
+```{r, echo = FALSE, fig.height=4}
+library(knitr)
+gamma_table <- data.frame(
+  gamma_beta1 = c(data1[["k5"]][["gamma_opt_beta1"]], data1[["k20"]][["gamma_opt_beta1"]], data1[["k100"]][["gamma_opt_beta1"]]),
+  gamma_beta2 = c(data1[["k5"]][["gamma_opt_beta2"]], data1[["k20"]][["gamma_opt_beta2"]], data1[["k100"]][["gamma_opt_beta2"]])
+)
+
+colnames(gamma_table) <- c("i", "ii")
+rownames(gamma_table) <- c("k = 5", "k = 20", "k = 100")
+
+kable(t(gamma_table), format = "latex", caption = "Gamma minimalizujące MSE") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+Jak widać w powyższej tabeli, wartości $\gamma$ są stosunkowo duże. Co ciekawe, $\gamma$ dla drugiego z wektorów $\beta$ są takie same bez względu na wartość $k$. Jest to związane z tym, że $||\beta||^2$ jest równe bez względu na wartość $k$. $$||\beta||^2 = \sum_{i = 1}^k \left( \sqrt{\frac{80}{k}} \right)^2 = k * \frac{80}{k} = 80$$ 
+
+W przypadku parametru $\lambda$ dla LASSO nie będę wykorzystywać teoretycznych wzorów i zamiast tego posłużę się biblioteką `glmnet` i zapisaną w niej funkcją `glmnet`. Wczytując nasze dane do funkcji, odczytałam wektor dopasowanych do nich parametrów $\lambda$, następnie z odpowiedniego wzoru wyznaczyłam wartości $MSE$ i wyszukałam wśród nich minimalną wartość, tym samym znajdując minimalizujące je $\lambda$. Poniżej przedstawiam wyniki tych symulacji, zamieszczone na odpowiednich wykresach. 
+
+```{r, include = FALSE, warning = FALSE, message = FALSE}
+p1 <- ggplot(data.frame(y = data1[["k5"]][["MSE_lasso_beta1"]], x = data1[["k5"]][["fitted_lambda_beta1"]]), aes(x = x, y = y)) +
+  geom_line(color = "red") +
+  geom_vline(xintercept = data1[["k5"]][["lambda_beta1"]]) +
+  theme_minimal() +
+  xlab("Lambda") +
+  ylab("MSE")
+
+p2 <- ggplot(data.frame(y = data1[["k20"]][["MSE_lasso_beta1"]], x = data1[["k20"]][["fitted_lambda_beta1"]]), aes(x = x, y = y)) +
+  geom_line(color = "orange") +
+  geom_vline(xintercept = data1[["k20"]][["lambda_beta1"]]) +
+  theme_minimal() +
+  xlab("Lambda") +
+  ylab("MSE")
+
+p3 <- ggplot(data.frame(y = data1[["k100"]][["MSE_lasso_beta1"]], x = data1[["k100"]][["fitted_lambda_beta1"]]), aes(x = x, y = y)) +
+  geom_line(color = "yellow3") +
+  geom_vline(xintercept = data1[["k100"]][["lambda_beta1"]]) +
+  theme_minimal() +
+  xlab("Lambda") +
+  ylab("MSE")
+
+p4 <- ggplot(data.frame(y = data1[["k5"]][["MSE_lasso_beta2"]], x = data1[["k5"]][["fitted_lambda_beta2"]]), aes(x = x, y = y)) +
+  geom_line(color = "green") +
+  geom_vline(xintercept = data1[["k5"]][["lambda_beta2"]]) +
+  theme_minimal() +
+  xlab("Lambda") +
+  ylab("MSE")
+
+p5 <- ggplot(data.frame(y = data1[["k20"]][["MSE_lasso_beta2"]], x = data1[["k20"]][["fitted_lambda_beta2"]]), aes(x = x, y = y)) +
+  geom_line(color = "blue") +
+  geom_vline(xintercept = data1[["k20"]][["lambda_beta2"]]) +
+  theme_minimal() +
+  xlab("Lambda") +
+  ylab("MSE")
+
+p6 <- ggplot(data.frame(y = data1[["k100"]][["MSE_lasso_beta2"]], x = data1[["k100"]][["fitted_lambda_beta2"]]), aes(x = x, y = y)) +
+  geom_line(color = "purple") +
+  geom_vline(xintercept = data1[["k100"]][["lambda_beta2"]]) +
+  theme_minimal() +
+  xlab("Lambda") +
+  ylab("MSE")
+
+full_plot <- wrap_elements(
+  grid.arrange(
+    textGrob("", gp = gpar()),
+    textGrob("k = 5", gp = gpar(fontface = "bold")), 
+    textGrob("k = 20", gp = gpar(fontface = "bold")), 
+    textGrob("k = 100", gp = gpar(fontface = "bold")),
+    textGrob("beta1", rot = 90, gp = gpar(fontface = "bold")),
+    ggplotGrob(p1), ggplotGrob(p2), ggplotGrob(p3),
+    textGrob("beta2", rot = 90, gp = gpar(fontface = "bold")),
+    ggplotGrob(p4), ggplotGrob(p5), ggplotGrob(p6),
+    ncol = 4,
+    widths = unit(c(1.2, 4, 4, 4), "null"),
+    heights = unit(c(0.8, 4, 4), "null")
+  )
+)
+```
+```{r, echo = FALSE}
+final_plot <- full_plot + plot_annotation(
+  title = "Wartości MSE w zależności od lambda (dla różnych k i beta)",
+  theme = theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold"))
+)
+final_plot
+```
+
+Można zobaczyć, że w symulacjach komputerowych otrzymaliśmy różne przedziały $\lambda$, zatem wykresy mają różną podziałkę. Nie jest to jednak dla nas problemem, gdyż wykresy pokazują nam jedynie, w podobny sposób jak poprzednie, w którym miejscu znajduje się wartość $\lambda$, która minimalizuje $MSE$. Widać, że nasze wyznaczenie tych wartości ponownie jest poprawne, a $MSE$ przyjmuje minimalne wartości w miejscu pionowych linii. Spójrzmy teraz na tabelę z wwyznaczonymi wartościami $\lambda$, które możemy zobaczyć na powyższych wykresach. 
+
+```{r, echo = FALSE}
+lambda_table <- data.frame(
+  lambda_beta1 = c(data1[["k5"]][["lambda_beta1"]], data1[["k20"]][["lambda_beta1"]], data1[["k100"]][["lambda_beta1"]]),
+  lambda_beta2 = c(data1[["k5"]][["lambda_beta2"]], data1[["k20"]][["lambda_beta2"]], data1[["k100"]][["lambda_beta2"]])
+)
+
+colnames(lambda_table) <- c("i", "ii")
+rownames(lambda_table) <- c("k = 5", "k = 20", "k = 100")
+
+kable(t(lambda_table), format = "latex", caption = "Lambda minimalizująca MSE") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+Jak widać powyżej, wartości $\lambda$ znajdujące się w tabeli są stosunkowo niewielkie. Podobnie jak wcześniej możemy również zauważyć, że wartości dla drugich z wektorów $\beta$ są podobne do siebie, również podobne do najmniejszej wartości $k$ przy pierwszych wektorach $\beta$ wartość jest zbliżona do pozostałych. Jest to tendencja przypominająca tę dla $\gamma$, w której mogliśmy zobaczyć, że wartości w tych czterech miejscach w tabeli były takie same.
+
+## Wartości MSE
+
+Powyższa analiza doprowadziła nas do porównania wyznaczonych wartości $MSE$ dla trzech metod - regresji grzbietowej, LASSO oraz metody najmniejszych kwadratów. W ostatnim z przypadków $MSE$ liczymy teoretycznie. Jak wcześniej wspominałam, $$MSE = Bias^2 + Var(\hat{\beta})$$ 
+
+Ze względu na to, że wiemy, że $Var(\hat{\beta_{LS}}) = \sigma^2 \left( X'X \right)^{-1}$, a $X'X = I$ (ponieważ $X$ jest ortonormalna), a estymator najmniejszych kwadratów jest estymatorem nieobciążonym (zatem $Bias = 0$), to powyższy wzrór na $MSE$ w naszym przypadku możemy uprościć do $$MSE(\hat{\beta}_{LS}) = p \sigma^2$$ co bez względu na $k$ oraz $\beta$ wynosi $500$, gdyż w naszym przypadku $\sigma^2 = 1$, a $p = 500$. Wartości $MSE$ dla regresji grzbietowej możemy policzyć ze wzoru podanego wyżej, natomiast wartość dla LASSO będzie przybliżoną wartością, liczoną jako suma kwadratów różnicy między prawdziwą wartością $\beta$, a jej estymatorem.
+
+```{r, echo = FALSE, results = "asis"}
+MSE_beta1 <- data.frame(
+  MSE_ls <- c(500, 500, 500),
+  MSE_ridge <- c(data1[["k5"]][["MSE_ridge_beta1_optimal"]], data1[["k20"]][["MSE_ridge_beta1_optimal"]], data1[["k100"]][["MSE_ridge_beta1_optimal"]]),
+  MSE_lasso <- c(data1[["k5"]][["MSE_lasso_beta1_optimal"]], data1[["k20"]][["MSE_lasso_beta1_optimal"]], data1[["k100"]][["MSE_lasso_beta1_optimal"]])
+)
+colnames(MSE_beta1) <- c("LS", "Ridge", "LASSO")
+rownames(MSE_beta1) <- c("k = 5", "k = 20", "k = 100")
+
+kable(MSE_beta1, format = "latex", align = "ccc", caption = "Porównanie MSE dla pierwszego typu beta") %>%
+  kable_styling(latex_options = "hold_position")
+
+MSE_beta2 <- data.frame(
+  MSE_ls <- c(500, 500, 500),
+  MSE_ridge <- c(data1[["k5"]][["MSE_ridge_beta2_optimal"]], data1[["k20"]][["MSE_ridge_beta2_optimal"]], data1[["k100"]][["MSE_ridge_beta2_optimal"]]),
+  MSE_lasso <- c(data1[["k5"]][["MSE_lasso_beta2_optimal"]], data1[["k20"]][["MSE_lasso_beta2_optimal"]], data1[["k100"]][["MSE_lasso_beta2_optimal"]])
+)
+colnames(MSE_beta2) <- c("LS", "Ridge", "LASSO")
+rownames(MSE_beta2) <- c("k = 5", "k = 20", "k = 100")
+
+kable(MSE_beta2, format = "latex", align = "ccc", caption = "Porównanie MSE dla drugiego typu beta") %>%
+  kable_styling(latex_options = "hold_position")
+```
+
+Jak widać powyżej, bez względu na wartości w wektorze $\beta$ najlepiej sobie radzi metoda LASSO. To dla niej wartości $MSE$ są najmniejsze, jednak w każdym przypadku widzimy poprawę w stosunku do wartości dla estymatora najmniejszych kwadratów. Warto również zauważyć, że dla drugiego typu parametru $\beta$ wartości są dużo mniejsze. 
+
+## Liczba fałszywych odkryć i moc identyfikacji dla LASSO
+
+Na koniec analizy dla macierzy ortonormalnej zajmiemy się analizą liczby fałszywych odkryć i mocy identyfikacji dla metody LASSO. Jesteśmy w stanie je wyliczyć teoretycznie.
+
+Jeśli chodzi o liczbę fałszywych odkryć, to będzie to liczba wszystkich niezerowych wartości (w naszym przypadku $500 - k$) pomnożona przez prawdopodobieństwo fałszywego odkrycia, które liczymy jako: $$\mathbb{P}(\text{Fałszywe odkrycie}) = \mathbb{P}(\text{LASSO wybiera} X^j | \beta_j = 0) = \mathbb{P}\left( |\hat{\beta}^j_{LS}| > \lambda | \beta_j = 0 \right)$$
+
+Wiemy, że $X$ jest ortonormalna, zatem $\hat{\beta}^j_{LS} \sim N(\beta^j, \sigma^2)$, stąd, jeśli $\beta^j = 0$, to $\hat{\beta}^j_{LS} \sim N(0, \sigma^2)$. Z tego względu musimy ustandaryzować zmienną, aby móc skorzystać z rozkładu standardowego normalnego. Wiemy jednak, że u nas $\sigma^2 = 1$ Zatem  $$\mathbb{P} \left( |\beta^j_{LS}| > \lambda | \beta_j = 0 \right) = 2 \left( 1 - \Phi \left( \lambda \right) \right)$$
+
+Z kolei moc identyfikacji jest prawdopodobieństwem poprawnego wskazania zmiennej niezerowej. Zatem w tym przypadku chcemy znależć prawdopodobieństwo $$\mathbb{P} \left(|\hat{\beta}^j_{LS}| > \lambda | \beta^j = x \right)$$ gdzie $x = 4$ lub $x = \sqrt{\frac{80}{k}}$ w zależności od tego, z którym przypadkiem mamy do czynienia. Po przekształceniach (aby móc skorzystać z rozkładu standardowego normalnego) otrzymujemy $$\mathbb{P} \left( \hat{\beta}^j_{LS} - x > \lambda - x \right) + \mathbb{P} \left( \hat{\beta}^j_{LS} - x < - \lambda - x \right) = (1 - \Phi(\lambda - x)) + \Phi(- \lambda - x)$$
+
+W poniższych tabelkach umieszczam wyniki tych działań. 
+
+```{r, echo = FALSE}
+fd_power <- readRDS("fd_power.rds")
+
+fd_table <- data.frame(
+  fd_beta1 = c(fd_power[[1]][["FD_lasso_beta1"]], fd_power[[2]][["FD_lasso_beta1"]], fd_power[[3]][["FD_lasso_beta1"]]),
+  fd_beta2 = c(fd_power[[1]][["FD_lasso_beta2"]], fd_power[[2]][["FD_lasso_beta2"]], fd_power[[3]][["FD_lasso_beta2"]])
+)
+
+colnames(fd_table) <- c("i", "ii")
+rownames(fd_table) <- c("k = 5", "k = 20", "k = 100")
+
+kable(t(fd_table), format = "latex", caption = "FD dla LASSO") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+power_table <- data.frame(
+  power_beta1 = c(fd_power[[1]][["Power_lasso_beta1"]], fd_power[[2]][["Power_lasso_beta1"]], fd_power[[3]][["Power_lasso_beta1"]]),
+  power_beta2 = c(fd_power[[1]][["Power_lasso_beta2"]], fd_power[[2]][["Power_lasso_beta2"]], fd_power[[3]][["Power_lasso_beta2"]])
+)
+
+colnames(power_table) <- c("i", "ii")
+rownames(power_table) <- c("k = 5", "k = 20", "k = 100")
+
+kable(t(power_table), format = "latex", caption = "Moc identyfikacji dla LASSO") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+Jak widać, bez względu na rozmiar i typ $\beta$ fałszywych odkryć jest stosunkowo bardzo dużo. Podobnie jednak również moc identyfikacji dla LASSO jest bardzo wysoka. Wynika z tego zatem, że metoda LASSO pozwala na dobrą identyfikację istotnych zmiennych, kosztem identyfikacji wielu zmiennych nieistotnych.
+
+# Analiza dla macierzy planu o niezależnych zmiennych losowych z rozkładu normalnego
+
+W ten części zajmiemy się analizą regresji grzbietowej oraz LASSO, podobnie jak poprzednio, jednak tym razem weźmiemy również na tapet adaptacyjne LASSO oraz technikę knockoffów dla LASSO i regresji grzbietowej. 
+
+## Symulacja danych i przygotowanie estymatorów $\beta$
+
+W pierwszej kolejności wygeneruję macierz planu $X$, która tym razem ma elementy, które są niezależnymi zmiennymi losowymi z rozkładu $N \left( 0, \sigma = \frac{1}{sqrt{500}} \right)$. Wektory $\beta$ oraz $Y$ są analogiczne do tych w poprzednim przypadku jedynie ze zmienioną macierzą $X$. Pozostaje nam zatem jedynie wyznaczyć estymatory $\beta$, które wyznaczymy na cztery różne sposoby.
+
+Na początek, skorzystamy z regresji grzbietowej z parametrem wyznaczonym za pomocą walidacji krzyżowej, a następnie różnież LASSO z parametrem wyznaczonym w ten sam sposób. Do wyboru tego parametru posłuży nam funkcja `cv.glmnet`, znajdująca się w bibliotece, o której wspominałam przy wyznaczaniu $\lambda$ minimalizującego $MSE$. 
+
+Następnie zajmę się adaptacyjnym LASSO. Wagi do niego wybiorę na dwa różne sposoby. W pierwszej kolejności, wagi będą wynosiły $\frac{1}{|\hat{\beta}_i|}$, gdzie $\hat{\beta}_i$ to estymator wyznaczony wcześniej dla regresji grzbietowej. Dzięki tym wagom, wyznaczę nową macierz planu $X$, którą wyliczę jako przemnożenie wcześniej wyznaczonej macierzy planu $X$ wraz z macierzą diagonalną, gdzie na diagonali znajdują się wartości $\frac{1}{w_j}$, gdzie $w_j$ oznacza odpowiednie wagi. Dopiero dla takiej macierzy korzystamy z funkcji `cv.glmnet` i za jej pomocą wyznaczamy estymatory LASSO parametrów $\beta$, które następnie ponownie dzielimy przez wagi.
+
+Drugie adaptacyjne LASSO natomiast będzie miało wagi wybrane w nieco inny sposób. Tym razem, pierwotne estymatory $\beta$, będą tymi dla LASSO, wyznaczonymi na początku. Następnie, wyestymuję $\sigma$, jako $\hat{\sigma} = \sqrt{\frac{RSS}{n-k}}$ (gdzie $RSS$ liczymy jako sumę kwadratów różnic między prawdziwą wartością $Y$, a iloczynem $X$ i estymatora $\beta$ wyznaczonego dla LASSO, a $k$ jest liczbą zmiennych wybranych przez LASSO - zatem liczbą zmiennych niezerowych). Następnie usuwamy zmienne, dla których wyznaczony estymator LASSO dla $\beta$ jest zerowy, a wagi oznaczamy jako $w_i = \frac{\hat{\sigma}}{|\hat{\beta}_i|}$. Na zmiennych, których nie uzunęliśmy stosujemy adaptacyjne LASSO z parametrem wygładzającym $\lambda = \hat{\sigma} \Phi ^{-1} \left( 1 - \frac{0.2}{2p} \right)$, gdzie $p = 500$. Zrobię to stosując funkcję `glmnet`.
+
+Dla tak przygotowanych danych dokonam analizy na początku dla jednokrotnego powtórzenia eksperymentu, a następnie dla wielokrotnego losowania.
+
+## Porównanie $SE$ dla różnych estymatorów $\beta$
+
+Zajmijmy się zatem porównaniem błędu kwadrtowego dla każdego z tych estymatorów. Poniżej umieszczam tabele dla wyliczonego $SE$.
+
+```{r, echo = FALSE}
+data2 <- readRDS("data2.rds")
+
+SE_beta1 <- data.frame(
+  SE_ridge_beta1 <- c(data2[["k5"]][["SE_ridge_beta1"]], data2[["k20"]][["SE_ridge_beta1"]], data2[["k100"]][["SE_ridge_beta1"]]),
+  SE_lasso_beta1 <- c(data2[["k5"]][["SE_lasso_beta1"]], data2[["k20"]][["SE_lasso_beta1"]], data2[["k100"]][["SE_lasso_beta1"]]),
+  SE_adlasso1_beta1 <- c(data2[["k5"]][["SE_adlasso1_beta1"]], data2[["k20"]][["SE_adlasso1_beta1"]], data2[["k100"]][["SE_adlasso1_beta1"]]),
+  SE_adlasso2_beta1 <- c(data2[["k5"]][["SE_adlasso2_beta1"]], data2[["k20"]][["SE_adlasso2_beta1"]], data2[["k100"]][["SE_adlasso2_beta1"]])
+)
+colnames(SE_beta1) <- c("Ridge", "LASSO", "AdLASSO1", "AdLASSO2")
+rownames(SE_beta1) <- c("k = 5", "k = 20", "k = 100")
+
+kable(SE_beta1, format = "latex", caption = "SE dla pierwszego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+SE_beta2<- data.frame(
+  SE_ridge_beta2 <- c(data2[["k5"]][["SE_ridge_beta2"]], data2[["k20"]][["SE_ridge_beta2"]], data2[["k100"]][["SE_ridge_beta2"]]),
+  SE_lasso_beta2 <- c(data2[["k5"]][["SE_lasso_beta2"]], data2[["k20"]][["SE_lasso_beta2"]], data2[["k100"]][["SE_lasso_beta2"]]),
+  SE_adlasso1_beta2 <- c(data2[["k5"]][["SE_adlasso1_beta2"]], data2[["k20"]][["SE_adlasso1_beta2"]], data2[["k100"]][["SE_adlasso1_beta2"]]),
+  SE_adlasso2_beta2 <- c(data2[["k5"]][["SE_adlasso2_beta2"]], data2[["k20"]][["SE_adlasso2_beta2"]], data2[["k100"]][["SE_adlasso2_beta2"]])
+)
+colnames(SE_beta2) <- c("Ridge", "LASSO", "AdLASSO1", "AdLASSO2")
+rownames(SE_beta2) <- c("k = 5", "k = 20", "k = 100")
+
+kable(SE_beta2, format = "latex", caption = "SE dla drugiego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+Jak widać w powyższych tabelach, najmniejsze $SE$ są dla metody LASSO w obu przypadkach $\beta$. AdLASSO z drugiego typu wagami dobrze minimalizuje $SE$ dla dużej liczby zer, ale też dla małych wartości prawdziwych (tj. gdy wartości są mniejsze od jedynki, dla największej wartości $k$ w drugim typie $\beta$). Wszystkie nie radzą sobie najlepiej z kolei gdy mamy do czynienia z wieloma dużymi wartościami (tj. pierwszy typ $\beta$, $k = 100$, gdzie mamy pierwsze 100 współrzędnych równych 4). Tam wartości są bardzo duże, w szczególności dla regresji grzbietowej, gdzie wartość $SE$ wynosi ponad półtora tysiąca. Wynika to prawdopodobnie z tego, że LASSO i oba typy AdLASSO zerują część zmiennych, które (w momencie gdy błędnie wyzerowane) dokładają dość dużo do błędu kwadratowego. Z kolei regresja grzbietowa estymuje wartości parametru, co prowadzi do większych błędów. Dokłada ona błędy zarówno przez niepoprawną estymację parametrów niezerowych, jak i (przede wszystkim) małe, jednak niezerowe wartości w miejscach, gdzie prawdziwe wartości wynoszą zero. Z tego względu błędy dla tego typu wektorów $\beta$, gdzie wiele wartości jest różnych od zera i dużo od niego większych widzimy duży wzrost w wartościach $SE$.
+
+## Analiza $FDR$ oraz mocy
+
+Do tej analizy potrzebujemy jeszcze zastosować technikę knockoffów dla LASSO oraz regresji grzbietowej, aby móc również je porównać. Chcemy, aby dzięki procedurze knockoffów kontrolować $FDR$ na poziomie $0.2$. 
+
+W celu wykonania procedury knockoffów wykonujemy ponowne losowanie macierzy $X$. Następnie, po sklejeniu nowej macierzy, wraz z oryginalną, liczymy wektor estymatorów dla regresji stworzonej dla zwiększonej macierzy. Ustalamy $w_j = |\hat{\beta}^j| - |\hat{\beta}^{j+p}|$, a następnie liczymy próg $$\hat{t} = \min \biggl\{ t>0: \frac{1 + \#\{ j:1_j \leq -t \}}{\# \{ j: w_j \geq t \} \vee 1} \biggl\}$$
+
+i obcinamy estymator, ustalając zera dla takich wartości $j$, gdzie $w_j < \hat{t}$. Poniżej przedstawiam tabele dla mocy (wyliczonej jako liczba prawdziwych odkryć podzielona przez liczbę niezerowych wartości parametru) oraz $FDR$ (wyliczonej jako liczba fałszywych odkryć przez liczbę wszystkich odkryć). Trzeba oczywiście wziąć pod uwagę, że w naszym przypadku badamy jedynie jeden przypadek, zatem może się zdażyć, że dana metoda nie zidentyfikuje żadnej zmiennej i dopiero w przypadku większej liczby powtórzeń zobaczymy bardziej zbliżone do prawdziwych wartości mocy oraz $FDR$.
+
+```{r, echo = FALSE}
+power_beta1 <- data.frame(
+  power_lasso_beta1 <- c(data2[["k5"]][["power_lasso_beta1"]], data2[["k20"]][["power_lasso_beta1"]], data2[["k100"]][["power_lasso_beta1"]]),
+  power_adlasso1_beta1 <- c(data2[["k5"]][["power_adlasso1_beta1"]], data2[["k20"]][["power_adlasso1_beta1"]], data2[["k100"]][["power_adlasso1_beta1"]]),
+  power_adlasso2_beta1 <- c(data2[["k5"]][["power_adlasso2_beta1"]], data2[["k20"]][["power_adlasso2_beta1"]], data2[["k100"]][["power_adlasso2_beta1"]]),
+  power_ridgekn_beta1 <- c(data2[["k5"]][["power_ridgekn_beta1"]], data2[["k20"]][["power_ridgekn_beta1"]], data2[["k100"]][["power_ridgekn_beta1"]]),
+  power_lassokn_beta1 <- c(data2[["k5"]][["power_lassokn_beta1"]], data2[["k20"]][["power_lassokn_beta1"]], data2[["k100"]][["power_lassokn_beta1"]])
+) 
+
+colnames(power_beta1) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(power_beta1) <- c("k = 5", "k = 20", "k = 100")
+
+kable(power_beta1, format = "latex", caption = "Moc dla pierwszego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+power_beta2 <- data.frame(
+  power_lasso_beta2 <- c(data2[["k5"]][["power_lasso_beta2"]], data2[["k20"]][["power_lasso_beta2"]], data2[["k100"]][["power_lasso_beta2"]]),
+  power_adlasso1_beta2 <- c(data2[["k5"]][["power_adlasso1_beta2"]], data2[["k20"]][["power_adlasso1_beta2"]], data2[["k100"]][["power_adlasso1_beta2"]]),
+  power_adlasso2_beta2 <- c(data2[["k5"]][["power_adlasso2_beta2"]], data2[["k20"]][["power_adlasso2_beta2"]], data2[["k100"]][["power_adlasso2_beta2"]]),
+  power_ridgekn_beta2 <- c(data2[["k5"]][["power_ridgekn_beta2"]], data2[["k20"]][["power_ridgekn_beta2"]], data2[["k100"]][["power_ridgekn_beta2"]]),
+  power_lassokn_beta2 <- c(data2[["k5"]][["power_lassokn_beta2"]], data2[["k20"]][["power_lassokn_beta2"]], data2[["k100"]][["power_lassokn_beta2"]])
+) 
+
+colnames(power_beta2) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(power_beta2) <- c("k = 5", "k = 20", "k = 100")
+
+kable(power_beta2, format = "latex", caption = "Moc dla drugiego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+FDR_beta1 <- data.frame(
+  FDR_lasso_beta1 <- c(data2[["k5"]][["FDR_lasso_beta1"]], data2[["k20"]][["FDR_lasso_beta1"]], data2[["k100"]][["FDR_lasso_beta1"]]),
+  FDR_adlasso1_beta1 <- c(data2[["k5"]][["FDR_adlasso1_beta1"]], data2[["k20"]][["FDR_adlasso1_beta1"]], data2[["k100"]][["FDR_adlasso1_beta1"]]),
+  FDR_adlasso2_beta1 <- c(data2[["k5"]][["FDR_adlasso2_beta1"]], data2[["k20"]][["FDR_adlasso2_beta1"]], data2[["k100"]][["FDR_adlasso2_beta1"]]),
+  FDR_ridgekn_beta1 <- c(data2[["k5"]][["FDR_ridgekn_beta1"]], data2[["k20"]][["FDR_ridgekn_beta1"]], data2[["k100"]][["FDR_ridgekn_beta1"]]),
+  FDR_lassokn_beta1 <- c(data2[["k5"]][["FDR_lassokn_beta1"]], data2[["k20"]][["FDR_lassokn_beta1"]], data2[["k100"]][["FDR_lassokn_beta1"]])
+)
+
+colnames(FDR_beta1) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(FDR_beta1) <- c("k = 5", "k = 20", "k = 100")
+
+kable(FDR_beta1, format = "latex", caption = "FDR dla pierwszego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+FDR_beta2 <- data.frame(
+  FDR_lasso_beta2 <- c(data2[["k5"]][["FDR_lasso_beta2"]], data2[["k20"]][["FDR_lasso_beta2"]], data2[["k100"]][["FDR_lasso_beta2"]]),
+  FDR_adlasso1_beta2 <- c(data2[["k5"]][["FDR_adlasso1_beta2"]], data2[["k20"]][["FDR_adlasso1_beta2"]], data2[["k100"]][["FDR_adlasso1_beta2"]]),
+  FDR_adlasso2_beta2 <- c(data2[["k5"]][["FDR_adlasso2_beta2"]], data2[["k20"]][["FDR_adlasso2_beta2"]], data2[["k100"]][["FDR_adlasso2_beta2"]]),
+  FDR_ridgekn_beta2 <- c(data2[["k5"]][["FDR_ridgekn_beta2"]], data2[["k20"]][["FDR_ridgekn_beta2"]], data2[["k100"]][["FDR_ridgekn_beta2"]]),
+  FDR_lassokn_beta2 <- c(data2[["k5"]][["FDR_lassokn_beta2"]], data2[["k20"]][["FDR_lassokn_beta2"]], data2[["k100"]][["FDR_lassokn_beta2"]])
+)
+
+colnames(FDR_beta2) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(FDR_beta2) <- c("k = 5", "k = 20", "k = 100")
+
+kable(FDR_beta2, format = "latex", caption = "FDR dla drugiego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+Jak widać w powyższych tabelach, dla LASSO z techniką knockoffów mamy do czynienia z sytuacją, w której nie zidentyfikował on żadnych zmiennych. Podobnie dla knockoffów w regresji grzbietowej, gdzie również dla drugiego typu beta żadne zmienne nie zostały zidentyfikowane. Skupmy się zatem bardziej na pierwszych trzech metodach, a knockoffy przeanalizujemy bardziej, gdy spojrzymy na stukrotne powtórzenie eksperymentu. W tym przypadku możemy zobaczyć, że LASSO (podobnie jak widzieliśmy wcześniej) identyfikuje on dość dużo zmiennych, jednak nie wszystkie są zidentyfikowane poprawnie. W pierwszym przypadku beta widzimy, że zarówno LASSO jak i AdLASSO1 radzą sobie bardzo podobnie, jednak gdy spojrzymy na drugi typ beta, widzimy, że (w szczególności dla największego $k$) pierwszy rodzaj AdLASSO najlepiej identyfikuje zmienne (mimo że wciąż wybiera bardzo dużo zmiennych, które nie są potrzebne). Na koniec, AdLASSO2 bardzo dobrze identyfikuje zmienne, gdy niezerowe wartości $\beta$ są duże (tj. pierwszy typ $\beta$), jednak zupełnie sobie nie radzi w przypadku drugiego typu $\beta$ i większych wartości $k$, gdzie nie identyfikuje zmiennch, lub identyfikuje je niezbyt poprawnie.
+
+## Analiza powtórzonego eksperymentu
+
+Spójrzmy teraz jak zmieniają się wartości $MSE$ oraz mocy i $FDR$, gdy zwiększymy liczbę powtórzeń do 100 i uśrednimy wyniki. W pierwszej kolejności przeanalizujmy tabele dla $MSE$ wraz z wykresem pudełkowym, w którym zmieniłam podziałkę na logarytmiczną, w celu dokładniejszej czytelności wykresu.
+
+\newpage
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+results <- readRDS("results.rds")
+library(dplyr)
+
+extract_metrics <- function(results) {
+  k_values <- c("k5", "k20", "k100")
+  all_k_metrics <- list()
+  
+  for (k in k_values) {
+    metrics_list <- lapply(results, function(res) {
+      res_k <- res[[k]]
+      data.frame(
+        SE_ridge_beta1 = res_k$SE_ridge_beta1,
+        SE_ridge_beta2 = res_k$SE_ridge_beta2,
+        SE_lasso_beta1 = res_k$SE_lasso_beta1,
+        SE_lasso_beta2 = res_k$SE_lasso_beta2,
+        SE_adlasso1_beta1 = res_k$SE_adlasso1_beta1,
+        SE_adlasso1_beta2 = res_k$SE_adlasso1_beta2,
+        SE_adlasso2_beta1 = res_k$SE_adlasso2_beta1,
+        SE_adlasso2_beta2 = res_k$SE_adlasso2_beta2,
+        FDR_lasso_beta1 = res_k$FDR_lasso_beta1,
+        FDR_lasso_beta2 = res_k$FDR_lasso_beta2,
+        power_lasso_beta1 = res_k$power_lasso_beta1,
+        power_lasso_beta2 = res_k$power_lasso_beta2,
+        FDR_adlasso1_beta1 = res_k$FDR_adlasso1_beta1,
+        FDR_adlasso1_beta2 = res_k$FDR_adlasso1_beta2,
+        power_adlasso1_beta1 = res_k$power_adlasso1_beta1,
+        power_adlasso1_beta2 = res_k$power_adlasso1_beta2,
+        FDR_adlasso2_beta1 = res_k$FDR_adlasso2_beta1,
+        FDR_adlasso2_beta2 = res_k$FDR_adlasso2_beta2,
+        power_adlasso2_beta1 = res_k$power_adlasso2_beta1,
+        power_adlasso2_beta2 = res_k$power_adlasso2_beta2,
+        FDR_ridgekn_beta1 = res_k$FDR_ridgekn_beta1,
+        FDR_ridgekn_beta2 = res_k$FDR_ridgekn_beta2,
+        power_ridgekn_beta1 = res_k$power_ridgekn_beta1,
+        power_ridgekn_beta2 = res_k$power_ridgekn_beta2,
+        FDR_lassokn_beta1 = res_k$FDR_lassokn_beta1,
+        FDR_lassokn_beta2 = res_k$FDR_lassokn_beta2,
+        power_lassokn_beta1 = res_k$power_lassokn_beta1,
+        power_lassokn_beta2 = res_k$power_lassokn_beta2
+      )
+    })
+    
+    k_df <- bind_rows(metrics_list)
+    k_avg <- colMeans(k_df, na.rm = TRUE)
+    all_k_metrics[[k]] <- k_avg
+  }
+  
+  return(all_k_metrics)
+}
+
+averaged_metrics_by_k <- extract_metrics(results)
+
+MSE_beta1 <- data.frame(
+  SE_ridge_beta1 <- c(averaged_metrics_by_k[["k5"]][["SE_ridge_beta1"]], averaged_metrics_by_k[["k20"]][["SE_ridge_beta1"]], averaged_metrics_by_k[["k100"]][["SE_ridge_beta1"]]),
+  SE_lasso_beta1 <- c(averaged_metrics_by_k[["k5"]][["SE_lasso_beta1"]], averaged_metrics_by_k[["k20"]][["SE_lasso_beta1"]], averaged_metrics_by_k[["k100"]][["SE_lasso_beta1"]]),
+  SE_adlasso1_beta1 <- c(averaged_metrics_by_k[["k5"]][["SE_adlasso1_beta1"]], averaged_metrics_by_k[["k20"]][["SE_adlasso1_beta1"]], averaged_metrics_by_k[["k100"]][["SE_adlasso1_beta1"]]),
+  SE_adlasso2_beta1 <- c(averaged_metrics_by_k[["k5"]][["SE_adlasso2_beta1"]], averaged_metrics_by_k[["k20"]][["SE_adlasso2_beta1"]], averaged_metrics_by_k[["k100"]][["SE_adlasso2_beta1"]])
+)
+colnames(MSE_beta1) <- c("Ridge", "LASSO", "AdLASSO1", "AdLASSO2")
+rownames(MSE_beta1) <- c("k = 5", "k = 20", "k = 100")
+
+kable(MSE_beta1, format = "latex", caption = "MSE dla pierwszego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+MSE_beta2<- data.frame(
+  SE_ridge_beta2 <- c(averaged_metrics_by_k[["k5"]][["SE_ridge_beta2"]], averaged_metrics_by_k[["k20"]][["SE_ridge_beta2"]], averaged_metrics_by_k[["k100"]][["SE_ridge_beta2"]]),
+  SE_lasso_beta2 <- c(averaged_metrics_by_k[["k5"]][["SE_lasso_beta2"]], averaged_metrics_by_k[["k20"]][["SE_lasso_beta2"]], averaged_metrics_by_k[["k100"]][["SE_lasso_beta2"]]),
+  SE_adlasso1_beta2 <- c(averaged_metrics_by_k[["k5"]][["SE_adlasso1_beta2"]], averaged_metrics_by_k[["k20"]][["SE_adlasso1_beta2"]], averaged_metrics_by_k[["k100"]][["SE_adlasso1_beta2"]]),
+  SE_adlasso2_beta2 <- c(averaged_metrics_by_k[["k5"]][["SE_adlasso2_beta2"]], averaged_metrics_by_k[["k20"]][["SE_adlasso2_beta2"]], averaged_metrics_by_k[["k100"]][["SE_adlasso2_beta2"]])
+)
+colnames(MSE_beta2) <- c("Ridge", "LASSO", "AdLASSO1", "AdLASSO2")
+rownames(MSE_beta2) <- c("k = 5", "k = 20", "k = 100")
+
+kable(MSE_beta2, format = "latex", caption = "MSE dla drugiego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+library(tidyverse)
+
+build_df_all2_from_results <- function(results) {
+  k_levels <- c("k5", "k20", "k100")
+  
+  safe_extract <- function(x) if (is.null(x)) NA_real_ else x
+  
+  df_all <- map_dfr(seq_along(results), function(rep_idx) {
+    rep_result <- results[[rep_idx]]
+    
+    map_dfr(k_levels, function(k_name) {
+      sim <- rep_result[[k_name]]
+      
+      se_vals <- c(
+        safe_extract(sim$SE_ridge_beta1),
+        safe_extract(sim$SE_lasso_beta1),
+        safe_extract(sim$SE_adlasso1_beta1),
+        safe_extract(sim$SE_adlasso2_beta1),
+        NA, NA,
+        safe_extract(sim$SE_ridge_beta2),
+        safe_extract(sim$SE_lasso_beta2),
+        safe_extract(sim$SE_adlasso1_beta2),
+        safe_extract(sim$SE_adlasso2_beta2),
+        NA, NA
+      )
+      
+      fdr_vals <- c(
+        NA,
+        safe_extract(sim$FDR_lasso_beta1),
+        safe_extract(sim$FDR_adlasso1_beta1),
+        safe_extract(sim$FDR_adlasso2_beta1),
+        safe_extract(sim$FDR_ridgekn_beta1),
+        safe_extract(sim$FDR_lassokn_beta1),
+        NA,
+        safe_extract(sim$FDR_lasso_beta2),
+        safe_extract(sim$FDR_adlasso1_beta2),
+        safe_extract(sim$FDR_adlasso2_beta2),
+        safe_extract(sim$FDR_ridgekn_beta2),
+        safe_extract(sim$FDR_lassokn_beta2)
+      )
+      
+      power_vals <- c(
+        NA,
+        safe_extract(sim$power_lasso_beta1),
+        safe_extract(sim$power_adlasso1_beta1),
+        safe_extract(sim$power_adlasso2_beta1),
+        safe_extract(sim$power_ridgekn_beta1),
+        safe_extract(sim$power_lassokn_beta1),
+        NA,
+        safe_extract(sim$power_lasso_beta2),
+        safe_extract(sim$power_adlasso1_beta2),
+        safe_extract(sim$power_adlasso2_beta2),
+        safe_extract(sim$power_ridgekn_beta2),
+        safe_extract(sim$power_lassokn_beta2)
+      )
+      
+      tibble(
+        k = as.integer(str_remove(k_name, "k")),
+        SE = se_vals,
+        FDR = fdr_vals,
+        power = power_vals,
+        beta_type = rep(c("beta1", "beta2"), each = 6),
+        method = rep(c("Ridge", "LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs"), 2)
+      )
+    })
+  })
+  
+  return(df_all)
+}
+
+df_all <- build_df_all2_from_results(results)
+
+ggplot(df_all %>% filter(!is.na(SE)), aes(x = method, y = SE, fill = method)) +
+  geom_boxplot(outlier.alpha = 0.3) +
+  facet_grid(beta_type ~ k, labeller = label_both) +
+  scale_y_log10() +
+  theme_minimal() +
+  labs(title = "Porównanie SE", x = "Metoda", y = "Sum of Squared Errors") +
+  scale_fill_brewer(palette = "Pastel2") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Jak widać w powyższych tabelach, poonownie można zobaczyć, że AdLASSO2 jest porównywalne do metody LASSO. Ponownie, najgorzej radzą one sobie, gdy wartości $\beta$ są w dużej części niezerowe (pierwszy typ $\beta$, $k = 100$).
+
+Patrząc z kolei na wykresy, w celu uzyskania dodatkowej informacji, można również zobaczyć dość duży rozrzut, zarówno dla AdLASSO1, jak i AdLASSO2 przy małej liczbie niezerowych wartości ($k = 5$). Z kolei estymator regresji grzbietowej w każdym przypadku przyjmuje wartości dość mocno do siebie zbliżone. Przy pierwszym typie $\beta$ możemy zobaczyć, że to AdLASSO2 ma największy rozrzut, z kolei w drugim przypadku z taką sytuacją mamy do czynienia dla AdLASSO1.
+
+Spójrzmy teraz na tabele i wykresy pudełkowe dla mocy oraz $FDR$.
+
+```{r, echo = FALSE}
+power_beta1 <- data.frame(
+  power_lasso_beta1 <- c(averaged_metrics_by_k[["k5"]][["power_lasso_beta1"]], averaged_metrics_by_k[["k20"]][["power_lasso_beta1"]], averaged_metrics_by_k[["k100"]][["power_lasso_beta1"]]),
+  power_adlasso1_beta1 <- c(averaged_metrics_by_k[["k5"]][["power_adlasso1_beta1"]], averaged_metrics_by_k[["k20"]][["power_adlasso1_beta1"]], averaged_metrics_by_k[["k100"]][["power_adlasso1_beta1"]]),
+  power_adlasso2_beta1 <- c(averaged_metrics_by_k[["k5"]][["power_adlasso2_beta1"]], averaged_metrics_by_k[["k20"]][["power_adlasso2_beta1"]], averaged_metrics_by_k[["k100"]][["power_adlasso2_beta1"]]),
+  power_ridgekn_beta1 <- c(averaged_metrics_by_k[["k5"]][["power_ridgekn_beta1"]], averaged_metrics_by_k[["k20"]][["power_ridgekn_beta1"]], averaged_metrics_by_k[["k100"]][["power_ridgekn_beta1"]]),
+  power_lassokn_beta1 <- c(averaged_metrics_by_k[["k5"]][["power_lassokn_beta1"]], averaged_metrics_by_k[["k20"]][["power_lassokn_beta1"]], averaged_metrics_by_k[["k100"]][["power_lassokn_beta1"]])
+) 
+
+colnames(power_beta1) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(power_beta1) <- c("k = 5", "k = 20", "k = 100")
+
+kable(power_beta1, format = "latex", caption = "Moc dla pierwszego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+power_beta2 <- data.frame(
+  power_lasso_beta2 <- c(averaged_metrics_by_k[["k5"]][["power_lasso_beta2"]], averaged_metrics_by_k[["k20"]][["power_lasso_beta2"]], averaged_metrics_by_k[["k100"]][["power_lasso_beta2"]]),
+  power_adlasso1_beta2 <- c(averaged_metrics_by_k[["k5"]][["power_adlasso1_beta2"]], averaged_metrics_by_k[["k20"]][["power_adlasso1_beta2"]], averaged_metrics_by_k[["k100"]][["power_adlasso1_beta2"]]),
+  power_adlasso2_beta2 <- c(averaged_metrics_by_k[["k5"]][["power_adlasso2_beta2"]], averaged_metrics_by_k[["k20"]][["power_adlasso2_beta2"]], averaged_metrics_by_k[["k100"]][["power_adlasso2_beta2"]]),
+  power_ridgekn_beta2 <- c(averaged_metrics_by_k[["k5"]][["power_ridgekn_beta2"]], averaged_metrics_by_k[["k20"]][["power_ridgekn_beta2"]], averaged_metrics_by_k[["k100"]][["power_ridgekn_beta2"]]),
+  power_lassokn_beta2 <- c(averaged_metrics_by_k[["k5"]][["power_lassokn_beta2"]], averaged_metrics_by_k[["k20"]][["power_lassokn_beta2"]], averaged_metrics_by_k[["k100"]][["power_lassokn_beta2"]])
+) 
+
+colnames(power_beta2) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(power_beta2) <- c("k = 5", "k = 20", "k = 100")
+
+kable(power_beta2, format = "latex", caption = "Moc dla drugiego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+ggplot(df_all %>% filter(!is.na(power)), aes(x = method, y = power, fill = method)) +
+  geom_boxplot(outlier.alpha = 0.3) +
+  facet_grid(beta_type ~ k, labeller = label_both) +
+  theme_minimal() +
+  labs(title = "Porównanie mocy identyfikacji", x = "Metoda", y = "Power") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+FDR_beta1 <- data.frame(
+  FDR_lasso_beta1 <- c(averaged_metrics_by_k[["k5"]][["FDR_lasso_beta1"]], averaged_metrics_by_k[["k20"]][["FDR_lasso_beta1"]], averaged_metrics_by_k[["k100"]][["FDR_lasso_beta1"]]),
+  FDR_adlasso1_beta1 <- c(averaged_metrics_by_k[["k5"]][["FDR_adlasso1_beta1"]], averaged_metrics_by_k[["k20"]][["FDR_adlasso1_beta1"]], averaged_metrics_by_k[["k100"]][["FDR_adlasso1_beta1"]]),
+  FDR_adlasso2_beta1 <- c(averaged_metrics_by_k[["k5"]][["FDR_adlasso2_beta1"]], averaged_metrics_by_k[["k20"]][["FDR_adlasso2_beta1"]], averaged_metrics_by_k[["k100"]][["FDR_adlasso2_beta1"]]),
+  FDR_ridgekn_beta1 <- c(averaged_metrics_by_k[["k5"]][["FDR_ridgekn_beta1"]], averaged_metrics_by_k[["k20"]][["FDR_ridgekn_beta1"]], averaged_metrics_by_k[["k100"]][["FDR_ridgekn_beta1"]]),
+  FDR_lassokn_beta1 <- c(averaged_metrics_by_k[["k5"]][["FDR_lassokn_beta1"]], averaged_metrics_by_k[["k20"]][["FDR_lassokn_beta1"]], averaged_metrics_by_k[["k100"]][["FDR_lassokn_beta1"]])
+)
+
+colnames(FDR_beta1) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(FDR_beta1) <- c("k = 5", "k = 20", "k = 100")
+
+kable(FDR_beta1, format = "latex", caption = "FDR dla pierwszego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+FDR_beta2 <- data.frame(
+  FDR_lasso_beta2 <- c(averaged_metrics_by_k[["k5"]][["FDR_lasso_beta2"]], averaged_metrics_by_k[["k20"]][["FDR_lasso_beta2"]], averaged_metrics_by_k[["k100"]][["FDR_lasso_beta2"]]),
+  FDR_adlasso1_beta2 <- c(averaged_metrics_by_k[["k5"]][["FDR_adlasso1_beta2"]], averaged_metrics_by_k[["k20"]][["FDR_adlasso1_beta2"]], averaged_metrics_by_k[["k100"]][["FDR_adlasso1_beta2"]]),
+  FDR_adlasso2_beta2 <- c(averaged_metrics_by_k[["k5"]][["FDR_adlasso2_beta2"]], averaged_metrics_by_k[["k20"]][["FDR_adlasso2_beta2"]], averaged_metrics_by_k[["k100"]][["FDR_adlasso2_beta2"]]),
+  FDR_ridgekn_beta2 <- c(averaged_metrics_by_k[["k5"]][["FDR_ridgekn_beta2"]], averaged_metrics_by_k[["k20"]][["FDR_ridgekn_beta2"]], averaged_metrics_by_k[["k100"]][["FDR_ridgekn_beta2"]]),
+  FDR_lassokn_beta2 <- c(averaged_metrics_by_k[["k5"]][["FDR_lassokn_beta2"]], averaged_metrics_by_k[["k20"]][["FDR_lassokn_beta2"]], averaged_metrics_by_k[["k100"]][["FDR_lassokn_beta2"]])
+)
+
+colnames(FDR_beta2) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(FDR_beta2) <- c("k = 5", "k = 20", "k = 100")
+
+kable(FDR_beta2, format = "latex", caption = "FDR dla drugiego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+ggplot(df_all %>% filter(!is.na(FDR)), aes(x = method, y = FDR, fill = method)) +
+  geom_boxplot(outlier.alpha = 0.3) +
+  facet_grid(beta_type ~ k, labeller = label_both) +
+  theme_minimal() +
+  labs(title = "Porównanie FDR", x = "Metoda", y = "False Discovery Rate") +
+  scale_fill_brewer(palette = "Set3") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+W tym przypakdu zacznijmy od knockoffów, które poprzednio ominęłam. Jak widać, nie ma tutaj zbyt dobrej mocy testu, jednak faktycznie możemy do pewnego stopnia zobaczyć, że $FDR$ jest w większości mniejszy od ustalonego $0.2$. Jedynym wyjątkiem jest LASSO z knockoffami dla 5 niezerowych współrzędnych, gdzie $FDR$ wynosi nieco ponad $0.2$. Z kolei ponownie możemy zobaczyć problem z identyfikacją jakichkolwiek zmiennych, w szczególności dla dużej liczby niezerowych. Moc, zarówno dla LASSO z knockoffami jak i regresji grzbietowej z knockoffami dla największej wartości $k$ w przypadku drugiego typu $\beta$ wynosi mniej niż $1%$. Oznacza to, że mniej niż jedna zmienna jest w tym przypadku poprawnie zidentyfikowana. Wyższy jest procent w przypadku $FDR$, bo jest to $0.05$ oraz $0.02$ odpowiedniu dla regresji grzbietowej oraz dla LASSO z knockoffami.
+
+Z kolei patrząc na pozostałe trzy metody, analizowane wstępnie już wcześniej, to możemy zobaczyć, że dla pierwszego typu $\beta$ zdecydowanie najlepiej radzi sobie AdLASSO2, w którym możemy zauważyć zarówno wysoką moc identyfikacji zmiennych, jak i niskie $FDR$. Zarówno dla AdLASSO1, jak i AdLASSO2 możemy spostrzec, że radzą sobie podobnie dobrze - zarówno identyfikując zmienne poprawnie, jak i dając nam dodatkowo wiele fałszywych odkryć. Niestety, wciąż żadne z nich nie radzi sobie najlepiej, gdy prawdziwe wartości $\beta$ się zmniejszają. Dla AdLASSO1 dostajemy bardzo wysokie $FDR$, przy jednoczesnej dość małej mocy (choć jest ona najwyższa ze wszystkich, zarówno dla $k = 20$, jak i $k = 100$ przy drugim typie $\beta$). Podobnie jest dla LASSO, gdzie zarówno moc, jak i FDR są nieco niższe. Z kolei AdLASSO2 ma zarówno najniższą moc, jak i najniższe FDR, co sprawia, że stosunkowo niewiele zmiennych identyfikuje w sytuacji mniejszych wartości prawdziwego $\beta$.
+
+Spójrzmy teraz na wykresy, w pierwszej kolejności skupiając się na mocy. Pierwszą rzucającą się w oczy rzeczą jest fakt, że dla knockoffów mamy do czynienia z rozrzutem wartości po całej osi y dla najmniejszej wartości $k$. Oznacza to, że mieliśmy do czynienia zarówno z sytuacjami, w których zidentyfikowane zostały zarówno wszystkie zmienne, jak i żadna. Również AdLASSO2 ma dość duży rozrzut dla najmniejszego $k$. W pierwszym typie $\beta$ można również zobaczyć, że (poza knockoffami) wartości mocy są dość duże, w przeciwieństwie do drugiego typu $\beta$, gdzie można zobaczyć jak moc maleje wraz ze wzrostem niezerowych wartości. Dla LASSO z knockoffami można zobaczyć, że w przypadku pierwszego typu $\beta$ wartości są w głównej mierze zerowe, jednak występują pojedyncze wartości odstające, które są dużo większe - równe 1 lub bardzo tej jedynki bliskie. Z kolei regresja grzbietowa z knockoffami ma wartości mocy rozrzucone w zupełnie inny sposób, gdyż przede wszystkim są one po środku osi (dla $k = 20$) oraz poniżej $0.5$ (dla $k = 100$). Z kolei dla drugiego typu $\beta$ i większych wartości $k$ oba knockoffy radzą sobie podobnie i w większości znajdują się w okolicach zera.
+
+Przyglądając się teraz $FDR$, można zobaczyć duży rozrzut LASSO z knockoffami dla $k = 5$, jednak w każdym przypadku występują wartości odstające po całej długości osi. Tym razem jednak możemy również zauważyć, że $FDR$ dla drugiego typu $\beta$ oraz estymatora LASSO również ma duży rozrzut - po całej osi. Tym razem nie widać konkretnej struktury ułożenia wykresów pudełkowych. Dla AdLASSO1 $FDR$ jest stosunkowo duże (z jednym wyjątkiem dla pierwszego typu $\beta$ i $k = 100$), natomiast widać również małe wartości odstające, w tym $0$. Największe watości przyjmuje często również estymator LASSO. Z kolei knockoffy i AdLASSO2 mają stosunkowo małe wartości (chociaż w drugim typie wektora $\beta$ dla $k = 20$ oraz $k = 100$ widać dość dużo wartości odstających).
+
+# Analiza dla macierzy planu z zależnymi zmiennymi
+
+Tym razem zajmiemy się ostatnim typem danych, gdzie macierz $X$ pochodzi z rozkładu normalnego, jednak tym razem ma ona rozkład $X_i \sim N(0, \frac{1}{n} \Sigma$, gdzie $\Sigma_{ii} = 1$ oraz $\Sigma_{ij} = 0.5$. Porównywane będą te same wartości, co w poprzednim zadaniu, zatem nie będę ponownie wyjaśniać, w jaki sposób je przygotowuję. Warto jedynie wyjaśnić, że macierz $X$ przygotowuję, generując ją za pomocą funkcji `rmvnorm` służącej do generowania elementów z wielowymiarowego rozkładu normalnego. Jedyną różnicą, będzie przygotowanie macierzy do knockoffów, w której generuję ją z rozkładu warunkowego $\tilde{X}_{(i)} | X_{(i)} \sim N(\mu, V)$, gdzie $\mu = X_{(i)} - X_{(i)} \Sigma^{-1} \text{diag(s)}$ oraz $V = 2 \text{diag(s)} - \text{diag(s)} \Sigma^{-1} \text{diag(s)}$, natomiast $\text{diag(s)} = siag(2 \lambda_{\min}(\Sigma) \land 1)$. Liczę zatem w pierwszej kolejności najmniejszą wartość własną macierzy $\Sigma$, będącej macierzą kowariancji dla wektorów w macierzy $X$. Następnie wyznaczam każdy wektor macierzy $\tilde{X}$ losując z rozkładu normalnego wielowymiarowego o parametrach jak opisanych wyżej. 
+
+## Analiza SE
+
+Poniżej przedstawiam wartości $SE$ dla tego typu danych. 
+
+```{r, echo = FALSE}
+data3 <- readRDS("data3.rds")
+
+SE_beta1 <- data.frame(
+  SE_ridge_beta1 <- c(data3[["k5"]][["SE_ridge_beta1"]], data3[["k20"]][["SE_ridge_beta1"]], data3[["k100"]][["SE_ridge_beta1"]]),
+  SE_lasso_beta1 <- c(data3[["k5"]][["SE_lasso_beta1"]], data3[["k20"]][["SE_lasso_beta1"]], data3[["k100"]][["SE_lasso_beta1"]]),
+  SE_adlasso1_beta1 <- c(data3[["k5"]][["SE_adlasso1_beta1"]], data3[["k20"]][["SE_adlasso1_beta1"]], data3[["k100"]][["SE_adlasso1_beta1"]]),
+  SE_adlasso2_beta1 <- c(data3[["k5"]][["SE_adlasso2_beta1"]], data3[["k20"]][["SE_adlasso2_beta1"]], data3[["k100"]][["SE_adlasso2_beta1"]])
+)
+colnames(SE_beta1) <- c("Ridge", "LASSO", "AdLASSO1", "AdLASSO2")
+rownames(SE_beta1) <- c("k = 5", "k = 20", "k = 100")
+
+kable(SE_beta1, format = "latex", caption = "SE dla pierwszego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+SE_beta2 <- data.frame(
+  SE_ridge_beta2 <- c(data3[["k5"]][["SE_ridge_beta2"]], data3[["k20"]][["SE_ridge_beta2"]], data3[["k100"]][["SE_ridge_beta2"]]),
+  SE_lasso_beta2 <- c(data3[["k5"]][["SE_lasso_beta2"]], data3[["k20"]][["SE_lasso_beta2"]], data3[["k100"]][["SE_lasso_beta2"]]),
+  SE_adlasso1_beta2 <- c(data3[["k5"]][["SE_adlasso1_beta2"]], data3[["k20"]][["SE_adlasso1_beta2"]], data3[["k100"]][["SE_adlasso1_beta2"]]),
+  SE_adlasso2_beta2 <- c(data3[["k5"]][["SE_adlasso2_beta2"]], data3[["k20"]][["SE_adlasso2_beta2"]], data3[["k100"]][["SE_adlasso2_beta2"]])
+)
+colnames(SE_beta2) <- c("Ridge", "LASSO", "AdLASSO1", "AdLASSO2")
+rownames(SE_beta2) <- c("k = 5", "k = 20", "k = 100")
+
+kable(SE_beta2, format = "latex", caption = "SE dla drugiego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+Przyglądając się tym wartościom można zauważyć znaczne pogorszenie się AdLASSO2 dla pierwszego typu $\beta$. Wartości dla najmniejszej liczby niezerowych zmiennych są dość podobne do pozostałych, jednak dla $k = 100$ możemy zobaczyć, że wynosi ona niemal tyle, co ta dla regresji grzbietowej, która dotychczas miała prawie największe wartości (zaraz po regresji grzbietowej). Tym razem to ona ma jedne z lepszych wyników. Szerszą analizę będę mogła jednak zrobić, patrząc na tabele z $MSE$ oraz wykresy pudełkowe z $SE$ w późniejszej części raportu.
+
+## Analiza $FDR$ oraz mocy
+
+Spójrzmy teraz na tabele dla $FDR$ oraz mocy.
+
+```{r, echo = FALSE}
+power_beta1 <- data.frame(
+  power_lasso_beta1 <- c(data3[["k5"]][["power_lasso_beta1"]], data3[["k20"]][["power_lasso_beta1"]], data3[["k100"]][["power_lasso_beta1"]]),
+  power_adlasso1_beta1 <- c(data3[["k5"]][["power_adlasso1_beta1"]], data3[["k20"]][["power_adlasso1_beta1"]], data3[["k100"]][["power_adlasso1_beta1"]]),
+  power_adlasso2_beta1 <- c(data3[["k5"]][["power_adlasso2_beta1"]], data3[["k20"]][["power_adlasso2_beta1"]], data3[["k100"]][["power_adlasso2_beta1"]]),
+  power_ridgekn_beta1 <- c(data3[["k5"]][["power_ridgekn_beta1"]], data3[["k20"]][["power_ridgekn_beta1"]], data3[["k100"]][["power_ridgekn_beta1"]]),
+  power_lassokn_beta1 <- c(data3[["k5"]][["power_lassokn_beta1"]], data3[["k20"]][["power_lassokn_beta1"]], data3[["k100"]][["power_lassokn_beta1"]])
+) 
+
+colnames(power_beta1) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(power_beta1) <- c("k = 5", "k = 20", "k = 100")
+
+kable(power_beta1, format = "latex", caption = "Moc dla pierwszego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+power_beta2 <- data.frame(
+  power_lasso_beta2 <- c(data3[["k5"]][["power_lasso_beta2"]], data3[["k20"]][["power_lasso_beta2"]], data3[["k100"]][["power_lasso_beta2"]]),
+  power_adlasso1_beta2 <- c(data3[["k5"]][["power_adlasso1_beta2"]], data3[["k20"]][["power_adlasso1_beta2"]], data3[["k100"]][["power_adlasso1_beta2"]]),
+  power_adlasso2_beta2 <- c(data3[["k5"]][["power_adlasso2_beta2"]], data3[["k20"]][["power_adlasso2_beta2"]], data3[["k100"]][["power_adlasso2_beta2"]]),
+  power_ridgekn_beta2 <- c(data3[["k5"]][["power_ridgekn_beta2"]], data3[["k20"]][["power_ridgekn_beta2"]], data3[["k100"]][["power_ridgekn_beta2"]]),
+  power_lassokn_beta2 <- c(data3[["k5"]][["power_lassokn_beta2"]], data3[["k20"]][["power_lassokn_beta2"]], data3[["k100"]][["power_lassokn_beta2"]])
+) 
+
+colnames(power_beta2) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(power_beta2) <- c("k = 5", "k = 20", "k = 100")
+
+kable(power_beta2, format = "latex", caption = "Moc dla drugiego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+FDR_beta1 <- data.frame(
+  FDR_lasso_beta1 <- c(data3[["k5"]][["FDR_lasso_beta1"]], data3[["k20"]][["FDR_lasso_beta1"]], data3[["k100"]][["FDR_lasso_beta1"]]),
+  FDR_adlasso1_beta1 <- c(data3[["k5"]][["FDR_adlasso1_beta1"]], data3[["k20"]][["FDR_adlasso1_beta1"]], data3[["k100"]][["FDR_adlasso1_beta1"]]),
+  FDR_adlasso2_beta1 <- c(data3[["k5"]][["FDR_adlasso2_beta1"]], data3[["k20"]][["FDR_adlasso2_beta1"]], data3[["k100"]][["FDR_adlasso2_beta1"]]),
+  FDR_ridgekn_beta1 <- c(data3[["k5"]][["FDR_ridgekn_beta1"]], data3[["k20"]][["FDR_ridgekn_beta1"]], data3[["k100"]][["FDR_ridgekn_beta1"]]),
+  FDR_lassokn_beta1 <- c(data3[["k5"]][["FDR_lassokn_beta1"]], data3[["k20"]][["FDR_lassokn_beta1"]], data3[["k100"]][["FDR_lassokn_beta1"]])
+)
+
+colnames(FDR_beta1) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(FDR_beta1) <- c("k = 5", "k = 20", "k = 100")
+
+kable(FDR_beta1, format = "latex", caption = "FDR dla pierwszego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+FDR_beta2 <- data.frame(
+  FDR_lasso_beta2 <- c(data3[["k5"]][["FDR_lasso_beta2"]], data3[["k20"]][["FDR_lasso_beta2"]], data3[["k100"]][["FDR_lasso_beta2"]]),
+  FDR_adlasso1_beta2 <- c(data3[["k5"]][["FDR_adlasso1_beta2"]], data3[["k20"]][["FDR_adlasso1_beta2"]], data3[["k100"]][["FDR_adlasso1_beta2"]]),
+  FDR_adlasso2_beta2 <- c(data3[["k5"]][["FDR_adlasso2_beta2"]], data3[["k20"]][["FDR_adlasso2_beta2"]], data3[["k100"]][["FDR_adlasso2_beta2"]]),
+  FDR_ridgekn_beta2 <- c(data3[["k5"]][["FDR_ridgekn_beta2"]], data3[["k20"]][["FDR_ridgekn_beta2"]], data3[["k100"]][["FDR_ridgekn_beta2"]]),
+  FDR_lassokn_beta2 <- c(data3[["k5"]][["FDR_lassokn_beta2"]], data3[["k20"]][["FDR_lassokn_beta2"]], data3[["k100"]][["FDR_lassokn_beta2"]])
+)
+
+colnames(FDR_beta2) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(FDR_beta2) <- c("k = 5", "k = 20", "k = 100")
+
+kable(FDR_beta2, format = "latex", caption = "FDR dla drugiego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+
+W tym przypadku nie możemy zobaczyć poprzedniego problemu z brakiem identyfikacji zmiennych przy knockoffach. Tutaj regresja grzbietowa z knockoffami dobrze zidentyfikowała wszystkie niezerowe wartości $\beta$, jednak nie widać tutaj również żadnej kontroli $FDR$, które w tym przypadku jest najwyższe. Knockoffy dla LASSO również zdają się nie kontrolować $FDR$ w żądanym przez nas stopniu ($0.2$), jednak jest ono niższe niż w przypadku regresji grzbietowej. Najniższe $FDR$ w prawie każdym przypadku (poza największą liczbą niezerowych zmiennych w drugim typie $\beta$) jest dla AdLASSO2, gdzie prawie wszędzie wynosi ono mniej niż $0.5$. Z kolei AdLASSO1 oraz LASSO wskazuje na wcześniej już zauważone problemy.
+
+## Analiza powtórzonego eksperymentu
+
+Spójrzmy teraz jak zmieniają się wartości gdy powtórzymy eksperyment stukrotnie. Najpierw przyjrzyjmy się tabeli z wartościami $MSE$ a także wykresowi pudełkowemu dla $100$ wyliczonych wartości $SE$.
+
+```{r, echo = FALSE}
+results2 <- readRDS("results2.rds")
+averaged_metrics_by_k <- extract_metrics(results2)
+
+library(tidyverse)
+
+build_df_all2_from_results2 <- function(results2) {
+  k_levels <- c("k5", "k20", "k100")
+  
+  safe_extract <- function(x) if (is.null(x)) NA_real_ else x
+  
+  df_all2 <- map_dfr(seq_along(results2), function(rep_idx) {
+    rep_result <- results2[[rep_idx]]
+    
+    map_dfr(k_levels, function(k_name) {
+      sim <- rep_result[[k_name]]
+      
+      se_vals <- c(
+        safe_extract(sim$SE_ridge_beta1),
+        safe_extract(sim$SE_lasso_beta1),
+        safe_extract(sim$SE_adlasso1_beta1),
+        safe_extract(sim$SE_adlasso2_beta1),
+        NA, NA,
+        safe_extract(sim$SE_ridge_beta2),
+        safe_extract(sim$SE_lasso_beta2),
+        safe_extract(sim$SE_adlasso1_beta2),
+        safe_extract(sim$SE_adlasso2_beta2),
+        NA, NA
+      )
+      
+      fdr_vals <- c(
+        NA,
+        safe_extract(sim$FDR_lasso_beta1),
+        safe_extract(sim$FDR_adlasso1_beta1),
+        safe_extract(sim$FDR_adlasso2_beta1),
+        safe_extract(sim$FDR_ridgekn_beta1),
+        safe_extract(sim$FDR_lassokn_beta1),
+        NA,
+        safe_extract(sim$FDR_lasso_beta2),
+        safe_extract(sim$FDR_adlasso1_beta2),
+        safe_extract(sim$FDR_adlasso2_beta2),
+        safe_extract(sim$FDR_ridgekn_beta2),
+        safe_extract(sim$FDR_lassokn_beta2)
+      )
+      
+      power_vals <- c(
+        NA,
+        safe_extract(sim$power_lasso_beta1),
+        safe_extract(sim$power_adlasso1_beta1),
+        safe_extract(sim$power_adlasso2_beta1),
+        safe_extract(sim$power_ridgekn_beta1),
+        safe_extract(sim$power_lassokn_beta1),
+        NA,
+        safe_extract(sim$power_lasso_beta2),
+        safe_extract(sim$power_adlasso1_beta2),
+        safe_extract(sim$power_adlasso2_beta2),
+        safe_extract(sim$power_ridgekn_beta2),
+        safe_extract(sim$power_lassokn_beta2)
+      )
+      
+      tibble(
+        k = as.integer(str_remove(k_name, "k")),
+        SE = se_vals,
+        FDR = fdr_vals,
+        power = power_vals,
+        beta_type = rep(c("beta1", "beta2"), each = 6),
+        method = rep(c("Ridge", "LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs"), 2)
+      )
+    })
+  })
+  
+  return(df_all2)
+}
+
+df_all2 <- build_df_all2_from_results2(results2)
+
+
+MSE_beta1 <- data.frame(
+  SE_ridge_beta1 <- c(averaged_metrics_by_k[["k5"]][["SE_ridge_beta1"]], averaged_metrics_by_k[["k20"]][["SE_ridge_beta1"]], averaged_metrics_by_k[["k100"]][["SE_ridge_beta1"]]),
+  SE_lasso_beta1 <- c(averaged_metrics_by_k[["k5"]][["SE_lasso_beta1"]], averaged_metrics_by_k[["k20"]][["SE_lasso_beta1"]], averaged_metrics_by_k[["k100"]][["SE_lasso_beta1"]]),
+  SE_adlasso1_beta1 <- c(averaged_metrics_by_k[["k5"]][["SE_adlasso1_beta1"]], averaged_metrics_by_k[["k20"]][["SE_adlasso1_beta1"]], averaged_metrics_by_k[["k100"]][["SE_adlasso1_beta1"]]),
+  SE_adlasso2_beta1 <- c(averaged_metrics_by_k[["k5"]][["SE_adlasso2_beta1"]], averaged_metrics_by_k[["k20"]][["SE_adlasso2_beta1"]], averaged_metrics_by_k[["k100"]][["SE_adlasso2_beta1"]])
+)
+colnames(MSE_beta1) <- c("Ridge", "LASSO", "AdLASSO1", "AdLASSO2")
+rownames(MSE_beta1) <- c("k = 5", "k = 20", "k = 100")
+
+kable(MSE_beta1, format = "latex", caption = "MSE dla pierwszego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+MSE_beta2<- data.frame(
+  SE_ridge_beta2 <- c(averaged_metrics_by_k[["k5"]][["SE_ridge_beta2"]], averaged_metrics_by_k[["k20"]][["SE_ridge_beta2"]], averaged_metrics_by_k[["k100"]][["SE_ridge_beta2"]]),
+  SE_lasso_beta2 <- c(averaged_metrics_by_k[["k5"]][["SE_lasso_beta2"]], averaged_metrics_by_k[["k20"]][["SE_lasso_beta2"]], averaged_metrics_by_k[["k100"]][["SE_lasso_beta2"]]),
+  SE_adlasso1_beta2 <- c(averaged_metrics_by_k[["k5"]][["SE_adlasso1_beta2"]], averaged_metrics_by_k[["k20"]][["SE_adlasso1_beta2"]], averaged_metrics_by_k[["k100"]][["SE_adlasso1_beta2"]]),
+  SE_adlasso2_beta2 <- c(averaged_metrics_by_k[["k5"]][["SE_adlasso2_beta2"]], averaged_metrics_by_k[["k20"]][["SE_adlasso2_beta2"]], averaged_metrics_by_k[["k100"]][["SE_adlasso2_beta2"]])
+)
+colnames(MSE_beta2) <- c("Ridge", "LASSO", "AdLASSO1", "AdLASSO2")
+rownames(MSE_beta2) <- c("k = 5", "k = 20", "k = 100")
+
+kable(MSE_beta2, format = "latex", caption = "MSE dla drugiego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+ggplot(df_all2 %>% filter(!is.na(SE)), aes(x = method, y = SE, fill = method)) +
+  geom_boxplot(outlier.alpha = 0.3) +
+  facet_grid(beta_type ~ k, labeller = label_both) +
+  scale_y_log10() +
+  theme_minimal() +
+  labs(title = "Porównanie SE", x = "Metoda", y = "Sum of Squared Errors") +
+  scale_fill_brewer(palette = "Pastel2") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+W tabeli ponownie można zobaczyć, że wartość $MSE$ dla AdLASSO2 jest dużo większe niż poprzednio. W przypadku drugiego typu $\beta$ ponownie możemy zauważyć, że dla regresji grzbietowej wszystkie wartości są do siebie podobne, a dla $k = 20$ oraz $k = 100$ najlepsze ze wszystkich. W pozostałych przypadkach najmniejsze wartości są te wyliczone dla AdLASSO1. 
+
+Z kolei patrząc na wykres pudełkowy, ponownie można zobaczyć dość duży rozrzut wartości dla $k = 5$ dla wszystkich estymatorów, poza regresją grzbietową (która dla każdej liczby niezerowych zmiennych, a także bez względu na $\beta$ ma bardzo mały rozrzut). W pozostałych przypadkach wartości zachowują się podobnie - rosną znacznie dla pierwszego typu $\beta$ przy wzroście niezerowych zmienncyh i rosną nieco mniej (z czego najbardziej AdLASSO2) dla drugiego typu $\beta$.
+
+Spójrzmy teraz na uśrednioną moc oraz $FDR$ a także na wykresy pudełkowe tych wartości. 
+
+```{r, echo = FALSE}
+power_beta1 <- data.frame(
+  power_lasso_beta1 <- c(averaged_metrics_by_k[["k5"]][["power_lasso_beta1"]], averaged_metrics_by_k[["k20"]][["power_lasso_beta1"]], averaged_metrics_by_k[["k100"]][["power_lasso_beta1"]]),
+  power_adlasso1_beta1 <- c(averaged_metrics_by_k[["k5"]][["power_adlasso1_beta1"]], averaged_metrics_by_k[["k20"]][["power_adlasso1_beta1"]], averaged_metrics_by_k[["k100"]][["power_adlasso1_beta1"]]),
+  power_adlasso2_beta1 <- c(averaged_metrics_by_k[["k5"]][["power_adlasso2_beta1"]], averaged_metrics_by_k[["k20"]][["power_adlasso2_beta1"]], averaged_metrics_by_k[["k100"]][["power_adlasso2_beta1"]]),
+  power_ridgekn_beta1 <- c(averaged_metrics_by_k[["k5"]][["power_ridgekn_beta1"]], averaged_metrics_by_k[["k20"]][["power_ridgekn_beta1"]], averaged_metrics_by_k[["k100"]][["power_ridgekn_beta1"]]),
+  power_lassokn_beta1 <- c(averaged_metrics_by_k[["k5"]][["power_lassokn_beta1"]], averaged_metrics_by_k[["k20"]][["power_lassokn_beta1"]], averaged_metrics_by_k[["k100"]][["power_lassokn_beta1"]])
+) 
+
+colnames(power_beta1) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(power_beta1) <- c("k = 5", "k = 20", "k = 100")
+
+kable(power_beta1, format = "latex", caption = "Moc dla pierwszego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+power_beta2 <- data.frame(
+  power_lasso_beta2 <- c(averaged_metrics_by_k[["k5"]][["power_lasso_beta2"]], averaged_metrics_by_k[["k20"]][["power_lasso_beta2"]], averaged_metrics_by_k[["k100"]][["power_lasso_beta2"]]),
+  power_adlasso1_beta2 <- c(averaged_metrics_by_k[["k5"]][["power_adlasso1_beta2"]], averaged_metrics_by_k[["k20"]][["power_adlasso1_beta2"]], averaged_metrics_by_k[["k100"]][["power_adlasso1_beta2"]]),
+  power_adlasso2_beta2 <- c(averaged_metrics_by_k[["k5"]][["power_adlasso2_beta2"]], averaged_metrics_by_k[["k20"]][["power_adlasso2_beta2"]], averaged_metrics_by_k[["k100"]][["power_adlasso2_beta2"]]),
+  power_ridgekn_beta2 <- c(averaged_metrics_by_k[["k5"]][["power_ridgekn_beta2"]], averaged_metrics_by_k[["k20"]][["power_ridgekn_beta2"]], averaged_metrics_by_k[["k100"]][["power_ridgekn_beta2"]]),
+  power_lassokn_beta2 <- c(averaged_metrics_by_k[["k5"]][["power_lassokn_beta2"]], averaged_metrics_by_k[["k20"]][["power_lassokn_beta2"]], averaged_metrics_by_k[["k100"]][["power_lassokn_beta2"]])
+) 
+
+colnames(power_beta2) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(power_beta2) <- c("k = 5", "k = 20", "k = 100")
+
+kable(power_beta2, format = "latex", caption = "Moc dla drugiego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+ggplot(df_all2 %>% filter(!is.na(power)), aes(x = method, y = power, fill = method)) +
+  geom_boxplot(outlier.alpha = 0.3) +
+  facet_grid(beta_type ~ k, labeller = label_both) +
+  theme_minimal() +
+  labs(title = "Porównanie mocy", x = "Metoda", y = "Power") +
+  scale_fill_brewer(palette = "Set1") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+FDR_beta1 <- data.frame(
+  FDR_lasso_beta1 <- c(averaged_metrics_by_k[["k5"]][["FDR_lasso_beta1"]], averaged_metrics_by_k[["k20"]][["FDR_lasso_beta1"]], averaged_metrics_by_k[["k100"]][["FDR_lasso_beta1"]]),
+  FDR_adlasso1_beta1 <- c(averaged_metrics_by_k[["k5"]][["FDR_adlasso1_beta1"]], averaged_metrics_by_k[["k20"]][["FDR_adlasso1_beta1"]], averaged_metrics_by_k[["k100"]][["FDR_adlasso1_beta1"]]),
+  FDR_adlasso2_beta1 <- c(averaged_metrics_by_k[["k5"]][["FDR_adlasso2_beta1"]], averaged_metrics_by_k[["k20"]][["FDR_adlasso2_beta1"]], averaged_metrics_by_k[["k100"]][["FDR_adlasso2_beta1"]]),
+  FDR_ridgekn_beta1 <- c(averaged_metrics_by_k[["k5"]][["FDR_ridgekn_beta1"]], averaged_metrics_by_k[["k20"]][["FDR_ridgekn_beta1"]], averaged_metrics_by_k[["k100"]][["FDR_ridgekn_beta1"]]),
+  FDR_lassokn_beta1 <- c(averaged_metrics_by_k[["k5"]][["FDR_lassokn_beta1"]], averaged_metrics_by_k[["k20"]][["FDR_lassokn_beta1"]], averaged_metrics_by_k[["k100"]][["FDR_lassokn_beta1"]])
+)
+
+colnames(FDR_beta1) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(FDR_beta1) <- c("k = 5", "k = 20", "k = 100")
+
+kable(FDR_beta1, format = "latex", caption = "FDR dla pierwszego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+FDR_beta2 <- data.frame(
+  FDR_lasso_beta2 <- c(averaged_metrics_by_k[["k5"]][["FDR_lasso_beta2"]], averaged_metrics_by_k[["k20"]][["FDR_lasso_beta2"]], averaged_metrics_by_k[["k100"]][["FDR_lasso_beta2"]]),
+  FDR_adlasso1_beta2 <- c(averaged_metrics_by_k[["k5"]][["FDR_adlasso1_beta2"]], averaged_metrics_by_k[["k20"]][["FDR_adlasso1_beta2"]], averaged_metrics_by_k[["k100"]][["FDR_adlasso1_beta2"]]),
+  FDR_adlasso2_beta2 <- c(averaged_metrics_by_k[["k5"]][["FDR_adlasso2_beta2"]], averaged_metrics_by_k[["k20"]][["FDR_adlasso2_beta2"]], averaged_metrics_by_k[["k100"]][["FDR_adlasso2_beta2"]]),
+  FDR_ridgekn_beta2 <- c(averaged_metrics_by_k[["k5"]][["FDR_ridgekn_beta2"]], averaged_metrics_by_k[["k20"]][["FDR_ridgekn_beta2"]], averaged_metrics_by_k[["k100"]][["FDR_ridgekn_beta2"]]),
+  FDR_lassokn_beta2 <- c(averaged_metrics_by_k[["k5"]][["FDR_lassokn_beta2"]], averaged_metrics_by_k[["k20"]][["FDR_lassokn_beta2"]], averaged_metrics_by_k[["k100"]][["FDR_lassokn_beta2"]])
+)
+
+colnames(FDR_beta2) <- c("LASSO", "AdLASSO1", "AdLASSO2", "Ridge knockoffs", "LASSO knockoffs")
+rownames(FDR_beta2) <- c("k = 5", "k = 20", "k = 100")
+
+kable(FDR_beta2, format = "latex", caption = "FDR dla drugiego typu beta") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+ggplot(df_all2 %>% filter(!is.na(FDR)), aes(x = method, y = FDR, fill = method)) +
+  geom_boxplot(outlier.alpha = 0.3) +
+  facet_grid(beta_type ~ k, labeller = label_both) +
+  theme_minimal() +
+  labs(title = "Porównanie FDR", x = "Metoda", y = "False Discovery Rate") +
+  scale_fill_brewer(palette = "Set3") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+W przypadku mocy, gdy mamy do czynienia ze zmiennymi zależnymi możemy zobaczyć znaczną poprawę, szczególnie dla knockoffów z regresją grzbietową, dla których moc z każdym z przypadków wynosi 1. Z kolei w pozostałych przypadkach również możemy zobaczyć wzrost i stosunkowo duże wartości. W przypadku drugiego typu $\beta$ ponownie (poza regresją grzbietową) możemy zobaczyć dość niskie wartości dla $k = 20$ oraz $k = 100$. Wyniki są podobne dla tych z niezależnymi wartościami w macierzy $X$, jednak można zauważyć nieco wyższe wyniki tym razem, w szczególności dla $k = 100$ w przypadku drugiego typu wektora $\beta$. 
+
+Patrząc na wykresy pudełkowe, widać, że rozrzut wartości jest tym razem dużo mniejszy, jednak rozkładają się w dość podobny sposób.
+
+W przypadku gdy patrzymy na $FDR$ główną rzeczą, która rzuca nam się w oczy jest brak kontroli $FDR$ dla knockoffów. $FDR$ wynosi w przypadku regresji grzbietowej ponad $0.8$ i ponad $0.5$ w przypadku LASSO. Z kolei dla pozostałych przypadków widzimy podobne wartości (LASSO lub AdLASSO1) lub większe (AdLASSO2). 
+
+Patrząc na wykresy pudełkowe możemy widzieć wzrost wartości AdLASSO2 w stosunku do macierzy X o wyrazach będących niezależnymi zmiennymi losowymi. Dla LASSO również można zobaczyć zmniejszony rozrzut w stosunku do poprzenich wykresów. Z kolei LASSO i regresja grzbietowa z knockoffami mają dużo większe i bliższe sobie wartości niż wcześniej. Widać również większe ustrukturyzowanie danych.
+
+# Podsumowanie
+
+W przypadku tego eksperymentu mogliśmy zobaczyć wady i zalety każdej z poznanych metod regulacyjnych. Estymator regresji grzbietowej ma dość duże $MSE$ przy dużej liczbie istotnych zmiennych (w porównaniu do pozostałych), jednak jednocześnie dość dobrze sobie radzi, gdy wartości $\beta$ są stosunkowo niewielkie (nawet gdy niezerowe) w minimalizowaniu $MSE$. Nie identyfikuje on jednak zmiennych nieistotnych, więc nie jest najlepszym wyborem, gdy na tym nam zależy. Z kolei estymator LASSO identyfikuje zmienne, jednak często niepoprawnie. Jego identyfikacja pogarsza się również w przypadku, gdy mamy do czynienia ze zmiennymi zależnymi. Z kolei adaptacyjne LASSO, jak mogliśmy zobaczyć, możemy dostosowywać do otrzymanych danych. Pierwsze z nich lepiej sobie radzi z danymi niezależnymi, z kolei drugie z takimi, gdzie macierz kowariancji ma niezerowe wartości również poza przekątną. Z kolei knockoffy działają nieco gorzej, gdy mamy do czynienia z macierzą, której elementy na wektorach są zmiennymi zależnymi. Jednocześnie trzeba mieć świadomość, że knockoffy są również bardziej wymagające. 
+
+Zatem w zależności od potrzeby, każdy ze sposobów może działać w dobry sposób. Regresja grzbietowa dobrze minimalizuje $MSE$, w przypadku, gdy mamy dużo niezerowych wartości, które są niewielkie. LASSO jest dobre, gdy chcemy dokonać wstępnej selekcji zmiennych, jednak dla większej precyzji - dobrze będzie skorzystać z adaptacyjnego LASSO (jednak trzeba pamiętać o dobrym doborze wag). Z kolei knockoffy są dobrym wyborem, gdy zależy nam na kontroli $FDR$, z zastrzeżeniem, że dla macierzy o elementach, które nie są niezależne, może nie występować ta kontrola, jak i również przy pojedynczym powtórzeniu możemy nie widzieć kontroli $FDR$, gdyż metoda może nie identyfikować żadnej ze zmiennych.  
+
+
+

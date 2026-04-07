@@ -1,0 +1,719 @@
+---
+title: "Analiza wpływu liczby zmiennych objaśniających na liczbę fałszywych odkryć"
+author: "Amelia Olejniczak"
+output: 
+  pdf_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+    dev: cairo_pdf
+    latex_engine: lualatex
+header-includes:
+  - \usepackage{polyglossia}
+  - \setmainlanguage{polish}
+  - \usepackage{selnolig}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Wprowadzenie
+
+Ten raport będzie się skupiać na analizie fałszywych odkryć (w tym wartości FDR oraz FWER) w zależności od liczby zmiennych objaśniających użytych do wyjaśnienia modelu. Zostanie również sprawdzone, jak korekta Boniferroniego oraz Benjaminiego-Hochberga wpływa na powyższe wartości. W celu tej analizy przeprowadzę pewne symulacje na macierzy $X_{1000 \times 950}$, w której każdy element jest niezależną zmienną losową z rozkładu normalnego $N(0, \sigma = \frac{1}{\sqrt{1000}})$. Wektor zmiennej odpowiedzi pochodzić będzie z modelu $Y = X \beta + \epsilon$. Analizę przeprowadzę w oparciu o modele wykorzystujące kolejno 5, 10, 20, 100, 500 oraz 950 zmiennych objaśniających. W pierwszej kolejności przeprowadzę analizę dla jednego losowo wyznaczonego modelu, a następnie wykonam analizę dla tysiąckrotnego powtórzenia losowania. 
+
+# Analiza przykładowego modelu
+
+```{r, echo = FALSE}
+set.seed(1)
+n <- 1000
+p <- 950
+num_rep <- 1000
+
+X <- matrix(rnorm(n * p, sd = 1 / sqrt(1000)), nrow = n, ncol = p)
+beta <- c(rep(3, 5), rep(0, 945))
+num <- c(5, 10, 20, 100, 500, 950)
+```
+
+## Analiza estymatora największych kwadratów dla wektora $\beta$
+
+Estymator największych kwadratów dla wektora $\beta$ wyliczamy przy pomocy wzoru $$\hat{\beta} = (\mathbb{X}' \mathbb{X})^{-1} \mathbb{X}' Y$$ gdzie $\mathbb{X}$ oznacza wygenerowaną macierz planu (w naszym przypadku jest to macierz obcięta do $k$ kolumn). Wyniki dla poszczególnych $\beta_i$ zaprezentuję na wykresach. 
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE, fig.height = 3.5}
+library(dplyr)
+library(tidyr)
+
+betas_info <- readRDS("C:\\Users\\ameli\\Documents\\betas_info.rds")
+
+library(ggplot2)
+ggplot(betas_info, aes(x = estimate, fill = factor(model_size))) +
+  geom_histogram(bins = 30, color = "black", alpha = 0.6) +
+  facet_wrap(~model_size, scales = "free") +  
+  labs(title = "Histogramy współczynników beta dla różnych rozmiarów modeli",
+       x = "Estymator beta",
+       y = "Liczność",
+       fill = "Liczba zmiennych") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Bazując na powyższych wykresach można stwierdzić, że im większa liczba zmiennych objaśniających, tym rozkład jest bliższy normalnemu. Można to w szczególności zauważyć dla liczby zmiennych 500 oraz 950. Ostatni z wykresów ma zarówno najmniejsze, jak i największe wartości (plasują się one między około -20, a 20). Wykresy dla liczby zmiennych 5 niewiele nam mówią na temat fałszywych odkryć biorąc pod uwagę, że wśród pięciu pierwszych $\beta_i$ nie znajduje się wartość, która mogłaby być fałszywym odkryciem (wszystkie $\beta_i$ wynoszą 3). Dla liczby zmiennych $10$ również niewiele mogę powiedzieć w tym temacie, gdyż wartości estymatorów pojawiające się na histogramie nie powtarzają się i wszystkie są mniej więcej tak jak oczekiwane (czyli okolice $0$ oraz okolice $3$). Im większa liczba zmiennych objaśniających możemy zauważyć większe wartości odstające, a zatem coraz więcej źle przypisanych wartości. 
+
+## Wyniki testów istotności parametrów $\beta_i$
+
+Zajmijmy się teraz testami istotności dla parametrów $\beta_i$. Dla każdego elementu wektora $\beta$ będziemy testować $$H_0: \beta_i = 0 \qquad vs. \qquad H_1: \beta_i \ne 0$$ Testy będę wykonywać na poziomie istotności $\alpha = 0.05$. W przypadku takiego wielokrotnego testowania będę korzystać ze statystyki $$T_i = \frac{\hat{\beta_i}}{s(\hat{\beta_i})}$$ gdzie $s(\hat{\beta_i}) = s \sqrt{(\mathbb{X}'\mathbb{X})_{i, i}^{-1}}$, a $s$ jest estymowanym odchyleniem standardowym szumu. Ponieważ statystyka $T_i$ ma rozkład t-studenta z $n - k$ stopniami swobody (gdzie $n$ to liczba obserwacji, w naszym przypadku $n = 1000$, a $k$ to liczba zmiennych wykorzystanych w modelu) to p-wartość wyliczymy jako $p_i = 2(1 - \varphi (|T_i|))$ gdzie $\varphi$ to dystrybuanta rozkładu t-studenta z $n - k$ stopniami swobody.
+
+Spójrzmy teraz na wyliczone w powyższy sposóbp-wartości dla parametrów $\beta_i$ dla każdego rozmiaru modelu. Warto zauważyć, że powinniśmy odrzucać hipotezę zerową jedynie dla pięciu pierwszych parametrów $\beta$, zatem wartości powinny być większe od $0.05$ poza tym. Sprawdźmy wykresy, aby móc stwierdzić, czy można zauważyć taką zależność. W tym celu na wykresach umieszczę również pionową linię oznaczającą wartość $\alpha$.
+
+```{r, echo = FALSE, fig.height = 3.5}
+ggplot(betas_info, aes(x = test, fill = factor(model_size))) +
+  geom_histogram(bins = 30, color = "black", alpha = 0.6) +
+  facet_wrap(~model_size, scales = "free") +  
+  labs(title = "Histogramy współczynników beta dla różnych rozmiarów modeli",
+       x = "P-wartość",
+       y = "Liczność",
+       fill = "Liczba zmiennych") +
+  theme_minimal() +
+  geom_vline(xintercept = 0.05, color = "darkblue", lwd = 1) +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+Jak widać, w piweszym wierszu wykresów możemy zobaczyć, że ich wartości są dość podobne do oczekiwanych. W przypadku pięciu zmiennych objaśniających, wszystkie wartości znajdują się poniżej wyrysowanej linii. Dla $10$ oraz $20$ możemy zobaczyć, że odrzucone zostaną 4 hipotezy zerowe, natomiast jedna wartość jest na tyle blisko, że nie można wykluczyć, że powodem takiej sytuacji jest konkretne losowanie. 
+
+Spójrzmy teraz na pozostałe trzy wykresy, gdzie sytuacja się znacznie różni. Możemy zauważyć, że jest więcej sytuacji, gdzie odrzucamy $H_0$ (lub otrzymujemy p-wartość bliską odrzucenia). W przypadku $100$ nie jest to duża liczba (chociaż wciąż większa niż powinna), natomiast dla $500$ i tym bardziej $950$ odrzucamy zbyt dużo hipotez zerowych. Można więc zauważyć wzrost fałszywych odkryć, gdy mamy do czynienia z większą liczbą nieistotnych współczynników.
+
+## Odchylenie standardowe i długości przedziałów dla $\beta_1$ i różnych rozmiarów modelu.
+
+Zajmujmy się teraz badaniem wartości odchylenia standardowego oraz długości przedziałów ufności dla $\beta_1$ w zależności od rozmiaru modelu. Jak już wcześniej wspomniałam, odchylenie standardowe wylicza się w następujący sposób $$s(\hat{\beta_1}) = s \sqrt{(\mathbb{X}'\mathbb{X})_{i, i}^{-1}}$$ $$s = \sqrt{\frac{1}{n - k} \sum^n_{i = 1} (Y_i - \sum^k_{j = 1} \mathbb{X}_{ij} \hat{\beta_j})^2}$$ natomiast w przypadku wyliczenia długości przedziału korzystamy z tego, że 95% przedział ufności to $$\hat{\beta_1} \pm t_c s(\hat{\beta_1})$$ gdzie $t_c$ to kwantyl rzędu $1 - \frac{\alpha}{2}$ rozkładu t-studenta z $n - k$ stopniami swobody. Długość przedziału to zatem $2 t_c s(\hat{\beta_1})$. Poniżej przedstawiam na wykresach wyliczone wartości.
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE, fig.height = 3.5}
+library(gridExtra)
+
+beta1_info <- readRDS("C:\\Users\\ameli\\Documents\\beta1_info.rds")
+
+p1 <- ggplot(beta1_info, aes(x = model_size, y = std)) +
+  geom_point(fill = "plum", color = "black", shape = 21, size = 2, stroke = 0.75) +
+  labs(title = "Odchylenie standardowe",
+       x = "Liczba zmiennych",
+       y = "Odchylenie standardowe") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+p2 <- ggplot(beta1_info, aes(x = model_size, y = interval_length)) +
+  geom_point(fill = "plum", color  = "black", shape = 21, size  = 2, stroke = 0.75) +
+  labs(title = "Długości przedziałów ufności",
+       x = "Liczba zmiennych",
+       y = "Długość przedziału") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Jak widać, oba wykresy są do siebie bardzo podobne, niemal identyczne. Jest to dość oczywiste, biorąc pod uwagę, że długość przedziału ufności zależy bezpośrednio od odchylenia standardowego. Warto zauważyć, że dla pierwszych trzech liczb zmiennych punkty są bardzo blisko siebie, niemal na tym samym poziomie, dla $100$ również nie można zauważyć zbyt dużego wzrostu, jednak dla $500$ i $950$ na obu wykresach można zauważyć znaczny wzrost tych wartości. 
+
+Jest to zrozumiałe, nawet patrząc na histogramy estymatorów $\beta$, na których dla większej liczby zmiennych mogliśmy zobaczyć większy rozrzut wśród wartości (a zatem większe odchylenie standardowe). Z kolei, jak już wcześniej napisałam, długość przedziału ufności jest bezpośrednio związana z odchyleniem standardowym, co przekłada się na podobny wygląd wykresu. Możemy widzieć ten wzrost również ze względu na to, że dla coraz większej liczby zmiennych objaśniających, zmniejsza się liczba stopni swobody i tym samym wzrasta wartość $t_c$.
+
+## Analiza liczby prawdziwych i fałszywych odkryć
+
+Spójrzmy teraz na liczbę prawdziwych i fałszywych odkryć, a zatem najważniejsze zagadnienie tego raportu. Odkrycie oznacza odrzucenie $H_0$, więc intuicyjnie prawdziwe i fałszywe odkrycie to odpowiednio poprawnie i niepoprawnie odrzucone $H_0$. Umieszczę je na wykresie punktowym (podobnym do tych dla odchylenia standardowego oraz długości przedziałów), a także w tabelach postaci pokazanej poniżej
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE, results="asis"}
+library(knitr)
+library(kableExtra)
+
+tabela <- data.frame(
+  "Przyjęte" = c("U", "T", "k-R"),
+  "Odrzucone" = c("V", "S", "R"),
+  "Razem" = c("k0", "k-k0", "k")
+)
+
+colnames(tabela) <- c("Przyjęte", "Odrzucone", "Razem")
+rownames(tabela) <- c("Prawdziwe", "Fałszywe", "Razem")
+
+kable(tabela, align = "c", booktabs = TRUE, caption = "Przykład") %>%
+  kable_styling(full_width = FALSE, position = "center")
+```
+
+Pozwoli to na dokładniejszą analizę i większą czytelność danych. W powyższej tabeli wartości $U$ oraz $S$ oznaczają poprawne decyzje (odpowiednio przyjęcie $H_0$ gdy jest prawdziwa oraz odrzucenie $H_0$, gdy jest fałszywa), a $V$ i $T$ błędy I i II rodzaju. Warto zauważyć, że w naszym przypadku $k - k_0$ będzie równe 5 bez względu na wielkość $k$, gdyż dokładnie 5 mamy zmiennych o niezerowych wartościach $\beta_i$. 
+
+```{r, echo = FALSE, message=FALSE, warning = FALSE, fig.height = 3.5}
+discoveries_one_try <- readRDS("C:\\Users\\ameli\\Documents\\discoveries_one_try.rds")
+discoveries_1_df <- readRDS("C:\\Users\\ameli\\Documents\\discoveries.rds")
+
+tables <- lapply(1:6, function(x) {
+  tabela_df <- data.frame(
+    "Przyjęte" = c(num[x] - 5 - discoveries_one_try[2, x], 5 - discoveries_one_try[1, x], num[x] - 5 - discoveries_one_try[2, x] + 5 - discoveries_one_try[1, x]),
+    "Odrzucone" = c(discoveries_one_try[2, x], discoveries_one_try[1, x], discoveries_one_try[2, x] + discoveries_one_try[1, x]),
+    "Razem" = c(num[x] - 5, 5, num[x])
+  )
+  colnames(tabela_df) <- c("Przyjęte", "Odrzucone", "Razem")
+  rownames(tabela_df) <- c("Prawdziwe", "Fałszywe", "Razem")
+  return(tabela_df)
+})
+
+p1 <- ggplot(discoveries_1_df, aes(x = model_size, y = true_discoveries)) +
+  geom_point(fill = "lightgreen", color = "black", shape = 21, size = 2, stroke = 0.75) +
+  labs(title = "Prawdziwe odkrycia",
+       x = "Liczba zmiennych",
+       y = "Prawdziwe odkrycia") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+p2 <- ggplot(discoveries_1_df, aes(x = model_size, y = false_discoveries)) +
+  geom_point(fill = "lightgreen", color = "black", shape = 21, size = 2, stroke = 0.75) +
+  labs(title = "Fałszywe odkrycia",
+       x = "Liczba zmiennych",
+       y = "Fałszywe odkrycia") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Przyglądając się w pierwszej kolejności wykresom fałszywych i prawdziwych odkryć Jak widać powyżej, liczba prawdziwych odkryć jest odwrotnie proporcjonalna do rozmiaru próby, z kolei liczba fałszywych odkryć wzrasta wraz ze wzrostem próby. Liczba fałszywych odkryć w tym przypadku jest zgodna z tym, w jaki sposób rozkładały się wykresy testów istotności, zatem nie daje nam to dodatkowych wniosków. Z kolei liczba prawdziwych odkryć jest dla nas nową informacją.
+
+\newpage
+
+```{r, echo = FALSE, warning= FALSE, message = FALSE, results="asis"}
+t1 <- kable(tables[[1]], format = "latex", align = "ccc", escape = F)
+t2 <- kable(tables[[2]], format = "latex", align = "ccc", escape = F)
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","Wyniki testowania, k = 5","}",
+          t1,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","Wyniki testowania, k = 10","}",
+          t2,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+
+t3 <- kable(tables[[3]], format = "latex", align = "ccc", escape = F)
+t4 <- kable(tables[[4]], format = "latex", align = "ccc", escape = F)
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","Wyniki testowania, k = 20","}",
+          t3,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","Wyniki testowania, k = 100","}",
+          t4,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+
+t5 <- kable(tables[[5]], format = "latex", align = "ccc", escape = F)
+t6 <- kable(tables[[6]], format = "latex", align = "ccc", escape = F)
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","Wyniki testowania, k = 500","}",
+          t5,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","Wyniki testowania, k = 950","}",
+          t6,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+```
+
+Patrząc na powyższe tabele można również zobaczyć zmniejszenie liczby prawdziwych odkryć i wzrost fałszywych. W szczególności między rozmiarem $500$ i rozmiarem $950$ można zauważyć znaczący wzrost fałszywych odkryć oraz zmniejszenie liczby prawdziwych odkryć z 3 do 2. Można więc tym bardziej zauważyć, że jeśli odrzucamy $158$ hipotez zerowych, z czego tylko 2 poprawnie, to można stwierdzić, że nie jest to dobry model. W przypadku powyższych wartości można stwierdzić, że najlepiej poradziły sobie, ponownie, trzy pierwsze rozmiary. Dla tych rozmiarów jedynie dla $k = 20$ możemy zauważyć niepoprawnie przyjętą hipotezę zerową. Gdy zwiększamy rozmiary do 100, a następnie 500 i 950 zmiennych objaśniających można zobaczyć znaczne pogorszenie się tych modeli. Wyraźnie widać wspominany wzrost fałszywych odkryć, jak i spadek prawdziwych.
+
+## Analiza korekty Bonferroniego
+
+Spójrzmy teraz ponownie na fałszywe odkrycia, tym razem nakładając korektę Bonferroniego na testy. Polega ona na odrzucaniu hipotezy zerowej kiedy p-wartość jest mniejsza od $\alpha$ podzielonego na liczbę zmiennych objaśniających, w przeciwieństwie do tradycyjnego testowania, gdzie odrzucamy $H_0$ dla p-wartości po prostu mniejszych od $\alpha$. Inaczej $$p_i \leq \frac{\alpha}{k}$$ Zatem mamy do czynienia z bardzo intuicyjnym rozwiązaniem problemu - jeśli przy dodaniu nieistotnych zmiennych odrzucamy zbyt dużo hipotez, których nie powinniśmy odrzucać, przeskalowanie poziomu istotności przez ich liczbę zmiennych powinno (w teorii) rozwiązać napotkany problem. Sprawdzę to jednak (ponownie) na wykresach fałszywych i prawdziwych odkryć, a następnie tabelach analogicznych do tych z poprzedniego podpunktu.
+
+```{r, echo = FALSE, message=FALSE, warning = FALSE, fig.height = 3.5}
+tables_bon <- lapply(1:6, function(x) {
+  tabela_df <- data.frame(
+    "Przyjęte" = c(num[x] - 5 - discoveries_one_try[4, x], 5 - discoveries_one_try[3, x], num[x] - 5 - discoveries_one_try[4, x] + 5 - discoveries_one_try[3, x]),
+    "Odrzucone" = c(discoveries_one_try[4, x], discoveries_one_try[3, x], discoveries_one_try[3, x] + discoveries_one_try[4, x]),
+    "Razem" = c(num[x] - 5, 5, num[x])
+  )
+  colnames(tabela_df) <- c("Przyjęte", "Odrzucone", "Razem")
+  rownames(tabela_df) <- c("Prawdziwe", "Fałszywe", "Razem")
+  return(tabela_df)
+})
+
+p1 <- ggplot(discoveries_1_df, aes(x = model_size, y = true_discoveries_bon)) +
+  geom_point(fill = "lightgreen", color = "black", shape = 21, size = 2, stroke = 0.75) +
+  labs(title = "Prawdziwe odkrycia (Bonferroni)",
+       x = "Liczba zmiennych",
+       y = "Prawdziwe odkrycia") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+p2 <- ggplot(discoveries_1_df, aes(x = model_size, y = false_discoveries_bon)) +
+  geom_point(fill = "lightgreen", color = "black", shape = 21, size = 2, stroke = 0.75) +
+  labs(title = "Fałszywe odkrycia (Bonferroni)",
+       x = "Liczba zmiennych",
+       y = "Fałszywe odkrycia") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+```{r, echo = FALSE, warning= FALSE, message = FALSE, results="asis"}
+t1 <- kable(tables_bon[[1]], format = "latex", align = "ccc", escape = F)
+t2 <- kable(tables_bon[[2]], format = "latex", align = "ccc", escape = F)
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","Wyniki testowania, k = 5","}",
+          t1,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","Wyniki testowania, k = 10","}",
+          t2,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+
+t3 <- kable(tables_bon[[3]], format = "latex", align = "ccc", escape = F)
+t4 <- kable(tables_bon[[4]], format = "latex", align = "ccc", escape = F)
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","Wyniki testowania, k = 20","}",
+          t3,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","Wyniki testowania, k = 100","}",
+          t4,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+
+t5 <- kable(tables_bon[[5]], format = "latex", align = "ccc", escape = F)
+t6 <- kable(tables_bon[[6]], format = "latex", align = "ccc", escape = F)
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","Wyniki testowania, k = 500","}",
+          t5,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","Wyniki testowania, k = 950","}",
+          t6,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+```
+
+Jak widać, zarówno na wykresach, jak i w tabelach, można zauważyć znaczne polepszenie się większych modeli po użyciu korekty Bonferroniego, przynajmniej w przypadku liczby fałszywych odkryć. Jedynie dla największego modelu można zauważyć jedno fałszywe odkrycie, co jest dużą poprawą, jeśli spojrzymy na poprzednie tabele i wykresy, gdzie wartości sięgały ponad 150. Widać jednak, że mimo tego, że znacznie mniej jest fałszywych odkryć, jest też mniej tych prawdziwych. Nawet dla $k = 5$, gdzie wcześniej poprawnie odrzucone zostały wszystkie hipotezy, tym razem jedną z nich niepoprawnie przyjęliśmy. Można się tego było spodziewać, biorąc pod uwagę, że zmniejszając p-wartość zmniejszamy ją dla wszystkich wartości. Sprawia to, że zmniejszamy liczbę fałszywych odkryć, ale zmniejszamy również liczbę prawdziwych. Aby odrzucić hipotezę zerową (szczególnie dla bardzo dużych wartości $k$) z korektą Bonferroniego potrzebujemy minimalnych p-wartości. Przykładowo, dla $k = 950$ $p_i \leq$ `r 0.05/950`. Jest to naprawdę mało, więc estymatory $\beta_i$ muszą być bardzo duże, aby było możliwe taką wartość uzyskać.
+
+## Analiza korekty Benjaminiego-Hochberga
+
+Inną korektą, z której można skorzystać, aby zmniejszyć liczbę fałszywych odkryć jest korekta Beniaminiego-Hochberga (do której będę się odnosić również jako BH w dalszej części raportu). W jej przypadku odrzucanie hipotez wygląda nieco inaczej. W tym przypadku sortujemy p-wartości dla wektora $\beta$ w kolejności rosnącej. Następnie mając posortowane p-wartości $p_{(1)} \leq p_{(2)} \leq ... \leq p_{(k)}$ wyznaczamy $i_0$ oznaczające największy indeks taki, że $p_{(i)} \leq \frac{i}{k} \alpha$ $$i_0 = max \left\{ i: p_{(i)} \leq \frac{i}{k} \alpha \right\}$$ Na koniec odrzucamy wszystkie hipotezy o posortowanym indeksie poniżej $i_0$. Intuicyjnie - ponownie skalujemy poziom istotności przez rozmiar modelu, ale jednocześnie, przez $i$ w mianowniku, jesteśmy w stanie dostosować próg odrzucenia do wielkości p-wartości. W ten sposób może to nam pomóc rzadziej niż w przypadku korekty Bonferroniego przyjmować hipotezy zerowe, które powinniśmy odrzucić. Sprawdźmy na wykresie oraz w tabelach czy możemy faktycznie zauważyć taką tendencję.
+
+```{r, echo = FALSE, message=FALSE, warning = FALSE, fig.height = 3.5}
+tables_bh <- lapply(1:6, function(x) {
+  tabela_df <- data.frame(
+    "Przyjęte" = c(num[x] - 5 - discoveries_one_try[6, x], 5 - discoveries_one_try[5, x], num[x] - 5 - discoveries_one_try[6, x] + 5 - discoveries_one_try[5, x]),
+    "Odrzucone" = c(discoveries_one_try[6, x], discoveries_one_try[5, x], discoveries_one_try[5, x] + discoveries_one_try[6, x]),
+    "Razem" = c(num[x] - 5, 5, num[x])
+  )
+  colnames(tabela_df) <- c("Przyjęte", "Odrzucone", "Razem")
+  rownames(tabela_df) <- c("Prawdziwe", "Fałszywe", "Razem")
+  return(tabela_df)
+})
+
+p1 <- ggplot(discoveries_1_df, aes(x = model_size, y = true_discoveries_bh)) +
+  geom_point(fill = "lightgreen", color = "black", shape = 21, size = 2, stroke = 0.75) +
+  labs(title = "Prawdziwe odkrycia (Bonferroni)",
+       x = "Liczba zmiennych",
+       y = "Prawdziwe odkrycia") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+p2 <- ggplot(discoveries_1_df, aes(x = model_size, y = false_discoveries_bh)) +
+  geom_point(fill = "lightgreen", color = "black", shape = 21, size = 2, stroke = 0.75) +
+  labs(title = "Fałszywe odkrycia (BH)",
+       x = "Liczba zmiennych",
+       y = "Fałszywe odkrycia") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+W pierwszej kolejności, patrząc na powyższe wykresy można potwierdzić tę własność, o której mówiłam wyżej. Wciąż maleje liczba prawdziwych odkryć i wciąż mamy jedno fałszywe odkrycie dla największego z modeli, ale dla najmniejszego z modeli udało się odrzucić wszystkie hipotezy, które powinny zostać odrzucone. Można więc zobaczyć poprawę, o której wspominałam wcześniej. Spójrzmy jeszcze tabele, aby zobaczyć dokładniejsze wartości.
+
+```{r, echo = FALSE, warning= FALSE, message = FALSE, results="asis"}
+t1 <- kable(tables_bh[[1]], format = "latex", align = "ccc", escape = F)
+t2 <- kable(tables_bh[[2]], format = "latex", align = "ccc", escape = F)
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","Wyniki testowania, k = 5","}",
+          t1,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","Wyniki testowania, k = 10","}",
+          t2,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+
+t3 <- kable(tables_bh[[3]], format = "latex", align = "ccc", escape = F)
+t4 <- kable(tables_bh[[4]], format = "latex", align = "ccc", escape = F)
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","Wyniki testowania, k = 20","}",
+          t3,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","Wyniki testowania, k = 100","}",
+          t4,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+```
+
+\newpage
+
+```{r, echo = FALSE, warning= FALSE, message = FALSE, results="asis"}
+t5 <- kable(tables_bh[[5]], format = "latex", align = "ccc", escape = F)
+t6 <- kable(tables_bh[[6]], format = "latex", align = "ccc", escape = F)
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","Wyniki testowania, k = 500","}",
+          t5,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","Wyniki testowania, k = 950","}",
+          t6,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+```
+
+Jak widać w tabelach, porównując do tych z korektą Bonferroniego, nie ma różnicy w przypadku fałszywych odkryć, w obu przypadkach niemal całkiem zostały zniwelowane. Z kolei jeśli chodzi o prawdziwe odkrycia mamy ich więcej, dla trzech najmniejszych $k$. W pozostałych nie ma różnicy.
+
+Warto jednak zauważyć, że dla trzech najmniejszych rozmiarów nałożenie korekty BH nie robi różnicy jeśli chodzi zarówno o liczbę prawdziwych jak i fałszywych odkryć (przynajmnniej dla naszego konkretnego losowania). Korekta Bonferroniego jest dla nich wręcz gorsza, gdyż tracimy prawdziwe odkrycia.
+
+# Analiza powtórzonego doświadczenia
+
+W drugiej części raportu zajmę się analizą średniej liczby prawdziwych i fałszywych odkryć dla powtórzenia tworzenia modeli $1000$ razy, dzięki czemu będę mogła wyciągnąć bardziej konkretne wnioski, które nie będą bazowały na jednej, konkretnej próbie, która mogła mieć bezpośredni wpływ na wyniki.
+
+## Analiza średniej wariancji estymatora $\beta_1$ w porównaniu do wartości teoretycznych
+
+W pierwszej kolejności zajmę się analizą średniej wariancji estymatora $\beta_1$. Porównam je do teoretycznych wartości wariancji tego estymatora. Wyliczymy ją korzystając z odwrotnego rozkładu Wisharta.
+
+Zanim zaczniemy porównywać jakiekolwiek wartości, wyjaśnijmy w jaki sposób możemy skorzystać z odwrotnego rozkładu Wisharta do wyliczenia teoretycznej wariancji estymatora $\beta_1$. Mając macierz $Z_{n \times p}$, gdzie każdy element macierzy $Z$ ma rozkład normalny $N(0, v)$. Wtedy $Z'Z \sim W(V, p, n)$ oraz $(Z'Z)^{-1} \sim W^{-1}(V, p, n)$ z kolei $\mathbb{E} \left[ (Z'Z)^{-1} \right] = \frac{V^{-1}}{n - p -1}$, gdzie $n > p+1$. Możemy to odnieść do naszej sytuacji biorąc $n$ jako liczbę obserwacji, $p$ to rozmiar modelu. Wtedy $\mathbb{X}'\mathbb{X} \sim W(V, p, n)$, a $V$ to macierz kowariancji zmiennych losowych. Stąd $V = \sigma^2 I = \frac{1}{1000} I$. Możemy to wykorzystać do wyliczenia $\mathbb{E} \left[ Var(\hat{\beta}) \right]$, ponieważ wiemy, że $\hat{\beta} \sim N(\beta, \sigma^2 (\mathbb{X}'\mathbb{X})^{-1})$, a $\sigma^2 = 1$ (jako wariancja $\epsilon$). Podstawiając otrzymujemy, że $\mathbb{E} \left[ Var(\hat{\beta}) \right] = \mathbb{E} \left[ (\mathbb{X}'\mathbb{X})^{-1} \right] = \frac{1000I}{1000 - p - 1}$. Pierwszy wyraz otrzymanej macierzy będzie szukaną wartością. Poniżej przedstawiam tabele dla średnich wartości wariancji oraz dla powyżej opisanych średnich wyliczeń.
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+library(kableExtra)
+variance_df <- readRDS("C:\\Users\\ameli\\Documents\\variance_df.rds")
+
+library(dplyr)
+variance_mean_table <- variance_df %>%
+  group_by(model_size) %>%
+  summarise(variance = mean(variance), interval = mean(interval))
+
+theoretical_results <- sapply(num, function(k) {
+  variance_k <- 1000 / (1000 - k - 1)
+  interval_k <- 2 * qt(0.975, 1000 - k) * sqrt(variance_k)
+  c(variance_k, interval_k)
+})
+
+theoretical_df <- data.frame(
+  model_size = num,
+  variance = theoretical_results[1, ],  
+  interval = theoretical_results[2, ]   
+)
+
+variance_mean_table_var <- variance_mean_table %>%
+  select(variance) %>%
+  t() %>%
+  as.data.frame()
+
+rownames(variance_mean_table_var) <- c("Średnia wariancja")
+colnames(variance_mean_table_var) <- c("k = 5", "k = 10", "k = 20", "k = 100", "k = 500", "k = 950")
+
+kable(variance_mean_table_var, caption = "Średnia wariancja w zależności od rozmiaru modelu", align = "ccc", escape = F) %>%
+  kable_styling(position = "center")
+
+theoretical_results_var <- theoretical_df %>%
+  select(variance) %>%
+  t() %>%
+  as.data.frame()
+
+rownames(theoretical_results_var) <- c("Teoretyczna wariancja")
+colnames(theoretical_results_var) <- c("k = 5", "k = 10", "k = 20", "k = 100", "k = 500", "k = 950")
+
+kable(theoretical_results_var, caption = "Teoretyczna wariancja w zależności od rozmiaru modelu", align = "ccc", escape = F) %>%
+  kable_styling(position = "center")
+```
+
+Jak widać w powyższych tabelach, wartości są do siebie bardzo podobne i wzrastają wraz ze wzrostem rozmiaru modelu. Jest to analogiczny wniosek do tego, który mieliśmy analizując odchylenie standardowe dla przykładowych modeli. Jest to zrozumiałe biorąc pod uwagę sam teoretyczny wzór z którego korzystaliśmy przy wyliczaniu wariancji. Im większa wartość $p$, tym mniejszy mianownik, a zatem większa wartość wariancji. Średnie wartości z losowanych prób są bardzo podobne do teoretycznych wyliczeń, zatem jest jak oczekiwano.
+
+## Analiza średniej długości przedziału ufności dla $\beta_1$ z teoretycznym oszacowaniem
+
+Teraz zajmiemy się średnią długością przedziału ufności, którą wyliczymy podobnie jak dla jednego losowania. Do teoretycznego wyliczenia wykorzystam wyliczone przed chwilą wariancje, które po spierwiastkowaniu dadzą potrzebne odchylenie standardowe. Wyniki, podobnie jak wcześniej, przedstawię w dwóch tabelach.
+
+```{r, echo = FALSE}
+variance_mean_table_int <- variance_mean_table %>%
+  select(interval) %>%
+  t() %>%
+  as.data.frame()
+
+rownames(variance_mean_table_int) <- c("Średnia długość przedziału ufności")
+colnames(variance_mean_table_int) <- c("k = 5", "k = 10", "k = 20", "k = 100", "k = 500", "k = 950")
+
+kable(variance_mean_table_int, caption = "Średnia długość przedziału ufności w zależności od rozmiaru modelu", align = "ccc", escape = F) %>%
+  kable_styling(position = "center")
+
+theoretical_results_int <- theoretical_df %>%
+  select(interval) %>%
+  t() %>%
+  as.data.frame()
+
+rownames(theoretical_results_int) <- c("Teoretyczna długość przedziału ufności")
+colnames(theoretical_results_int) <- c("k = 5", "k = 10", "k = 20", "k = 100", "k = 500", "k = 950")
+
+kable(theoretical_results_int, caption = "Teoretyczna długość przedziału ufności w zależności od rozmiaru modelu", align = "ccc", escape = F) %>%
+  kable_styling(position = "center")
+```
+
+Jak widać, wyniki są takie jakich oczekiwalibyśmy po wcześniej analizowanej wariancji, a także jaki wysnuliśmy w przypadku jednorazowego losowania. Długość $95%$ przedziału ufności rośnie wraz ze wzrostem modelu, co jest związane bezpośrednio ze wzrostem wariancji (zatem również odchylenia standardowego), ale wynika to również z tego, że ze wzrostem rozmiaru modelu rośnie również $t_c$, zatem kwantyl z rozkładu t-studenta. Również można zauważyć, że wartości w obu tabelach są ponownie bardzo do siebie zbliżone.
+
+## Analiza średniej liczby prawdziwych i fałszywych odkryć wraz z teoretycznymi wartościami
+
+Zajmiemy się teraz analizą średniej liczby prawdziwych i fałszywych odkryć bez korekty, z korektą Bonferroniego oraz korektą BH. Dane umieszczę w tabelach oraz na wykresach, aby móc je ze sobą porównać.
+
+\newpage
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+results_discoveries <- readRDS("C:\\Users\\ameli\\Documents\\results_discoveries.rds")
+
+summary_table <- dplyr::bind_rows(results_discoveries) %>%
+  group_by(Correction, NumVars) %>%
+  summarize(MeanTrueDiscoveries = mean(NumTrueDiscoveries),
+            MeanFalseDiscoveries = mean(NumFalseDiscoveries),
+            FWER = mean(FWER),
+            FDR = mean(FDP))
+
+library(tibble)
+
+true_disc <- dplyr::bind_rows(results_discoveries) %>%
+  group_by(Correction, NumVars) %>%
+  summarize(Średnia_Prawdziwych_Odkryć = mean(NumTrueDiscoveries)) %>%
+  pivot_wider(names_from = NumVars, values_from = Średnia_Prawdziwych_Odkryć) %>%
+  column_to_rownames("Correction")
+
+false_disc <- dplyr::bind_rows(results_discoveries) %>%
+  group_by(Correction, NumVars) %>%
+  summarize(Średnia_Fałszywych_Odkryć = mean(NumFalseDiscoveries)) %>%
+  pivot_wider(names_from = NumVars, values_from = Średnia_Fałszywych_Odkryć) %>%
+  column_to_rownames("Correction")
+
+kable(true_disc, caption = "Średnia liczba prawdziwych odkryć", digits = 2) %>%
+  kable_styling(full_width = FALSE, position = "center")
+kable(false_disc, caption = "Średnia liczba fałszywych odkryć", digits = 2) %>%
+  kable_styling(full_width = FALSE, position = "center")
+
+library(patchwork)
+
+p1 <- ggplot(summary_table, 
+       aes(x = NumVars, y = MeanTrueDiscoveries, color = Correction)) +
+  geom_line() +
+  geom_point() +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  xlab("Liczba zmiennych w modelu") +
+  ylab("Średnia liczba prawdziwych odkryć") +
+  ggtitle("Prawdziwe odkrycia") +
+  scale_color_discrete(name = "Korekta") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom")
+
+p2 <- ggplot(summary_table, 
+       aes(x = NumVars, y = MeanFalseDiscoveries, color = Correction)) +
+  geom_line() +
+  geom_point() +
+  theme_bw() +
+  theme(legend.position = "bottom") +
+  xlab("Liczba zmiennych w modelu") +
+  ylab("Średnia liczba fałszywych odkryć") +
+  ggtitle("Fałszywe odkrycia") +
+  scale_color_discrete(name = "Korekta") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5), legend.position = "bottom")
+
+p1 + p2 + plot_layout(ncol = 2, guides = "collect") & theme(legend.position = "bottom")
+```
+
+Spójrzmy w pierwszej kolejności na prawdziwe odkrycia. Podobnie jak zauważyliśmy wcześniej, najlepiej w tym przypadku radzi sobie model bez korekty (w szczególności bardzo znacząco dla wartości $100$ oraz $500$), natomiast najgorzej korekta Bonferroniego. Nieco lepiej korekta BH, jednak jedynie w niewielkim stopniu. Jest to dość intuicyjne - korekta Bonferroniego jak i Benjaminiego-Hochberga wpływają na mniejszą liczbę odrzucanych hipotez, co sprawia, że mamy do czynienia z mniejszą liczbą odkryć ogólnie, nie tylko tych fałszywych, których liczbę przede wszystkim staramy się kontrolować. 
+
+Spójrzmy więc, jak się prezentuje sytuacja w przypadku fałszywych odkryć. Jak widać, bez korekty ich liczba bardzo szybko wzrasta, czego nie możemy zauważyć w przypadku którejkolwiek z korekt. W przypadku korekt, jeśli spojrzymy na liczbę fałszywych odkryć w tabeli możemy zobaczyć, że Bonferroni wypada najlepiej. Jest to jednak niewielka różnica w stosunku do korekty BH. 
+
+Spójrzmy teraz na tabele dla wartości teoretycznych oszacowań liczby prawdziwych i fałszywych odkryć dla korekty Bonferroniego oraz bez korekty wyliczonych jako $$FD = (k - 5) \alpha$$ $$TD = 5 \cdot P(|T| > t_c)$$ gdzie $t_c \sim t_{df, \delta}$ to kwantyl z rozkładu t-Studenta z n-k stopniami swobody i parametrem niecentralności $\delta = \frac{\beta}{s(\hat \beta)}$. Fałszywe odkrycia zależą więc od poziomu istotności, a prawdziwe odkrycia od mocy testu. Dla procedury Bonferroniego zamiast $\alpha$ w obu przypadkach wykorzystam $\frac{\alpha}{k}$.
+
+```{r, echo = FALSE}
+FD <- (num - 5) * 0.05
+FD_bon <- (num - 5) * (0.05/num)
+
+TD_fun <- function(k) {
+  Y <- X %*% beta + rnorm(1000) 
+  X_k <- X[, 1:k, drop = FALSE]  
+  Y_k <- Y[1:k]
+  
+  beta_hat_k <- solve(t(X_k) %*% X_k) %*% t(X_k) %*% Y
+  
+  Y_hat <- X[, 1:k] %*% beta_hat_k
+  
+  s2 <- 1 / (1000 - k) * sum((Y - Y_hat)^2)
+  
+  s2_beta <- s2 * diag(solve(t(X_k) %*% X_k))
+
+  t_c <- qt(1 - 0.05 / 2, df = 1000 - k)
+  
+  delta <- beta[1] / sqrt(s2_beta[1])  
+  
+  moc <- 1 - pt(t_c, 1000 - k, delta) + pt(- t_c, 1000 - k, delta)
+  
+  return(5 * moc) 
+}
+
+TD <- sapply(num, function(n) TD_fun(n))
+
+TD_fun_bon <- function(k) {
+  Y <- X %*% beta + rnorm(1000) 
+  X_k <- X[, 1:k, drop = FALSE]  
+  Y_k <- Y[1:k]
+  
+  beta_hat_k <- solve(t(X_k) %*% X_k) %*% t(X_k) %*% Y
+  
+  Y_hat <- X[, 1:k] %*% beta_hat_k
+  
+  s2 <- 1 / (1000 - k) * sum((Y - Y_hat)^2)
+  
+  s2_beta <- s2 * diag(solve(t(X_k) %*% X_k))
+
+  t_c <- qt(1 - (0.05/k) / 2, df = 1000 - k)
+  
+  delta <- beta[1] / sqrt(s2_beta[1])  
+  
+  moc <- 1 - pt(t_c, 1000 - k, delta) + pt(- t_c, 1000 - k, delta)
+  
+  return(5 * moc) 
+}
+
+TD_bon <- sapply(num, function(n) TD_fun_bon(n))
+
+FD_table <- t(data.frame(
+  FD <- FD,
+  FD_bon <- FD_bon
+))
+
+TD_table <- t(data.frame(
+  TD <- TD,
+  TD_bon <- TD_bon
+))
+
+colnames(FD_table) <- c("5", "10", "20", "100", "500", "950")
+rownames(FD_table) <- c("brak", "Bonferroni")
+
+kable(FD_table, caption = "Teoretyczne oszacowanie fałszywych odkryć", digits = 4) %>%
+  kable_styling(full_width = FALSE, position = "center")
+
+colnames(TD_table) <- c("5", "10", "20", "100", "500", "950")
+rownames(TD_table) <- c("brak", "Bonferroni")
+
+kable(TD_table, caption = "Teoretyczne oszacowanie prawdziwych odkryć", digits = 4) %>%
+  kable_styling(full_width = FALSE, position = "center")
+```
+
+Jak widać po tych wartościach, są one bardzo zbliżone do wartości estymowanych wyznaczonych wcześniej. Potwierdza to zatem otrzymane przez nas wyniki i pokazuje, że symulacje przeszły w poprawy sposób. 
+
+## Analiza estymatorów FWER i FDR
+
+W tym podpunkcie zajmiemy się analizą FWER, czyli prawdopodobieństwem popełnienia co najmniej jednego fałszywego odkrycia oraz FDR czyli liczbie fałszywych odkryć względem wszystkich odkryć.
+
+FWER definiujemy zatem jako $FWER = P(V \geq 1)$. Aby wyestymować tę wartość potrzebujemy zliczyć ile razy dla każdego rozmiaru próby otrzymamy co najmniej jedno fałszywe odkrycie i następnie podzielimy przez 1000, a zatem liczbę wszystkich prób. 
+
+Z kolei FDR oznacza wartość oczekiwaną innej statystyki, mianowicie $FDP = \frac{V}{max(R, 1)}$, czyli stosunek fałszywych odkryć do liczby wszystkich odkryć. Przyjmujemy FDP za 0 jeśli nie mamy żadnych odkryć. Wartość FDR możemy wyznaczyć przy pomocy średniej z 1000 statystyk FDP.
+
+Poniżej przedstawiam wyniki w tabeli.
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+summary_table <- dplyr::bind_rows(results_discoveries) %>%
+  group_by(Correction, NumVars) %>%
+  summarize(MeanTrueDiscoveries = mean(NumTrueDiscoveries),
+            MeanFalseDiscoveries = mean(NumFalseDiscoveries),
+            FWER = mean(FWER),
+            FDR = mean(FDP))
+
+FWER_table <- dplyr::bind_rows(results_discoveries) %>%
+  group_by(Correction, NumVars) %>%
+  summarize(FWER = mean(FWER)) %>%
+  pivot_wider(names_from = NumVars, values_from = FWER) %>%
+  column_to_rownames("Correction")
+
+FDR_table <- dplyr::bind_rows(results_discoveries) %>%
+  group_by(Correction, NumVars) %>%
+  summarize(FDR = mean(FDP)) %>%
+  pivot_wider(names_from = NumVars, values_from = FDR) %>%
+  column_to_rownames("Correction")
+
+kable(FWER_table, caption = "Estymowane wartości FWER", digits = 4) %>%
+  kable_styling(full_width = FALSE, position = "center")
+kable(FDR_table, caption = "Estymowane wartośći FDR", digits = 4) %>%
+  kable_styling(full_width = FALSE, position = "center")
+```
+
+Jak widać w powyższych tabelach, jeśli nie mamy nałożonej żadnej korekty, to wartości zarówno FWER jak i FDR są bardzo duże, szczególnie w porównaniu do sytuacji, gdy nałożyliśmy korekty. Z kolei zarówno dla korekty BH jak i Bonferroniego widzimy bardzo małe wartości dla każdej próby. Oznacza to, że faktycznie ograniczają one liczbę fałszywych odkryć, tak jak powinny, co spostrzegliśmy już w poprzednich analizach. Oczywiście, jak już wcześniej zauważyliśmy, dla procedury Bonferroniego możemy zobaczyć mniejsze wartości niż dla BH, w szczególności jeśli chodzi o prawdopodobieństwo fałszywego odkrycia. 
+
+Co ciekawe, dla procedury BH, estymowane prawdopodobieństwo co najmniej jednego fałszywego odkrycia rośnie do $k = 20$, a następnie maleje i dla $k = 950$ jest mniejsze niż dla $k = 10$. Jest to ciekawa zależność.
+
+Na koniec, wyliczę również teoretyczne oszacowania wartości FWER dla procedury bez korekty oraz z korektą Bonferroniego ze wzoru $$FWER = 1-(1-\alpha)^{k-5}$$ gdzie oczywiście dla Bonfferoniego zamiast $\alpha$ umieszczę wartość $\frac{1}{k} \alpha$
+
+```{r, echo = FALSE}
+FWER <- 1 - (1 - 0.05) ** (num - 5)
+FWER_bon <- 1 - (1 - (0.05/num)) ** (num - 5)
+
+FWER <- t(data.frame(
+  FWER <- FWER,
+  FWER_bon <- FWER_bon
+))
+colnames(FWER) <- c("5", "10", "20", "100", "500", "950")
+rownames(FWER) <- c("brak", "Bonferroni")
+
+kable(FWER, caption = "Teoretyczne oszacowanie FWER", digits = 4) %>%
+  kable_styling(full_width = FALSE, position = "center")
+```
+
+Podobnie jak w przypadku fałszywych i prawdziwych odkryć możemy zobaczyć, że wartości są bardzo zbliżone do teoretycznych. Ponownie, możemy uznać to za potwierdzenie, że symulacje zostały przeprowadzone poprawnie.
+
+# Podsumowanie
+
+Można zobaczyć znaczący wpływ liczby zmiennych objaśniających na liczbę fałszywych odkryć. Im większa liczba zmiennych, tym więcej możemy zobaczyć fałszywych odkryć, gdy testujemy nie używając żadnej korekty. Fałszywe odkrycia możemy kontrolować przy pomocy korekty Bonferroniego lub Benjaminiego-Hochberga, obie kosztem prawdziwych odkryć. 

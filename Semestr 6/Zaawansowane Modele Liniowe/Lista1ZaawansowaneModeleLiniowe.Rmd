@@ -1,0 +1,581 @@
+---
+title: "Lista 1."
+author: "Amelia Olejniczak"
+output: 
+  pdf_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo = FALSE}
+setwd('C:\\Users\\ameli\\Documents\\R\\zaawansowane modele liniowe')
+data <- read.csv("lista_1.csv")
+```
+
+\newpage
+
+# Wstęp
+
+W tym raporcie skupię się w pierwszej kolejności na analizie wyników rekrutacji na studia w zależności od wyników testów rachunkowych oraz poziomu niepokoju. Dane te pochodzą z pliku *lista_1.csv*, gdzie w kolumnie *numeracy* pojawiają się wyniki testów rachunkowych, w następnej kolumnie oznaczonej jako *anxiety* możemy uzyskać informacje na temat poziomu niepewności, a ostatnia kolumna, nazwana *success* posiada wartość $0$ lub $1$, oznaczającą pozytywny lub negatywny wynik rekrutacji (a zatem przyjęcie lub nieprzyjęcie na studia).
+
+W kolejnej części umieszczę symulacje na pewnej macierzy $X$. Na jej podstawie przebadam estymatory $\hat{\beta_i}$, a także jaki wpływ na dokładność estymatorów mają liczba obserwacji, korelacja między regresorami oraz liczba regresorów.
+
+# Analiza danych
+
+## Analiza wykresów pudełkowych
+
+W przypadku analizy danych z podanego pliku, rozpocznę ją od narysowania wykresów pudełkowych (tzw. *boxplot*) wyników tesów rachunkowych dla przyjętych oraz dla nieprzyjętych na studia osób. Powtórzę to również dla poziomu niepokoju.
+
+```{r, echo=FALSE, fig.height=5, fig.width=10, message = FALSE}
+data$success_factor <- as.factor(data$success)
+library(ggplot2)
+require(gridExtra)
+p11 <- ggplot(data, aes(x=success_factor, y=numeracy, fill = success_factor)) +
+  geom_boxplot(color = "black") +
+  theme_minimal()
+p12 <-  ggplot(data, aes(x=success_factor, y=anxiety, fill = success_factor)) +
+  geom_boxplot(color = "black") +
+  theme_minimal()
+grid.arrange(p11, p12, ncol=2)
+```
+
+Spójrzmy w pierwszej kolejności na boxplot po lewej stronie (*numeracy~success*). Jak widać, wyniki testu były znacznie wyższe wśród osób, które dostały się na studia. Pierwszy kwartyl wśród studentów z pozytywnym wynikiem rekrutacji był niewiele mniejszy niż trzeci kwartyl dla studentów, którym nie udało się dostać na studia. Z kolei dla poziomu niepokoju, studenci z negatywnym wynikiem rekrutacji mieli znacznie wyższy poziom niepewności, niż ci z pozytywnym wynikiem. Tym razem, pierwszy kwartyl dla grupy z nieudaną rekrutacją jest równy (lub bardzo bliski) trzeciemu kwartylowi dla grupy z pozytywnym wynikiem. 
+
+W obu przypadkach można zatem powiedzieć, że wyniki niewiele się na siebie nakładają. Możnaby więc z tego wnioskować, że wynik rekrutacji zależy zarówno od wyników testów rachunkowych, jak i poziomu stresu. Im większy stres i niższe wyniki - tym mniejsza szansa na dostanie się na studia. Na podstawie tych wykresów można również postawić tezę, że wyniki testów rachunkowych mogą być mniej istotne niż poziom niepewności. Aby to jednak sprawdzić, będzie potrzebna dalsza analiza.
+
+## Analiza modelu regresji logistycznej
+
+Utworzę (przy pomocy funkcji `glm`) model regresji logistycznej ze zmienną odpowiedzi *success* oraz zmiennymi objaśniającymi *numeracy* oraz *anxiety*. Po wykonaniu funkcji `summary()` dla utworzonego przeze mnie modelu można odczytać estymowane wartości zarówno wektora $\beta$, jak i P-wartości. Wyniki przedstawiam w poniższej tabeli. 
+
+```{r, echo = FALSE}
+logmod1 <- glm(success~numeracy+anxiety, data = data, family =  "binomial"(link="logit"))
+betas <- summary(logmod1)$coefficients[, 1]
+p_vals <- summary(logmod1)$coefficients[, 4]
+logit <- data.frame(
+  "Beta" = betas,
+  "P-wartości" = p_vals
+)
+```
+
+||$\beta$|P-wartości|
+|:-:|:-:|:-:|
+|Intercept|`r round(logit$Beta[1], 3)`|`r logit$P.wartości[1]`|
+|`numeracy`|`r round(logit$Beta[2], 3)`|`r logit$P.wartości[2]`|
+|`anxiety`|`r round(logit$Beta[3], 3)`|`r logit$P.wartości[3]`|
+
+W pierwszej kolumnie można zauważyć wartości dla estymatorów wektora $\beta$. Przyglądając się drugiej kolumnie, można zauważyć, że wszystkie p-wartości wynoszą poniżej $\alpha = 0.05$, zatem możemy odrzucić $H_0$ na rzecz $H_1$ i uznać, że wszystkie statystyki zawarte w modelu są istotne w objaśnianiu prawdopodobieństwa dostania się na studia.
+
+## Przewidywane prawdopodobieństwo sukcesu
+
+```{r, include=FALSE}
+predict.glm(logmod1, newdata = data.frame(numeracy = 10, anxiety = 13),type = "response")
+```
+
+Aby obliczyć przewidywane prawdopodobieństwo sukcesu dla wartości `numeracy` $= 10$ oraz `anxiety` $= 13$  potrzebujemy skorzystać z tego, że wartość prawdopodobieństwa jest funkcją odwrotną do funkcji *logit*. Prezentuje się ona następująco $$\mu = \frac{1}{1 + e^{-\eta}}$$. Po podstawieniu pod $\eta$ wartości, którą wyliczyliśmy poprzez podstawienie podanych przeze mnie liczb do modelu otrzymujemy prawdopodobieństwo na poziomie około 88.2%. Jest ono stosunkowo wysokie. 
+
+Porównując to z wykresami pudełkowymi możemy stwierdzić, że jest to intuicyjne przewidywanie. Wynik testu rachunkowego znajduje się poniżej pierwszego kwartyla dla pozytywnego wyniku rekrutacji oraz między medianą i drugim kwartylem dla negatywnego wyniku rekrutacji. Natomiast wartość poziomu niepokoju jest dość niska, znajduje się ona w okolicach mediany dla pozytywnego wyniku rekrutacji i nie jest widoczne w żadnej części wykresu pudełkowego dla negatywnego wyniku rekrutacji. Zatem intuicyjnie, przy `numeracy` $= 10$ oraz `anxiety` $= 13$ jest większa szansa na pozytywny wynik rekrutacji, niż na jej negatywny wynik.
+
+## Krzywa ROC
+
+W kolejnej części zajmę się analizą krzywej $ROC$ (*Receiver Operating Characteristic Curve*). Jest ona wykresem $TPR$, inaczej czułości, względem $FPR(s) = 1 - TNR(s)$ (*False Positive Rate*) przy różnych progach. Poniżej przedstawiam wzory na wtliczenie obu potrzebnych wielkości ($TPR$ oraz $FPR$). $$TPR(s) = \frac{TP(s)}{TP(s) + FN(s)} = \frac{ \# \{ i: y_ i = 1, \hat{Y}_i(s) = 1\}}{ \# \{ i: y_i = 1 \}}$$ $$FPR(s) = 1 - TNR(s) = \frac{FP(s)}{FP(s) + TN(s)} = \frac{ \# \{ i: y_i = 0, \hat{Y}_i(s) = 1 \}}{ \# \{ i: y_i = 0 \}}$$
+
+W obu powyższych wielkościach pojawiają się miary $TP(s)$, $FP(s)$, $TN(s)$ oraz $FN(s)$. Oznaczają one kolejno - *True Positive*, *False Positive*, *True Negative* oraz *False Negative*. Poniżej znajduje się wykres krzywej ROC.
+
+```{r, echo = FALSE, warning=FALSE, message=FALSE}
+library("pROC")
+mu <- predict.glm(logmod1 ,type = "response")
+plot(roc(data$success~mu), legacy.axes=TRUE,col = "red", print.auc = TRUE, print.auc.y = 0.4 )
+```
+
+Przedstawiony powyżej wykres to krzywa ROC dla modelu skonstruowanego przy pomocy funkcji linkującej `logit`, ponieważ z niej korzystaliśmy w poprzednich zadaniach. Wykres znajduje się względnie niedaleko lewego górnego rogu (punktu $(0, 1)$), zatem można stwierdzić, że skuteczność predykcyjna modelu jest dość wysoka. Zapisana wartość $AUC$, mierząca obszar pod krzywą jest bardzo zbliżona do jedynki, zatem to potwierdza, że jest to dość dobry model.
+
+## Porównanie różnych funkcji linkujących
+
+Teraz zajmę się powtórzeniem ostatnio wykonanych czynności (tj. stworzenie modelu regresji logistycznej i analiza wartości w wektorze $\beta$ oraz p-wartości, przewidywane prawdopodobieństwo sukcesu oraz krzywa ROC) dla różnych funkcji linkujących. Wartości porównam do pierwotnie stworzonego przeze mnie modelu (zatem stworzonego przy pomocy funkcji `logit`) a także do siebie nawzajem. Funkcje linkujące, z których będę korzystać to `probit`, `cauchit` oraz `cloglog`. 
+
+### Estymatory $\beta$ oraz testy istotności
+
+W pierwszej kolejności przyjrzę się wartościom wektorów $\beta$ z modeli utworzonych dla różnych funkcji linkujących. Aby móc je odpowiednio porównać, umieszczę w tabeli dane dla każdego z poszczególnych elementów, gdzie odpowiednie dwie kolumny ($\beta$ oraz P-wartość) będą odpowiadały danej funkcji linkującej.
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+linkfun <- c("logit", "probit", "cauchit", "cloglog")
+logmods <- lapply(linkfun, function(lf) {
+  glm(success~numeracy+anxiety, data = data, family =  "binomial"(link=lf))
+})
+values <- lapply(logmods, function(lm) {
+  list(
+    Betas = summary(lm)$coefficients[, 1],
+    P_vals = summary(lm)$coefficients[, 4]
+  )
+})
+```
+
+\newpage
+
+||`logit`||`probit`||`cauchit`||`cloglog`||
+|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+||$\beta$|P-wartość|$\beta$|P-wartość|$\beta$|P-wartość|$\beta$|P-wartość|
+|Intercept|`r round(values[[1]][[1]][1], 3)`|`r values[[1]][[2]][1]`|`r round(values[[2]][[1]][1], 3)`|`r values[[2]][[2]][1]`|`r round(values[[3]][[1]][1], 3)`|`r values[[3]][[2]][1]`|`r round(values[[4]][[1]][1], 3)`|`r values[[4]][[2]][1]`|
+|`numeracy`|`r round(values[[1]][[1]][2], 3)`|`r values[[1]][[2]][2]`|`r round(values[[2]][[1]][2], 3)`|`r values[[2]][[2]][2]`|`r round(values[[3]][[1]][2], 3)`|`r values[[3]][[2]][2]`|`r round(values[[4]][[1]][2], 3)`|`r values[[4]][[2]][2]`|
+|`anxiety`|`r round(values[[1]][[1]][3], 3)`|`r values[[1]][[2]][3]`|`r round(values[[2]][[1]][3], 3)`|`r values[[2]][[2]][3]`|`r round(values[[3]][[1]][3], 3)`|`r values[[3]][[2]][3]`|`r round(values[[4]][[1]][3], 3)`|`r values[[4]][[2]][3]`|
+
+Jak widać z powyższej tabeli, wartości parametru $\beta$ różnią się od siebie. W przypadku, gdy mamy do czynienia z wartościami $\beta_1$ oraz $\beta_2$ - odpowiedno dla `numeracy` oraz `anxiety` są one dość zbliżone do siebie w każdej z kolumn, tak Intercept jest różny dla każdej z funkcji linkujących. Co najciekawsze i wydaje mi się również najważniejsze do zauważenia na podstawie powyższych wartości, to zupełnie różne są testy istotności. można zauważyć, że nie ma problemu dla funkcji linkujących `logit` oraz `probit`, gdyż tam (mimo największej różnicy w wartościach estymatorów $\beta$), to można zauważyć te same wyniki testów istotności. Zmienia się to jednak w przypadku, gdy używamy funkcji linkujących zarówno `cauchit`, jak i `cloglog`. W przypadku, gdy tworzymy model przy pomocy pierwszej z nich, wszystkie P-wartości są znacznie większe od $\alpha = 0.05$, a zatem nie możemy odrzucić $H_0$ w przypadku żadnej z wartości w wektorze $\beta$. Oznaczałoby to, że w utworzonym wcześniej modelu żadna ze zmiennych nie jest statystycznie istotna przy wyjaśnieniu prawdopodobieństwa dostania się na studia. Zatem model jest źle skonstruowany. Z kolei nie możemy odrzucić hipotezy zerowej jedynie w przypadku gdy mamy do czynienia z Interceptem.
+
+Na podstawie powyższych wartości można stwierdzić, że najlepsze dopasowanie modelu mamy przy użyciu funkcji linkującej `logit` oraz `probit`, natomiast znacząco najgorsze, gdy mamy do czynienia z funkcją `cauchit`. Sprawdzę jednak również, jak każdy z modeli radzi sobie z przybliżeniem prawdopodobieństwa dla poprzednio podanych wartości.
+
+### Przewidywane prawdopodobieństwo sukcesu
+
+```{r, echo = FALSE}
+predicted_values <- lapply(logmods, function(lm) {
+  predict.glm(lm,  newdata = data.frame(numeracy = 10, anxiety = 13),type = "response")
+})
+```
+
+Kiedy spojrzymy na przewidywane prawdopodobieństwo, gdy `numeracy` $= 10$ oraz `anxiety` $= 13$ dostajemy następujące wyniki:
+
+|`logit`|`probit`|`cauchit`|`cloglog`|
+|:-:|:-:|:-:|:-:|
+|`r round(predicted_values[[1]], 3) * 100`%|`r round(predicted_values[[2]], 3) * 100`%|`r round(predicted_values[[3]], 3) * 100`%|`r round(predicted_values[[4]], 3) * 100`%|
+
+Jak widać w powyższej tabeli, pomimo znaczej różnicy w estymacji wektora $\beta$, dla każdego z modeli przewidywane prawdopodobieństwo jest bardzo zbliżone do siebie. Wszędzie wynosi około $88%$ (największa wartość - aż $89.6%$) jest dla funkcji linkującej `cloglog`, co różni się względem poprzedniej tabeli, w której za najgorszą uznałam macierz `cauchit`. Zatem tutaj, mimo nieznaczącej różnicy w przewidywaniach można wysnuć wnioski, że `cloglog` jest tą "najgorszą" funkcją linkującą, gdyż ta wartość jest jedyną, która w pewnym stopniu odstaje od pozostałych. 
+
+### Krzywe ROC
+
+Do ostatecznego potwierdzenia wysnutej tezy pozostaje jedynie analiza krzywych ROC narysowanych dla każdego z modeli. Dla ułatwienia analizy umieszczę je wszystkie na jednym wykresie, aby dokładniej określić, jak bliskie siebie są te krzywe. Umieszczę również legendę kolorystyczną wyjaśniającą, która krzywa należy do którego z modeli.
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+mu2 <- predict.glm(logmods[[2]], type = "response")
+mu3 <- predict.glm(logmods[[3]], type = "response")
+mu4 <- predict.glm(logmods[[4]], type = "response")
+
+plot(roc(data$success~mu), legacy.axes=TRUE,col = "red", print.auc = TRUE, print.auc.y = 0.4 )
+plot(roc(data$success~mu2), add=TRUE, legacy.axes=F,col = "green", print.auc = TRUE, print.auc.y = 0.3)
+plot(roc(data$success~mu3), add=TRUE, legacy.axes=F,col = "blue", print.auc = TRUE, print.auc.y = 0.2)
+plot(roc(data$success~mu4), add=TRUE, legacy.axes=F,col = "orange", print.auc = TRUE, print.auc.y = 0.1)
+legend("bottomright", c("logit", "probit", "cauchit", "cloglog"), col = c("red", "green", "blue", "orange"), lwd = 2)
+```
+
+Jak można zobaczyć w tym przypadku, model, który wypada nieznacznie gorzej od pozostałych to ten skonstruowany przy pomocy funkcji linkującej `cloglog`, co jest zgodne z poprzednim podpunktem. Jednak na podstawie tej krzywej można stwierdzić, że wszystkie modele są niemal jednakowo dobre. Wynika więc z tego, że wszystkie te modele są podobne jeśli chodzi o ich skuteczność predykcyjną. Potwierdza to poprzednio prezentowaną tabelę, gdzie wszystkie wartości przewidywanego prawdopodobieństwa były bardzo do siebie zbliżone.
+
+W dalszej części, aż do końca fragmentu poświęconemu analizie danych będę się posługiwać wyłącznie funkcją linkującą `logit`.
+
+## Estymator macierzy kowariancji wektora estymatorów parametrów w modelu regresji logistycznej
+
+Teraz zajmę się estymacją macierzy kowariancji wektora estymatorów $\beta$. Ponieważ $\hat{\beta}$ ma rozkład asymptotycznie normalny $$\hat{\beta} \xrightarrow{\text{D}} N(\beta, J^{-1})$$ gdzie $J = - \mathbb{E}_{\beta} H(b) = X'S(\beta)X$ oraz $S(b) =$ diag $(\sigma^2_1(\beta), ..., \sigma^2_n(\beta))$ to diagonalna macierz o $i$-tym elemencie na diagonali postaci $\sigma^2_i(\beta) = \mu_i(\beta)(1 - \mu_1(\beta))$. Musimy zatem przybliżyć macierz $J^{-1}$. Potrzebujemy do tego $S(\hat{\beta})$, w którym wyrazy na przekątnej to $\hat{p}_i (1 - \hat{p}_i)$. Poniżej przedstawiam wyliczoną przy pomocy odpowiednich wzorów macierz $J^{-1}$
+
+```{r, echo = FALSE}
+X <- model.matrix(logmod1)
+S <- diag(mu * (1 - mu))  # Macierz S
+J <- t(X) %*% S %*% X  # Macierz Fishera
+J_inv <- solve(J)
+sd <- summary(logmod1)$coefficients[, "Std. Error"]
+```
+
+$$
+\hat{J^{-1}} =
+\begin{pmatrix}
+46.2295 & -0.2482 & -3.0620 \\
+-0.2482 & 0.0616 & -0.0238 \\
+-3.0620 & -0.0238 & 0.2308
+\end{pmatrix}
+$$
+
+Jak wiadomo, na przekątnej tej macierzy znajdują się wartości wariancji. Możemy ją zatem porównać z kwadratem odchylenia standardowego otrzymanego przy pomocy komendy `summary()` w R. Odchylenia standardowe wynoszą tam kolejno `r round(sd[1], 4)`, `r round(sd[2], 4)` oraz `r round(sd[3], 4)`. Jeśli podniesiemy te wartości do kwadratu to otrzymamy `r round(sd[1]**2, 4)`, `r round(sd[2]**2, 4)` oraz `r round(sd[3]**2, 4)`. Jak możemy zauważyć - wartości tej wariancji bardzo nieznacznie różnią się od wartości otrzymanych podczas teoretycznego wyliczenia macierzy.
+
+## Test czy obie zmienne objaśniające nie mają wpływu na zmienną odpowiedzi
+
+Po wykonaniu testu istotności dla każdej ze zmiennych objaśniających, warto również sprawdzić wyniki testu istotności dla obu zmiennych objaśniających jednocześnie. Możemy ten test przeprowadzić dla statystyki Deviance, którą wyznaczamy jako $$D(\hat{\beta}) = 2 \left( I(\hat{\beta}^s) - I(\hat{\beta}) \right)$$ Jest ona zatem podwójną różnicą pomiędzy logarytmami funkcji wiarogodności dla modelu saturowanego i zredukowanego. Zatem w przypadku problemu testowania $$H_0: \forall i \neq 0, \quad \beta_i = 0 \qquad H_1: \exists i \neq 0, \quad \beta_i \neq 0$$ dla standardowo przyjętego poziomu istotnośći $\alpha = 0.05$ statystyka testowa ma postać $$\chi^2 = D(M_0) + D(M_1)$$ gdzie $D(M_0)$ to tzw **Null deviance**, a zatem statystyka Deviance dla modelu, gdzie istotny jest jedynie intercept, natomiast $D(M_1)$ to statystyka Deviance dla pełnego modelu. Możemy je odczytać ponownie przy pomocy `summary()`. Ponieważ przy prawdziwości hipotezy zerowej statystyka testowa ma rozkład $\chi^2$ z (w naszym przypadku) dwoma stopniami swobody (ze względu na to, że badamy dwa regresory), to odrzucamy ją, gdy $\chi^2 > F^{-1}(1 - \alpha)$. Jako $F^{-1}(1 - \alpha)$ rozumiemy kwantyl rzędu $1 - \alpha$ z rozkładu $\chi^2(2)$. 
+
+```{r, echo = FALSE}
+D_null <- summary(logmod1)$null.deviance
+D_full <- summary(logmod1)$deviance
+chi2 <- D_null - D_full
+quantile <- qchisq(0.95, 2)
+```
+
+Po wykonaniu obliczeń otrzymujemy $$\chi^2 = D(M_0) - D(M_1) = 68.029 - 28.286 = 39.744 > F^{-1}(0.95) = 5.991$$ Wynika z tego, że możemy odrzucić $H_0$ na rzecz $H_1$, zatem co najmniej jedna ze zmiennych objaśniających (`numeracy` lub `anxiety`) jest istotna na zmienną odpowiedzi.
+
+## Sprawdzenie czy rozkład danych jest zgodny z założonym modelem
+
+Aby sprawdzić zgodność rozkładu danych z założonym modelem przeanalizuję wartość $$R^2 = 1 - \frac{D(M_1)}{D(M_0)}$$ gdzie $D(M_1)$ i $D(M_0)$ jest takie jak wyżej. Im bardziej $R^2$ jest zbliżone do wartości $1$, tym lepiej dopasowany jest model. 
+
+```{r, echo = FALSE}
+r2 <- 1 - (D_full/D_null)
+```
+
+Gdy podstawimy te wartości do wzoru otrzymujemy $$R^2 = 1 - \frac{D(M_1)}{D(M_0)} = 1 - \frac{28.286}{68.029} = 0.5842$$ Jak widać, jest to więcej niż połowa, zatem jest bliższe wartości $1$ niż $0$. Można zatem powiedzieć, że jest to całkiem dobry model, chociaż nie jest idealny, ani nie jest bardzo zbliżony do idealnego, który nastąpiłby w przypadku, gdy statystyka Deviance ($D(M_1)$) jest równa $0$, jak i $R^2$ wynosi $1$. 
+
+## Różne wartości parametru epsilon
+
+Ostatni fragment części analitycznej poświęcę na analizę parametru `epsilon`. Ze względu na to, że estymator największej wiarogodności parametru $\hat{\beta}$ możemy wyliczyć wyłącznie przy użyciu metod numerycznych, potrzebujemy określić precyzję, z jaką chcemy przybliżyć te parametry. Z tego względu potrzebujemy parametru `epsilon`, który określa to przybliżenie. W dokumentacji R dla funkcji `glm.control` możemy przeczytać, że parametr `epsilon` pozwala zakończyć wykonywanie algorytmu, kiedy $$\frac{|dev - dev_{old}|}{|dev| + 0.1} < \epsilon$$ gdzie $dev$ to wcześniej wspominana statystyka Deviance. W tym samym miejscu możemy przeczytać, że wartością domyślną dla parametru `epsilon` jest $10^{-8}$. Sprawdzę teraz, jak zmienia się estymator $\beta$, gdy używam innej wielkości `epsilon`. Poniżej przedstawiam tabelę z wyliczeniami, gdzie umieściłam nie tylko wartości estymatorów, ale również liczbę iteracji. 
+
+```{r, echo = FALSE}
+epsilons <- c(10^(-1), 10^(-2), 10^(-3), 10^(-6), 10^(-8))
+results <- lapply(epsilons, function(eps) {
+  model <- glm(success~numeracy+anxiety, data = data, family =  "binomial"(link="logit"), control = glm.control(epsilon = eps))
+  list(iterations = model$iter, estimators = coef(model))
+})
+```
+
+|$\epsilon$|$\beta_0$|$\beta_1$|$\beta_2$|Iteracje|
+|:-:|:-:|:-:|:-:|:-:|
+|`r epsilons[1]`|`r results[[1]][[2]][1]`|`r results[[1]][[2]][2]`|`r results[[1]][[2]][3]`|`r results[[1]][1]`|
+|`r epsilons[2]`|`r results[[2]][[2]][1]`|`r results[[2]][[2]][2]`|`r results[[2]][[2]][3]`|`r results[[2]][1]`|
+|`r epsilons[3]`|`r results[[3]][[2]][1]`|`r results[[3]][[2]][2]`|`r results[[3]][[2]][3]`|`r results[[3]][1]`|
+|`r epsilons[4]`|`r results[[4]][[2]][1]`|`r results[[4]][[2]][2]`|`r results[[4]][[2]][3]`|`r results[[4]][1]`|
+|`r epsilons[5]`|`r results[[5]][[2]][1]`|`r results[[5]][[2]][2]`|`r results[[5]][[2]][3]`|`r results[[5]][1]`|
+
+W pierwszej kolejności przyjrzyjmy się liczbie iteracji. Oczywiście jest ich potrzebnych dużo mniej, gdy mamy do czynienia z większą wartość $\epsilon$, co jest dość intuicyjne. Jeśli natomiast chodzi o przybliżone wartości estymatorów $\beta$, to można zauważyć, że dla największej wartości $\epsilon$, mimo że potrzebowaliśmy mniej iteracji, to przybliżenie jest widocznie inne od pozostałych. Z kolei w pozostałych przypadkach nie można zauważyć znaczącej różnicy. Oczywiście nie są one identyczne, ale różnica, w szczególności od $\epsilon = 10^{-3}$ nie wydaje się tak znacząca. Zatem wystarczyłby $\epsilon = 10^{-3}$ aby wystarczająco dobrze przybliżyć wartości $\beta$ i wykonalibyśmy również o jedną iterację mniej (co nie robi zbyt dużej różnicy, jednak gdybyśmy wykonywali wiele powtórzeń, to mogłoby mieć znaczenie). 
+
+# Symulacje
+
+## Pierwsze losowanie
+
+W części symulacyjnej, w pierwszej kolejności dokonam analizy poszczególnych statystyk (w szczególności $\hat{\beta_i}$) dla wygenerowanej macierzy $X$ o wymiarach $n = 400$ oraz $p = 3$, której elementy są zmiennymi losowymi z rozkładu $N(0, \sigma = \frac{1}{20})$. Znamy również prawdziwe wartości $\beta$. W pierwszej kolejności w ramach przygotowania do analizy estymowanej macierzy kowariancji parametrów $\hat{\beta}$ wyznaczę macierz Fishera (a następnie $J^{-1}$, będące asymptotyczną macierzą kowariancji dla $\beta$), wyliczoną ze wzoru $$J = X'S(\beta)X$$ Ze względu na to, że znamy zarówno macierz $X$, jak i prawdziwe wartości $\beta$, jesteśmy w stanie wyliczyć tę macierz bez przybliżenia, w przeciwnieństwie do jednego z poprzednich zadań.
+
+```{r, echo = FALSE}
+set.seed(123)
+n <- 400
+p <- 3
+X <- matrix(rnorm(n * p, 0, 1/20), nrow = n, ncol = p)
+beta <- c(3, 3, 3)
+fisher_info <- function(X, beta) {
+  eta <- X %*% beta
+  p <- 1 / (1 + exp(-eta))
+  W <- diag(as.vector(p * (1 - p)))
+  t(X) %*% W %*% X
+}
+fisher_info_matrix_1 <- fisher_info(X, beta)
+prob <- 1 / (1 + exp(-(X %*% beta)))
+asym_cov <- solve(fisher_info_matrix_1)
+```
+
+Macierz Fishera z każdym elementem zaokrąglonym do 4 miejsca po przecinku prezentuje się zatem następująco $$J = \begin{pmatrix} 0.2279 & 0.0033 & -0.0165 \\ 0.0033 & 0.2400 & -0.0042 \\ -0.0165 & -0.0042 & 0.2571 \end{pmatrix}$$ W takim wypadku asymptotyczna macierz kowariancji dla $\beta$ to $$J^{-1} = \begin{pmatrix} 4.4092 & -0.0549 & 0.2813 \\ -0.0549 & 4.1677 & 0.0646 \\ 0.2813 & 0.0646 & 3.9091 \end{pmatrix}$$
+
+Teraz wygeneruję 1000 wektorów odpowiedzi, gdzie każdy z nich będzie zawierał 400 zmiennych z rozkładu dwupunktowego, gdzie prawdopodobieństwo będzie takie, jak to wyliczone i wykorzystane w macierzy informacji Fishera.
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, fig.height = 5, fig.width=10}
+B <- 1000
+Y_sim <- replicate(B, rbinom(n, size = 1, prob = prob))
+betas <- apply(Y_sim, 2, function(Y) {
+  model <- glm(Y ~ X - 1, family =  "binomial")
+  model$coefficients
+})
+betas_df <- as.data.frame(t(betas))
+colnames(betas_df) <- c("Beta1", "Beta2", "Beta3")
+
+library(tidyr)
+
+betas_long <- pivot_longer(betas_df, cols = everything(), names_to = "Beta", values_to = "Value")
+
+ggplot(betas_long, aes(x = Value, fill = Beta)) +
+  geom_histogram(bins = 30, alpha = 0.6, color = "black") +
+  facet_wrap(~ Beta, scales = "free") +  # Osobny histogram dla każdej Beta
+  labs(title = "Histogram estymowanych współczynników Beta",
+       x = "Estymatory Beta",
+       y = "Liczność") +
+  theme_minimal() + 
+  xlim(range(betas_long$Value)) +
+  ylim(0, 120) +
+  geom_vline(xintercept = 3, color = "darkblue", size = 1)
+```
+
+Jak widać, powyższe histogramy bardzo przypominają krzywą Gaussa. Narysowane pionowe proste oznaczają wartość $3$, a zatem prawdziwą wartość $\beta$. Jak widać, najwięcej wartości estymatorów $\beta$ znajduje się wokół tej prostej. Jest to zgodne z oczekiwaniami.
+
+Teraz, zajmę się analizą estymowanego obciążenia, a zatem od średniej estymatorów $\hat{\beta_i}$ odejmę prawdziwe wartości $\beta_i$. Wyniki umieszczę w tabeli.
+
+```{r, echo = FALSE}
+bias <- colMeans(t(betas)) - beta
+```
+
+|$\beta_1$|$\beta_2$|$\beta_3$|
+|:-:|:-:|:-:|
+|`r round(bias[1], 4)`|`r round(bias[2], 4)`|`r round(bias[3], 4)`|
+
+Jak widać powyżej, wartości obciążenia są niewielkie w każdym z przypadków. Najmniejsze jest dla estymatora $\beta_2$, największe dla $\beta_1$, natomiast w każdym z przypadków jest ono dość bliskie $0$. Obciążenie nie jest jednak znacząco duże w przypadku żadnego z estymatorów.
+
+Na koniec analizy tego losowania, spojrzę na średnią estymowaną macierz kowariancji, którą wyliczę jak w jednym z poprzednich zadań. Wykorzystam do tego wyliczone modele z losowanych wcześniej $Y$, a następnie obliczę średnią każdego z elementów macierzy. Ostateczny wynik prezentuje się następująco:
+
+```{r, echo = FALSE}
+matrix <- lapply(1:1000, function(i) {
+  Y <- Y_sim[,i]
+  model <- glm(Y ~ X - 1, family =  "binomial")
+  predicted <- predict.glm(model, type = "response")
+  S <- diag(predicted * (1 - predicted))  
+  J <- t(X) %*% S %*% X  
+  solve(J)
+})
+
+matrix_array <- simplify2array(matrix)
+
+mean_matrix <- apply(matrix_array, c(1, 2), mean, na.rm = TRUE)
+```
+
+$$\hat{J^{-1}} = \begin{pmatrix} 4.4671 & -0.0547 & 0.2867 \\ -0.0547 & 4.2193 & 0.0659 \\ 0.2867 & 0.0659 & 3.9560 \end{pmatrix}$$
+
+Porównując ją do wartości z asymptotycznej macierzy kowariancji można zauważyć, że odpowiadające sobie wartości są bardzo bliskie. 
+
+## Wpływ liczby obserwacji
+
+Powtórzę teraz powyższą analizę dla wartości, gdzie $n = 100$. Poprzednie informacje posłużą mi do porównania, aby zobaczyć, na co wpływa liczba ovserwacji, gdy zmniejszymy ją z $n = 400$.
+
+W pierwszej kolejności pokażę asymptotyczną macierz kowariancji (tym razem bez macierzy Fishera, gdyż nie jest ona potrzebna do dalszej analizy).
+
+```{r, echo = FALSE}
+n <- 100
+p <- 3
+X <- matrix(rnorm(n * p, 0, 1/20), nrow = n, ncol = p)
+beta <- c(3, 3, 3)
+
+fisher_info_matrix_2 <- fisher_info(X, beta)
+prob_2 <- 1 / (1 + exp(-(X %*% beta)))
+asym_cov_2 <- solve(fisher_info_matrix_2)
+```
+
+$$J^{-1} = \begin{pmatrix} 16.0678 & -1.7998 & 3.9840 \\ -1.7998 & 16.5063 & -1.4373 \\ 3.9840 & -1.4373 & 23.5437 \end{pmatrix}$$
+
+Jak widać, jest dość duża różnica między tą macierzą w poprzednim przypadku, a teraz. Zarówno na przekątnej macierzy, jak i poza nią wartości tym razem są dużo większe. Może mieć to znaczenie w dalszej analizie.
+
+Przyjrzyjmy się teraz histogramom estymatorów $\beta$.
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE, fig.height=5, fig.width=10}
+B <- 1000
+Y_sim <- replicate(B, rbinom(n, size = 1, prob = prob_2))
+betas <- apply(Y_sim, 2, function(Y) {
+  model <- glm(Y ~ X - 1, family =  "binomial")
+  model$coefficients
+})
+betas_df <- as.data.frame(t(betas))
+colnames(betas_df) <- c("Beta1", "Beta2", "Beta3")
+
+library(tidyr)
+
+betas_long <- pivot_longer(betas_df, cols = everything(), names_to = "Beta", values_to = "Value")
+
+ggplot(betas_long, aes(x = Value, fill = Beta)) +
+  geom_histogram(binwidth = 1, alpha = 0.6, color = "black") +
+  facet_wrap(~ Beta, scales = "free") +  # Osobny histogram dla każdej Beta
+  labs(title = "Histogram estymowanych współczynników Beta",
+       x = "Estymatory Beta",
+       y = "Liczność") +
+  theme_minimal() + 
+  xlim(range(betas_long$Value)) +
+  ylim(0, 110) +
+  geom_vline(xintercept = 3, color = "darkblue", size = 1)
+```
+
+Jak widać, histogram ponownie przypomina krzywą Gaussa, jednak tym razem rozrzut jest o wiele większy. Poprzednio wartości znajdowały się pomiędzy $-4$, a $8$, tak tym razem jest to ponad 2 razy większe - między $-10$, a $20$. Może to powodować znaczne różnice w przypadku m.in. obciążenia, które możemy zobaczyć w tabeli poniżej.
+
+```{r, echo = FALSE}
+bias <- colMeans(t(betas)) - beta
+```
+
+|$\beta_1$|$\beta_2$|$\beta_3$|
+|:-:|:-:|:-:|
+|`r round(bias[1], 4)`|`r round(bias[2], 4)`|`r round(bias[3], 4)`|
+
+Ponownie można zauważyć, że wartość obciążenia jest największa dla wartości $\beta_1$, z kolei najmniejsza dla $\beta_2$. Warto zauważyć, że obciążenie jest znacząco większe w tym przypadku. Zmniejszenie liczby obserwacji miało więc wpływ na pogorszenie się estymatorów.
+
+Spójrzmy na koniec na średnią estymowaną asymptotyczną macierz kowariancji.
+
+```{r, echo = FALSE}
+matrix <- lapply(1:1000, function(i) {
+  Y <- Y_sim[,i]
+  model <- glm(Y ~ X - 1, family =  "binomial")
+  predicted <- predict.glm(model, type = "response")
+  S <- diag(predicted * (1 - predicted))  
+  J <- t(X) %*% S %*% X  
+  solve(J)
+})
+
+matrix_array <- simplify2array(matrix)
+
+mean_matrix <- apply(matrix_array, c(1, 2), mean, na.rm = TRUE)
+```
+
+$$\hat{J^{-1}} = \begin{pmatrix} 16.4901 & -2.0211 & 4.0352 \\ -2.0211 & 16.9364 & -1.6519 \\ 4.0352 & -1.6519 & 24.4416 \end{pmatrix}$$
+
+Jak widać, jest ona bardzo podobna do macierzy wyliczonej teoretycznie. Wartości na przekątnej są bardzo podobne, poza przekątną są one większe, natomiast nie są to istotne różnice.
+
+## Wpływ korelacji między regresorami
+
+Spójrzmy teraz, jak zmieniają się te wartości, jeśli przeliczymy powyższe wartości dla macierzy $X$, dla której wartości są ze sobą skorelowane (tj. wektory macierzy $X$ pochodzą z rozkładu wielowymiarowego normalnego $N(0, \Sigma)$, gdzie $\Sigma = \frac{1}{n}S$, gdzie $S$ to macierz, która na przekątnej ma wartości $1$ i $0.3$ poza nią). W tym przypadku, ponownie $n = 400$.
+
+Ponownie zacznijmy od analizy asymptotycznej macierzy kowariancji. Prezentuje się ona następująco:
+
+```{r, echo = FALSE}
+library(MASS)  
+
+n <- 400  
+p <- 3    
+Sigma <- matrix(0.3, nrow = p, ncol = p)  
+diag(Sigma) <- 1  
+X <- mvrnorm(n, mu = rep(0, p), Sigma = Sigma/n)
+beta <- c(3, 3, 3)
+
+fisher_info_matrix_3 <- fisher_info(X, beta)
+prob_3 <- 1 / (1 + exp(-(X %*% beta)))
+asym_cov_3 <- solve(fisher_info_matrix_3)
+```
+
+$$J^{-1} = \begin{pmatrix} 5.4228 & -1.0229 & -1.0923 \\ -1.0229 & 5.0398 & -1.3731 \\ -1.0923 & -1.3731 & 4.9193 \end{pmatrix}$$
+
+Jak widać, porównując wartości w tej macierzy są bardzo podobne do pierwszego losowania. Można więc wysnuć tezę, że korelacja między regresorami nie ma zbyt dużego wpływu na poprawność wyników. Aby się w tym upewnić przeanalizujemy jeszcze histogram dla wartości $\beta_1$, $\beta_2$ oraz $\beta_3$.
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE, fig.height=5, fig.width=10}
+B <- 1000
+Y_sim <- replicate(B, rbinom(n, size = 1, prob = prob_3))
+betas <- apply(Y_sim, 2, function(Y) {
+  model <- glm(Y ~ X - 1, family =  "binomial")
+  model$coefficients
+})
+betas_df <- as.data.frame(t(betas))
+colnames(betas_df) <- c("Beta1", "Beta2", "Beta3")
+
+betas_long <- pivot_longer(betas_df, cols = everything(), names_to = "Beta", values_to = "Value")
+
+ggplot(betas_long, aes(x = Value, fill = Beta)) +
+  geom_histogram(bins = 30, alpha = 0.6, color = "black") +
+  facet_wrap(~ Beta, scales = "free") +  # Osobny histogram dla każdej Beta
+  labs(title = "Histogram estymowanych współczynników Beta",
+       x = "Estymatory Beta",
+       y = "Liczność") +
+  theme_minimal() + 
+  xlim(range(betas_long$Value)) +
+  ylim(0, 110) +
+  geom_vline(xintercept = 3, color = "darkblue", size = 1)
+```
+
+Jak widać, ponownie możemy tu zobaczyć krzywą łudząco podobną do krzywej Gaussa. Znów są one bardzo zbliżone do siebie (między $-5$, a $10$), co jest dość podobne do wartości z pierwszego losowania. Może to potwierdzać naszą tezę. Spójrzmy teraz na tabelę dla obciążenia. 
+
+```{r, echo = FALSE}
+bias <- colMeans(t(betas)) - beta
+```
+
+|$\beta_1$|$\beta_2$|$\beta_3$|
+|:-:|:-:|:-:|
+|`r round(bias[1], 4)`|`r round(bias[2], 4)`|`r round(bias[3], 4)`|
+
+Jak widać - dla każdego $\beta_i$ wartości są małe i bardzo zbliżone do siebie. Największe jest dla $\beta_3$, jednak nie jest ono ponownie znaczące. Przypominają one wartości dla pierwszego losowania. Możemy zatem potwierdzić naszą tezę, że korelacja między elementami macierzy $X$ nie ma zbyt dużego znaczenia w estymacji parametrów $\beta$
+
+Na koniec wyznaczę estymowaną asymptotyczną macierz kowariancji.
+
+```{r, echo = FALSE, warning = FALSE, message=FALSE}
+matrix <- lapply(1:1000, function(i) {
+  Y <- Y_sim[,i]
+  model <- glm(Y ~ X - 1, family =  "binomial")
+  predicted <- predict.glm(model, type = "response")
+  S <- diag(predicted * (1 - predicted))  
+  J <- t(X) %*% S %*% X  
+  solve(J)
+})
+
+matrix_array <- simplify2array(matrix)
+
+mean_matrix <- apply(matrix_array, c(1, 2), mean, na.rm = TRUE)
+```
+
+$$\hat{J^{-1}} = \begin{pmatrix} 5.4926 & -1.0322 &	-1.1067 \\ -1.0322 & 5.1087 & -1.3923 \\ -1.1067 & -1.3923 & 4.9902 \end{pmatrix}$$
+
+Jak widać, wartości są bardzo podobne do teoretycznych wyliczeń, podobnie jak w poprzednich podpunktach.
+
+## Wpływ liczby regresorów
+
+Spójrzmy teraz na sytuację, gdy zwiększymy liczbę regresorów do $p = 20$. Tym razem, w przeciwieństwie do poprzedniego przykładu - elementy macierzy $X$ są od siebie niezależne. Ponieważ zwiększamy liczbę regresorów, musimy również wziąć pod uwagę, że zmieniają się założenia. Ze względu na małą prezyzję, postanowiłam użyć wektora $\beta$, w którym na każdym miejscu wartość wynosi $3$ i przeprowadzę analizę dla wszystkich wartości $\beta_i$ (ze skupieniem się na pierwszych trzech). Dla ułatwienia - macierze umieszczę w postaci tabeli, w których każda wartość będzie zaokrąglona do części całkowitych. 
+
+Poniżej można zobaczyć tabelę dla teoretycznego wyliczenia asymptotycznej macierzy kowariancji dla $\beta$.
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+n <- 400
+p <- 20
+X <- matrix(rnorm(n * p, 0, 1/20), nrow = n, ncol = p)
+beta <- rep(3, p)
+
+fisher_info_matrix_4 <- fisher_info(X, beta)
+prob_4 <- 1 / (1 + exp(-(X %*% beta)))
+asym_cov_4 <- solve(fisher_info_matrix_4)
+library(knitr)
+library(kableExtra)
+
+kable(asym_cov_4, digits = 0)
+```
+
+Jak widać, wartości na przekątnej wynoszą około $4$ lub $5$, zatem bardzo podobnie jak w pierwszym przypadku. Poza przekątną wartości są bardzo niewielkie, zaokrąglone do $0$ lub $1$. Możemy przyjąć, że są to wartości bardzo podobne do pierwszej analizowanej macierzy. Spójrzmy teraz na wykresy parametrów $\beta_i$.
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE, fig.height=12, fig.width=9}
+B <- 1000
+Y_sim <- replicate(B, rbinom(n, size = 1, prob = prob_4))
+betas <- apply(Y_sim, 2, function(Y) {
+  model <- glm(Y ~ X - 1, family =  "binomial")
+  model$coefficients
+})
+betas_df <- as.data.frame(t(betas))
+colnames(betas_df) <- c("Beta1", "Beta2", "Beta3", "Beta4", "Beta5", "Beta6", "Beta7", "Beta8", "Beta9", "Beta10", "Beta11", "Beta12", "Beta13", "Beta14", "Beta15", "Beta16", "Beta17", "Beta18", "Beta19", "Beta20")
+
+library(tidyr)
+
+betas_long <- pivot_longer(betas_df, cols = everything(), names_to = "Beta", values_to = "Value")
+betas_long$Beta <- factor(betas_long$Beta, levels = paste0("Beta", 1:20))
+
+ggplot(betas_long, aes(x = Value, fill = Beta)) +
+  geom_histogram(binwidth = 1, alpha = 0.6, color = "black") +
+  facet_wrap(~ Beta, scales = "free") +  
+  labs(title = "Histogram estymowanych współczynników Beta",
+       x = "Estymatory Beta",
+       y = "Liczność") +
+  theme_minimal() + 
+  xlim(range(betas_long$Value)) +
+  ylim(0, 225) +
+  geom_vline(xintercept = 3, color = "darkblue", size = 1) + 
+  theme(legend.position = 'none')
+```
+\newpage
+Jak widać na poprzedniej stronie - wszystkie co do jednego przypominają krzywą Gaussa. Wartości są rozłożone bardzo podobnie do tych z punktu 1. Różnica jest niewielka - na początku mieliśmy wartości między $-4$, a $8$, natomiast teraz są to wartości między $-5$, a $10$. Może to wpłynąć na obciążenie estymatorów, ale nie można zauważyć znacznego ich pogorszenia.
+
+```{r, echo = FALSE}
+bias <- colMeans(t(betas)) - beta
+```
+
+|$\beta_1$|$\beta_2$|$\beta_3$|$\beta_4$|$\beta_5$|$\beta_6$|$\beta_7$|$\beta_8$|$\beta_8$|$\beta_9$|$\beta_{10}$|
+|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+|`r round(bias[1], 4)`|`r round(bias[2], 4)`|`r round(bias[3], 4)`|`r round(bias[4], 4)`|`r round(bias[5], 4)`|`r round(bias[6], 4)`|`r round(bias[7], 4)`|`r round(bias[8], 4)`|`r round(bias[9], 4)`|`r round(bias[10], 4)`|
+
+|$\beta_{11}$|$\beta_{12}$|$\beta_{13}$|$\beta_{14}$|$\beta_{15}$|$\beta_{16}$|$\beta_{17}$|$\beta_{18}$|$\beta_{19}$|$\beta_{20}$|
+|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+|`r round(bias[11], 4)`|`r round(bias[12], 4)`|`r round(bias[13], 4)`|`r round(bias[14], 4)`|`r round(bias[15], 4)`|`r round(bias[16], 4)`|`r round(bias[17], 4)`|`r round(bias[18], 4)`|`r round(bias[19], 4)`|`r round(bias[20], 4)`|
+
+Gdy spojrzymy na wartości obciążenia, zapisane w powyższych tabelach, możemy zauważyć, że jest ono znacznie większe. Przypomina wartości otrzymane, gdy zmniejszyliśmy liczbę obserwacji. Widać więc znaczną różnicę, gdy zwiększymy liczbę regresorów. Spójrzmy teraz na estymowaną asymptotyczną macierz kowariancji.
+
+```{r, echo = FALSE, warning = FALSE, message=FALSE}
+matrix <- lapply(1:1000, function(i) {
+  Y <- Y_sim[,i]
+  model <- glm(Y ~ X - 1, family =  "binomial")
+  predicted <- predict.glm(model, type = "response")
+  S <- diag(predicted * (1 - predicted))  
+  J <- t(X) %*% S %*% X  
+  solve(J)
+})
+
+matrix_array <- simplify2array(matrix)
+
+mean_matrix <- apply(matrix_array, c(1, 2), mean, na.rm = TRUE)
+kable(mean_matrix, digits = 0)
+```
+
+Można zauważyć niewielką różnicę między macierzą teoretyczną, a estymowaną. Na przekątnej można zauważyć nieco więcej piątek niż czwórek, zatem wartości mogą być nieco większe, nie jesteśmy jednak w stanie sprawdzić przy przyjętym zaokrągleniu o ile większe są to wartości.
+
+## Podsumowanie
+
+Zacznę od wniosków dotyczących liczby obserwacji. W dość oczywisty sposób, gdy mieliśmy do czynienia z większą ich liczbą wyniki były bardziej dokładne. Gdy zmieniliśmy wartość $n$ z $400$ na $100$ mogliśmy zauważyć większe wartości w asymptotycznej macierzy kowariancji, większy rozrzut na histogramach, jak i znacząco większe obciążenie estymatorów. Jest to dość oczywisty wynik, gdyż w każdym przypadku wiemy, że im więcej mamy obserwacji, tym bardziej zbliżone do teoretycznych wyniki. 
+
+Z kolei gdy zmieniliśmy korelację między regresorami, nie mogliśmy zauważyć znacznej różnicy w wynikach. Wynika z tego, że jeśli będziemy wykonywać analizę na zmiennych skorelowanych nie będzie to miało znaczenia w wynikach. 
+
+Na koniec, liczba regresorów nie wpłynęła w znaczący sposób na wygląd macierzy kowariancji, można jednak było zauważyć, że obciążenie było znacząco większe, podobne jak przy zwiększeniu liczby obserwacji. 
+
+Z pewnych ogólnych spostrzeżeń warto również dodać, że obciążenie jedynie w jednym przypadku okazało się ujemne, zatem w znacznej większości przypadków możemy zobaczyć, że estymatory średnio są zbyt duże, nie zbyt małe.
+

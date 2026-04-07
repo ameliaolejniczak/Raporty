@@ -1,0 +1,570 @@
+---
+title: "Analiza błędów estymatorów"
+author: "Amelia Olejniczak"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Wprowadzenie
+
+W tym raporcie skupię się na analizie błędów sześciu różnych estymatorów. Skupię się tutaj na błędzie kwadratowym, sumie liczby błędów pierwszego i drugiego rodzaju (dla estymatorów obciętych), a także $MSE = E(SE)$. Badane przeze mnie estymatory będą to:
+
+- estymator najmniejszych kwadratów $\hat{\beta}^{LS}$
+- dwa estymatory Jamesa-Steina (ściągający do zera oraz do wspólnej średniej)
+- obcięte estymatory bazujące na trzech procedurach wielokrotnego testowania (Bonferroniego, Benjaminiego-Hochberga oraz stosując klasyfikator Bayesowski)
+
+# Przygotowanie danych
+
+Aby wykonać tę analizę w pierwszej kolejności wygeneruję dane do niej potrzebne. Macierz $X_{1000 \times 1000}$ jest macierzą ortonormalną, z kolei wektor współczynników regresji jest to wektor o rozkładzie $$\beta_i \sim (1 - \gamma)\delta_0 + \gamma \varphi (0, \tau^2)$$ gdzie $\delta_0$ jest rozkładem skupionym w zerze, natomiast $\varphi (0, \tau^2)$ jest to gęstość rozkładu normalnego o wariancji równej $\tau^2$. Na podstawie trzech wartości parametru $\gamma = \{ 0.01, 0.05, 0.1 \}$ oraz dwóch wartości parametru $\tau = \{ 1.5 \sqrt{2\log1000}, 3 \sqrt{2 \log1000} \}$ wygeneruję również wektor odpowiedzi $Y = \beta X + \epsilon$, gdzie $\epsilon \sim N(0, 1)$. Analizę przeprowadzę przy założeniu, że $\sigma^2$ jest znana i równa 1. 
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+library(pracma)
+set.seed(72654826)
+X <- randortho(1000, "orthonormal")
+d <- max(abs(diag(t(X)%*%X) - rep(1, 1000)))
+X_offdiag <- t(X) %*% X
+diag(X_offdiag) <- 0
+o <- max(abs(X_offdiag))
+```
+
+W pierwszej kolejności sprawdźmy, czy wygenerowana macierz $X$ jest ortonormalna. Nie możemy po prostu przyrównać $X'X = I$, ponieważ R dokonuje pewnych przybliżeń i zaokrągleń, przez które wynik nie będzie dokładnie macierzą identycznościową, natomiast będzie macierzą jej bardzo bliską. Aby określić, jak bliska macierzy identycznościowej jest wynik działania na wygenerowanej macierzy wskażę maksymalną co do modułu wartość poza przekątną wyniku (aby zobaczyć odległość od 0), a także maksymalną (co do modułu) różnicę między wartościami na przekątnej wyniku oraz wektorem jedynek. Dowiemy się wtedy, z jakim przybliżeniem mamy do czynienia. 
+
+W przypadku wgenerowanej przeze mnie macierzy mamy w takim przypadku `r d` na różnicy przekątnych macierzy oraz `r o` poza nią. Są to bardzo niewielkie liczby, zatem potwierdza to, że macierz $X$ jest macierzą ortonormalną.
+
+Musimy jeszcze wygenerować wektor parametrów $\beta_i$. Aby to zrobić musimy wygenerować wektor z wartościami z rozkładu dwumianowego o prawdopodobieństwie $\gamma$. Następnie zamieniamy wartości 1 na losową wartość z rozkładu normalnego o gęstości $\varphi(0, \tau^2)$. Pozostałe wartości pozostają bez zmian, gdyż  z prawdopodobieństwem $1 - \gamma$ mamy wartość 0 w wektorze $\beta$.
+
+```{r, echo = FALSE}
+gamma <- c(0.01, 0.05, 0.1)
+tau <- c(1.5 * sqrt(2 * log(1000)), 3 * sqrt(2 * log(1000)))
+
+generate_betas_matrix <- function(gamma, tau, n = 1000, p = 1000) {
+  probs <- matrix(rbinom(n * p, 1, gamma), nrow = n)
+  values <- matrix(rnorm(n * p, 0, tau), nrow = n)
+  betas <- probs * values
+  return(betas)  
+}
+
+beta_mat <- list()
+
+for (g in gamma) {
+  for (t in tau) {
+    key <- paste0("g_", g, "_t_", round(t, 2))
+    beta_mat[[key]] <- generate_betas_matrix(g, t)
+  }
+}
+```
+
+# Wyznaczenie estymatorów
+
+Zajmę się teraz wyznaczeniem potrzebych estymatorów do analizy.
+
+## Estymator najmniejszych kwadratów
+
+W pierwszej kolejności zajmę się estymatorem najmniejszych kwadratów, który wyliczamy ze wzoru $$\hat{\beta}^{LS} = (X'X)^{-1}X'Y$$ Ze względu na to, że $X$ jest macierzą ortonormalną (zatem $X'X = I \iff (X'X)^{-1} = I$) możemy uprościć wzór do postaci $$\hat{\beta}^{LS} = X'Y$$ Wiemy, że $$\hat{\beta}^{LS} \sim N(\beta, \sigma^2(X'X)^{-1})$$ Ponieważ wiemy, ze $\sigma^2 = 1$, a $(X'X)^{-1} = I$ to ostateczny rozkład $\hat{\beta}^{LS}$ prezentuje się następująco $$\hat{\beta}^{LS} \sim N(\beta, I)$$
+
+```{r, echo = FALSE}
+epsilon <- matrix(rnorm(1000 * 1000), nrow = 1000, ncol = 1000)
+beta_LS <- lapply(beta_mat, function(beta_matrix) {
+  lapply(1:nrow(beta_matrix), function(n) {
+    beta_matrix[n, ] + t(X) %*% epsilon[n, ]
+  })
+})
+```
+
+## Estymator Jamesa-Steina ściągający do zera
+
+Teraz wyliczę estymator Jamesa-Steina ściągający do zera. Wzór ogólny dla tego estymatora to: $$\hat{\beta}_JS = c_{JS} \hat{\beta}^{LS}$$ gdzie $c_{JS} = 1 - \frac{(n - 2) \sigma^2}{||X||^2}$. W naszym przypadku wiemy, że $n = 1000$, $\sigma^2 = 1$ oraz $||X||^2 = ||\hat{\beta}^{LS}||^2$. Otrzymujemy z tego: $$\hat{\beta}_JS = \left( 1 - \frac{998}{||\hat{\beta}^{LS}||^2} \right) \hat{\beta}^{LS}$$
+
+```{r, echo = FALSE}
+beta_JS0 <- lapply(beta_LS, function(LS) {
+  lapply(LS, function(beta_hat) {
+    (1 - (998/sum(beta_hat ** 2))) * beta_hat
+  })
+})
+```
+
+## Estymator Jamesa-Steina ściągający do wspólnej średniej
+
+Kolejny z estymatorów (Jamesa-Steina ściągający do wspólnej średniej) ma wzór ogólny następującej postaci: $$\hat{\beta}_{JS} = (1 - d_{JS}) \hat{\beta}^{LS} + d_{JS} \bar{\beta}^{LS}$$ gdzie $d_{JS} = \frac{(n - 3)}{(n - 1)} \frac{\sigma^2}{Var \left( \hat{\beta}^{LS} \right)}$ oraz $Var \left( \hat{\beta}^{LS} \right) = \frac{1}{n - 1} \sum^n_{i = 1} (\hat{\beta_i}^{LS} - \bar{\beta}^{LS})^2$. Ponownie w naszym przypadku wiemy, że $\sigma^2 = 1$ oraz $n = 1000$, zatem ostateczny wzór to $$\hat{\beta}_{JS} = \left( 1 - \frac{997}{999} \cdot \frac{1}{Var \left( \hat{\beta}^{LS} \right)} \right) \hat{\beta}^{LS} + \left( \frac{997}{999} \cdot \frac{1}{Var \left( \hat{\beta}^{LS} \right)} \right) \bar{\beta}^{LS}$$
+
+```{r, echo = FALSE}
+beta_JSmean <- lapply(beta_LS, function(LS) {
+  lapply(LS, function(beta) {
+    variance <- 1/999 * sum((beta - mean(beta))**2)
+    (1 - 997/(999 * variance)) * beta + (997/(999 * variance)) * mean(beta)
+  })
+})
+```
+
+# Testowanie hipotez
+
+W celu wyliczenia obciętych estymatorów, potrzebnych do dalszej analizy, w pierwszej kolejności wykonam testowanie hipotez na trzy sposoby. W pierwszej kolejności będzie to procedura Bonferroniego, następnie procedura Benjaminiego-Hochberga, a na koniec klasyfikator Bayesowski (przy założeniu $C_1 = C_0$).
+
+Mamy serię hipotez $$H_0: \beta_i = 0 \qquad vs \qquad H_1: \beta_i \neq 0$$ gdzie statystyka testowa ma postać $T = \hat{\beta}_i$ (ponieważ $\sigma^2 = 1$). Tym samym p-wartości wyliczamy jako $p_i = 2 \cdot (1 - \Phi(|\hat{\beta}_i|))$
+
+## Procedura Bonferroniego
+
+Przy procedurze Bonferroniego odrzucamy wszystkie $H_0$, dla których $$p_i \leq \frac{\alpha}{n}$$ gdzie $\alpha = 0.05$ i $n = 1000$. 
+
+```{r, echo = FALSE}
+bonf <- lapply(beta_LS, function(LS) {
+  lapply(LS, function(beta) {
+    p_val <- 2 * (1 - pnorm(abs(beta)))
+    which(p_val <= 0.05/1000)
+  })
+})
+```
+
+## Procedura Benjaminiego-Hochberga
+
+W przypadku procedury Benjaminiego-Hochberga ustawiamy wszystkie wyliczone p-wartości w kolejności rosnącej (tj. $p_{(1)} \leq p_{(2)} \leq ... \leq p_{(n)}$). Następnie wyznaczamy $i_0$ takie, że $$i_0 = \max \{ i: p_{(i)} \leq \frac{i\alpha}{n} \}$$ gdzie $\alpha = 0.05$, a $n = 1000$. W tym przypadku odrzucamy $H_{(1)}, ..., H_{(i_0)}$.
+
+```{r, echo = FALSE}
+alpha <- 0.05
+p <- 1000
+
+bh <- lapply(beta_LS, function(LS) {
+  lapply(LS, function(beta) {
+    p_val <- 2 * (1 - pnorm(abs(beta)))
+    p_ord <- order(p_val)
+    p_sort <- p_val[p_ord]
+    
+    i <- 1:p
+    thresholds <- (i * alpha) / p
+    below <- which(p_sort <= thresholds)
+
+    if (length(below) == 0) {
+      rejected <- integer(0)  
+    } else {
+      i0 <- max(below)
+      rejected <- p_ord[1:i0]  
+    }
+
+    rejected
+  })
+})
+```
+
+## Klasyfikator Bayesowski
+
+Zanim będziemy mogli wyznaczyć klasyfikator Bayesowski potrzebujemy wyznaczyć rozkład $\hat{\beta}^{LS}_i$ przy $H_0$ oraz przy $H_1$, ponieważ w przypadku klasyfikatora Bayesowskiego, na tej podstawie określamy obszar krytyczny. Rozkład $\hat{\beta}^{LS}_i$ zależy od rozkładu $\beta_i \sim (1 - \gamma)\delta_0 + \gamma \varphi (0, \tau^2)$ oraz rozkładu $\epsilon_i \sim N(0, 1)$. Oznacza to, że $\hat{\beta}^{LS}_i \sim N(0, 1)$ dla hipotezy zerowej oraz $\hat{\beta}^{LS}_i \sim N(0, \tau^2 + 1)$ dla hipotezy alternatywnej, opisanych wcześniej. W takim przypadku możemy przeprowadzić test $$H_0: \hat{\beta}^{LS}_i \sim N(0, 1) \qquad vs \qquad H_1: \hat{\beta}^{LS}_i \sim N(0, \tau^2 + 1)$$ Aby wyznaczyć obszar, w którym odrzucamy hipotezę zerową potrzebujemy skorzystać ze wzoru $$\Gamma_1 = \left\{ x: \frac{f_1(x)}{f_0(x)} \geq \frac{C_0}{C_1} \frac{P(H_0)}{P(H_1)} \right\}$$ Z polecenia zakładamy, że mamy tę samą funkcję straty za błąd I i II rodzaju (tj. $C_1 = C_0$). Z informacji podanych wyżej wiemy, jaka jest gęstość $f_1(x)$ oraz $f_0(x)$, natomiast prawdopodobieństwa wynoszą $P(H_0) = 1 - \gamma$ oraz $P(H_1) = \gamma$. Zatem wzór, po podstawieniu znanych wartości prezentuje się następująco: $$\Gamma_1 = \left\{ x:  \frac{\frac{1}{\sqrt{2 \pi (1 + \tau^2)}} e^{-\frac{x^2}{2(1 + \tau^2)}}}{\frac{1}{\sqrt{2 \pi}} e^{-\frac{x^2}{2}}} \geq \frac{1 - \gamma}{\gamma} \right\}$$ Co po potrzebnych przekształceniach daje nam $$\Gamma_1 = \left\{ x: |x| \geq \sqrt{log\left( \frac{1 - \gamma}{\gamma} \cdot \sqrt{1 + \tau^2} \right) \cdot \frac{2(1 + \tau^2)}{\tau^2}} \right\}$$ W naszym przypadku będziemy porównywać wartości $|\hat{\beta}^{LS}_i|$ z powyższą nierównością i odrzucać hipotezę zerową, dla takich wartości $i$, dla których nierówność jest spełniona.
+
+```{r, echo = FALSE}
+bayes <- list()
+
+for (g in gamma) {
+  for (t in tau) {
+    threshold <- sqrt(log((1 - g) / g * sqrt(1 + t^2)) * (2 * (1 + t^2) / t^2))
+    
+    key <- paste0("g_", g, "_t_", round(t, 2))
+    
+    LS_list <- beta_LS[[key]]
+    results_gt <- list()
+    
+    for (i in seq_along(LS_list)) {
+      beta_hat <- LS_list[[i]]
+      rejected_indices <- which(abs(beta_hat) >= threshold)
+      results_gt[[i]] <- rejected_indices
+    }
+    
+    bayes[[key]] <- results_gt
+  }
+}
+```
+
+# Estymatory ucięte
+
+Przy pomocy powyższych testów możemy wyznaczyć estymatory ucięte, w których dla danego $\hat{\beta}^{obc}_i$ jeśli nie możemy odrzucić $H_0$ podstawiamy $0$, a w przypadku gdy odrzucamy $H_0$ zostawiamy wartość dla $\hat{\beta}^{LS}_i$. Zatem $$\hat{\beta}^{obc}_i = \begin{cases} \hat{\beta}^{LS}_i, & H_i \quad \text{odrzucone} \\ 0, & H_i \quad \text{nie odrzucona} \end{cases}$$ Wykonam takie działanie dla wszystkich powyższych testów.
+
+```{r, echo = FALSE}
+estimate <- function(beta, indexes) {
+  beta_new <- beta
+  for (i in 1:length(beta)) {
+    for (j in 1:length(beta[[i]])) {
+      for (h in 1:length(beta[[i]][[j]])) {
+          if (!(h %in% indexes[[i]][[j]])) {
+            beta_new[[i]][[j]][h] <- 0
+          }
+      }
+    }
+  }
+  return(beta_new)
+}
+
+est_ob_bonf <- estimate(beta_LS, bonf)
+est_ob_bh <- estimate(beta_LS, bh)
+est_ob_bay <- estimate(beta_LS, bayes)
+```
+
+# Porównania estymatorów
+
+Teraz porównam powyższe 6 estymatorów (najmniejszych kwadratów, dwa estymatory Jamesa-Steina oraz estymatory obcięte dla 3 procedur testowania). Aby jasno przedstawiać wyniki wszystkie umieszczę w tabelach, gdzie kolumny będą oznaczać odpowiedni estymator (oznaczone jako **LS, CJS, DJS, BON, BH, BAYES** w tej kolejności jak zawarte w tekście), z kolei rzędy - odpowiednią kombinację wartości $\gamma$ oraz $\tau$, z oznaczeniami zgodnymi z poniższą tabelą: 
+
+||$\gamma$|$\tau$|
+|:-:|:-:|:-:|
+|I|$0.01$|$1.5\sqrt{2\log{1000}}$|
+|II|$0.01$|$3\sqrt{2\log{1000}}$|
+|III|$0.05$|$1.5\sqrt{2\log{1000}}$|
+|IV|$0.05$|$3\sqrt{2\log{1000}}$|
+|V|$0.1$|$1.5\sqrt{2\log{1000}}$|
+|VI|$0.1$|$3\sqrt{2\log{1000}}$|
+
+## Błąd kwadratowy
+
+W pierwszej kolejności porównanie wykonam na podstawie błędu kwadratowego dla każdego z tych estymatorów. Wyliczamy go przy pomocy wzoru: $$SE = ||\hat{\beta} - \beta||^2$$ Wszystkie wartośći (dla różnych kombinacji $\gamma$ i $\tau$) umieszczę w tabeli poniżej
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+SE_LS <- lapply(1:length(beta_mat), function(i) {
+  sum((beta_LS[[i]][[1]] - beta_mat[[i]][1, ])**2)
+})
+
+SE_JS0 <- lapply(1:length(beta_mat), function(i) {
+  sum((beta_JS0[[i]][[1]] - beta_mat[[i]][1, ])**2)
+})
+
+SE_JSmean <- lapply(1:length(beta_mat), function(i) {
+  sum((beta_JSmean[[i]][[1]] - beta_mat[[i]][1, ])**2)
+})
+
+SE_bonf <- lapply(1:length(beta_mat), function(i) {
+  sum((est_ob_bonf[[i]][[1]] - beta_mat[[i]][1, ])**2)
+})
+
+SE_bh <- lapply(1:length(beta_mat), function(i) {
+  sum((est_ob_bh[[i]][[1]] - beta_mat[[i]][1, ])**2)
+})
+
+SE_bayes <- lapply(1:length(beta_mat), function(i) {
+  sum((est_ob_bay[[i]][[1]] - beta_mat[[i]][1, ])**2)
+})
+
+library(knitr)
+library(kableExtra)
+
+se_df <- data.frame(
+  LS = unlist(SE_LS),
+  CJS = unlist(SE_JS0),
+  DJS = unlist(SE_JSmean),
+  B = unlist(SE_bonf),
+  BH = unlist(SE_bh),
+  BAYES = unlist(SE_bayes)
+)
+
+rownames(se_df) <- c("I", "II", "III", "IV", "V", "VI")
+
+kable(se_df, format = "latex", booktabs = TRUE,
+      caption = "Porównanie błędu kwadratowego") %>%
+  kable_styling(latex_options = c("hold_position")) %>%
+  add_header_above(c(" " = 1, " " = 6)) 
+```
+
+Gdy przykrzymy się powyższym wartościom możemy zobaczyć, że dla estymatora najmniejszych kwadratów wartości są największe. Są one takie same bez względu na wartości $\gamma$ i $\tau$, gdyż zależą one jedynie od $X'$ oraz $\epsilon$ (który jest taki sam bez względu na wartości $\beta$, dzięki czemu będziemy w stanie porównać wpływ $\gamma$ oraz $\tau$ - czyli zagęszczenia wartości niezerowych w wektorze $\beta$ oraz ich wariancji - bez żadnych zależności wychodzących od $\epsilon$).
+
+Dla estymatorów Jamesa-Steina (zarówno ściągających do 0 jak i do wspólnej średniej) wartości SE są mniejsze i bardzo podobne do siebie. Estymator ściągający do zera działa nieco lepiej dla mniejszych $\gamma$ (a zatem większej liczby prawdziwych wartości 0), jednak nie jest to znacząca różnica. Im większe wartości $\gamma$ oraz $\tau$, tym bliższe wartościom dla estymatora najmniejszych kwadratów są te błędy. Ze względu na to, że główną ideą dla estymatorów Jamesa-Steina jest minimalizacja błędu średniokwadratowego, zatem wpływa również na błąd kwadratowy.
+
+Najlepiej radzą sobie obcięte estymatory, w szczególności oparty na testowaniu przy pomocy klasyfikatora Bayesowskiego. Nie jest to zaskakujące, gdyż zamieniając wartości estymatora najmniejszych kwadratów przy nieodrzuconych hipotezach zerowych, pojawia się bardzo dużo wartości równych 0, co przy niewielkim $\gamma$ powoduje, że duża część z wartości nakłada się z prawdziwymi wartościami $0$. Z tego względu można zobaczyć, że najlepiej radzą sobie te estymatory, gdy mamy do czynienia z najmniejszym $\gamma$. Błędy dla tego sposobu estymowania są związane bezpośrednio z błędów testowania, zatem ich analizą zajmiemy się w tym momencie.
+
+## Liczba błędów I i II rodzaju dla różnych rodzajów testowania
+
+Aby dobrze przeanalizować obcięte estymatory, przeanalizuję teraz liczbę błędów I oraz II rodzaju przy różnych procedurach wielokrotnego testowania (a także łącznej liczbie popełnionych błędów) dla różnych wartości $\gamma$ oraz $\tau$ na podstawie których tworzyłam estymatory obcięte. Wyniki przedstawię w trzech tabelach.
+
+```{r, echo = FALSE}
+bonf_I <- numeric(length(beta_mat))
+bonf_II <- numeric(length(beta_mat))
+
+for (i in 1:length(beta_mat)) {
+  beta_true <- beta_mat[[i]][1, ]
+  beta_est  <- est_ob_bonf[[i]][[1]]  
+
+  bl_i <- 0
+  bl_ii <- 0
+  
+  for (j in 1:length(beta_mat[[i]][1, ])) {
+    if (beta_true[j] == 0 &  beta_est[j] != 0) {
+    bl_i <- bl_i + 1
+  }
+  if (beta_true[j] != 0 & beta_est[j] == 0) {
+    bl_ii <- bl_ii + 1
+  }
+  }
+  
+  bonf_I[i] <- bl_i
+  bonf_II[i] <- bl_ii
+}
+
+bh_I <- numeric(length(beta_mat))
+bh_II <- numeric(length(beta_mat))
+
+for (i in 1:length(beta_mat)) {
+  beta_true <- beta_mat[[i]][1, ]
+  beta_est  <- est_ob_bh[[i]][[1]]  
+
+  bl_i <- 0
+  bl_ii <- 0
+  
+  for (j in 1:length(beta_mat[[i]][1, ])) {
+    if (beta_true[j] == 0 &  beta_est[j] != 0) {
+    bl_i <- bl_i + 1
+  }
+  if (beta_true[j] != 0 & beta_est[j] == 0) {
+    bl_ii <- bl_ii + 1
+  }
+  }
+  
+  bh_I[i] <- bl_i
+  bh_II[i] <- bl_ii
+}
+
+bay_I <- numeric(length(beta_mat))
+bay_II <- numeric(length(beta_mat))
+
+for (i in 1:length(beta_mat)) {
+  beta_true <- beta_mat[[i]][1, ]
+  beta_est  <- est_ob_bay[[i]][[1]]  
+
+  bl_i <- 0
+  bl_ii <- 0
+  
+  for (j in 1:length(beta_mat[[i]][1, ])) {
+    if (beta_true[j] == 0 &  beta_est[j] != 0) {
+    bl_i <- bl_i + 1
+  }
+  if (beta_true[j] != 0 & beta_est[j] == 0) {
+    bl_ii <- bl_ii + 1
+  }
+  }
+  
+  bay_I[i] <- bl_i
+  bay_II[i] <- bl_ii
+}
+
+bonf_table <- data.frame(
+  `Błąd I rodzaju` = bonf_I,
+  `Błąd II rodzaju` = bonf_II,
+  Razem = bonf_I + bonf_II
+)
+
+rownames(bonf_table) <- c("I", "II", "III", "IV", "V", "VI")
+
+kable(bonf_table, format = "latex", booktabs = TRUE,
+      caption = "Liczba błędów testowania - procedura Bonferroniego") %>%
+  kable_styling(latex_options = c("hold_position"))
+
+bh_table <- data.frame(
+  `Błąd I rodzaju` = bh_I,
+  `Błąd II rodzaju` = bh_II,
+  Razem = bh_I + bh_II
+)
+
+rownames(bh_table) <- c("I", "II", "III", "IV", "V", "VI")
+
+kable(bh_table, format = "latex", booktabs = TRUE,
+      caption = "Liczba błędów testowania - procedura Benjaminiego-Hochberga") %>%
+  kable_styling(latex_options = c("hold_position"))
+```
+\newpage
+```{r, echo = FALSE}
+bay_table <- data.frame(
+  `Błąd I rodzaju` = bay_I,
+  `Błąd II rodzaju` = bay_II,
+  Razem = bay_I + bay_II
+)
+
+rownames(bay_table) <- c("I", "II", "III", "IV", "V", "VI")
+
+kable(bay_table, format = "latex", booktabs = TRUE,
+      caption = "Liczba błędów testowania - klasyfikator Bayesowski") %>%
+  kable_styling(latex_options = c("hold_position")) 
+```
+
+Widać w powyższych tabelach, że faktycznie liczba błędów testowania wpływa na błąd kwadratowy obciętych estymatorów. W większości sytuacji, jeśli wzrasta liczba błędów testowania, to możemy również zobaczyć wzrost wartości błędu kwadratowego. 
+
+Jasne są również wyniki znajdujące się w tabeli - przy zastosowaniu procedury Bonferroniego kontrolujemy liczbę błędów I rodzaju (a zatem fałszywych odkryć), nie kontroując jednocześnie błędów II rodzaju w takim samym stopniu - z tego względu mimo że ta procedura nie popełnia żadnych błędów I rodzaju, to łączna liczba błędów przy testowaniu jest największa w wielu przypadkach - ze względu właśnie na tak dużą liczbę odkryć w ogóle.
+
+Z kolei gdy spojrzymy na procedurę Benjaminiego-Hochberga, wiemy, że ogranicza ona liczbę fałszywych odkryć, jednak radzi sobie ona w tym przypadku dużo gorzej niż pozostałe procedury, ponieważ ma największą liczbę błędów I rodzaju. Warto jednak zauważyć, że przez łagodniejsze podejście do odrzucania hipotez zerowych niż w przypadku procedury Bonferroniego udało się zmniejszyć liczbę błędów II rodzaju.
+
+Klasyfikator Bayesowski natomiast radzi sobie zdecydowanie najlepiej, co nie jest zaskakujące, biorąc pod uwagę, że minimalizuje on zarówno błąd I jak i II rodzaju, dzięki czemu możemy zauważyć najmniejszą liczbę popełnionych błędów. 
+
+Warto również się zastanowić, dlaczego dla większej wariancji otrzymujemy mniejszą liczbę błędów (i tym samym mniejszy błąd kwadratowy w większości przypadków). Intuicyjnie, jest to związane z liczbą błędów II rodzaju, która jest większa niż liczba błędów I rodzaju. Oczywistym jest, że trudniej jest odrzucić hipotezę zerową dla większej wariancji, gdyż wartości są bardziej oddalone od zera. Ze względu na losowość parametrów $\beta$ możemy mieć do czynienia z bardzo małymi wartościami, jeśli wariancja jest stosunkowo mała.
+
+## Błąd średniokwadratowy
+
+Na koniec, wyestymuję błąd średniokwadratowy (będący wartością oczekiwaną błędu kwadratowego) przy pomocy średniej błędów kwadratowych dla powyższego doświadczenia powtórzonego 1000 razy. Wyniki umieszczę w tabeli analogicznej do tej z błędem kwadratowym.
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+MSE_LS <- sapply(1:length(beta_mat), function(i) {
+  SE <- sapply(1:nrow(beta_mat[[i]]), function(j) {
+    sum((beta_LS[[i]][[j]] - beta_mat[[i]][j, ])^2)
+  })
+  mean(SE)
+})
+
+MSE_JS0 <- sapply(1:length(beta_mat), function(i) {
+  SE <- sapply(1:nrow(beta_mat[[i]]), function(j) {
+    sum((beta_JS0[[i]][[j]] - beta_mat[[i]][j, ])^2)
+  })
+  mean(SE)
+})
+
+MSE_JSmean <- sapply(1:length(beta_mat), function(i) {
+  SE <- sapply(1:nrow(beta_mat[[i]]), function(j) {
+    sum((beta_JSmean[[i]][[j]] - beta_mat[[i]][j, ])^2)
+  })
+  mean(SE)
+})
+
+MSE_bonf <- sapply(1:length(beta_mat), function(i) {
+  SE <- sapply(1:nrow(beta_mat[[i]]), function(j) {
+    sum((est_ob_bonf[[i]][[j]] - beta_mat[[i]][j, ])^2)
+  })
+  mean(SE)
+})
+
+MSE_bh <- sapply(1:length(beta_mat), function(i) {
+  SE <- sapply(1:nrow(beta_mat[[i]]), function(j) {
+    sum((est_ob_bh[[i]][[j]] - beta_mat[[i]][j, ])^2)
+  })
+  mean(SE)
+})
+
+MSE_bayes <- sapply(1:length(beta_mat), function(i) {
+  SE <- sapply(1:nrow(beta_mat[[i]]), function(j) {
+    sum((est_ob_bay[[i]][[j]] - beta_mat[[i]][j, ])^2)
+  })
+  mean(SE)
+})
+
+SE_bayes <- lapply(1:length(beta_mat), function(i) {
+  sum((est_ob_bay[[i]][[1]] - beta_mat[[i]][1, ])**2)
+})
+
+mse_df <- data.frame(
+  LS = MSE_LS,
+  CJS = MSE_JS0,
+  DJS = MSE_JSmean,
+  B = MSE_bonf,
+  BH = MSE_bh,
+  BAYES = MSE_bayes
+)
+
+rownames(mse_df) <- c("I", "II", "III", "IV", "V", "VI")
+
+kable(mse_df, format = "latex", booktabs = TRUE,
+      caption = "Porównanie błędu średniokwadratowego") %>%
+  kable_styling(latex_options = c("hold_position")) %>%
+  add_header_above(c(" " = 1, " " = 6)) 
+```
+
+Jak widać, powyższe wartości są bardzo podobne do wartości błędów kwadratowych, zatem wnioski są analogiczne. Główną różnicą jest mniejsza wartość dla estymatora najmniejszych kwadratów, która jest związana z różnymi wartościami błędu średniokwadratowego dla 1000 powtórzeń. W pozostałych przypadkach przede wszystkim możemy zobaczyć, że dla najmniejszego $\gamma$ wartości MSE są większe niż wartości SE w poprzedniej tabeli. Tym razem również widać jasno różnicę w wartościach uciętych estymatorów dla różnych wartości $\tau$ - faktycznie dla mniejszego $\tau$ ta wartość jest większa, gdzie w poprzednim przypadku nie dla każdego testowania się tak zdarzało. 
+
+## Wartość oczwkiwana błędów testowania
+
+Spójrzmy jednak na estymowaną liczbę błędów tesotwania (a zatem średnią liczbę błędów I i II rodzaju dla 1000 powtórzeń), aby zobaczyć, czy również tutaj jest widoczny wpływ na błąd średniokwadratowy, a także jak się różnią z poprzednimi tabelami.
+
+```{r, echo = FALSE}
+bonf_I <- numeric(length(beta_mat))
+bonf_II <- numeric(length(beta_mat))
+
+for (i in 1:length(beta_mat)) {
+  bl_i_all <- numeric(nrow(beta_mat[[i]]))
+  bl_ii_all <- numeric(nrow(beta_mat[[i]]))
+  
+  for (j in 1:nrow(beta_mat[[i]])) {
+    beta_true <- beta_mat[[i]][j, ]
+    beta_est  <- est_ob_bonf[[i]][[j]]
+    
+    bl_i <- sum(beta_true == 0 & beta_est != 0)
+    bl_ii <- sum(beta_true != 0 & beta_est == 0)
+    
+    bl_i_all[j] <- bl_i
+    bl_ii_all[j] <- bl_ii
+  }
+  
+  bonf_I[i] <- mean(bl_i_all)
+  bonf_II[i] <- mean(bl_ii_all)
+}
+
+bh_I <- numeric(length(beta_mat))
+bh_II <- numeric(length(beta_mat))
+
+for (i in 1:length(beta_mat)) {
+  bl_i_all <- numeric(nrow(beta_mat[[i]]))
+  bl_ii_all <- numeric(nrow(beta_mat[[i]]))
+  
+  for (j in 1:nrow(beta_mat[[i]])) {
+    beta_true <- beta_mat[[i]][j, ]
+    beta_est  <- est_ob_bh[[i]][[j]]
+    
+    bl_i_all[j] <- sum(beta_true == 0 & beta_est != 0)
+    bl_ii_all[j] <- sum(beta_true != 0 & beta_est == 0)
+  }
+  
+  bh_I[i] <- mean(bl_i_all)
+  bh_II[i] <- mean(bl_ii_all)
+}
+
+bay_I <- numeric(length(beta_mat))
+bay_II <- numeric(length(beta_mat))
+
+for (i in 1:length(beta_mat)) {
+  bl_i_all <- numeric(nrow(beta_mat[[i]]))
+  bl_ii_all <- numeric(nrow(beta_mat[[i]]))
+  
+  for (j in 1:nrow(beta_mat[[i]])) {
+    beta_true <- beta_mat[[i]][j, ]
+    beta_est  <- est_ob_bay[[i]][[j]]
+    
+    bl_i_all[j] <- sum(beta_true == 0 & beta_est != 0)
+    bl_ii_all[j] <- sum(beta_true != 0 & beta_est == 0)
+  }
+  
+  bay_I[i] <- mean(bl_i_all)
+  bay_II[i] <- mean(bl_ii_all)
+}
+
+# Tabela Bonferroni
+bonf_table <- data.frame(
+  `Błąd I rodzaju` = bonf_I,
+  `Błąd II rodzaju` = bonf_II,
+  Razem = bonf_I + bonf_II
+)
+rownames(bonf_table) <- c("I", "II", "III", "IV", "V", "VI")
+
+kable(bonf_table, format = "latex", booktabs = TRUE,
+      caption = "Średnia liczba błędów - procedura Bonferroniego") %>%
+  kable_styling(latex_options = "hold_position")
+
+# Tabela BH
+bh_table <- data.frame(
+  `Błąd I rodzaju` = bh_I,
+  `Błąd II rodzaju` = bh_II,
+  Razem = bh_I + bh_II
+)
+rownames(bh_table) <- c("I", "II", "III", "IV", "V", "VI")
+
+kable(bh_table, format = "latex", booktabs = TRUE,
+      caption = "Średnia liczba błędów - procedura Benjaminiego–Hochberga") %>%
+  kable_styling(latex_options = "hold_position")
+
+# Tabela Bayes
+bay_table <- data.frame(
+  `Błąd I rodzaju` = bay_I,
+  `Błąd II rodzaju` = bay_II,
+  Razem = bay_I + bay_II
+)
+rownames(bay_table) <- c("I", "II", "III", "IV", "V", "VI")
+
+kable(bay_table, format = "latex", booktabs = TRUE,
+      caption = "Średnia liczba błędów - klasyfikator Bayesowski") %>%
+  kable_styling(latex_options = "hold_position")
+```
+
+Jak widać, te tabele są bardzo zgodne z tym, co możemy zobaczyć dla błędu średniokwadratowego, a także wszystkie wartości są bardzo bliskie do tabeli pokazywanych poprzednio, zatem wnioski są również analogiczne.
+
+# Podsumowanie
+
+Wśród porównywanych estymatorów pod względem błędu kwadratowego oraz średniokwadratowego najlepiej wypadły obcięte estymatory. Wśród nich nabardziej wyróżniał się klasyfikator Bayesowski, który miał mniejszą liczbę błędów testowania w porównaniu do pozostałych (jednak nie była to różnica znacząca). Były one w szczególności dobre, gdy wartości $\gamma$ były niewielkie, ale nawet poza tym radziły sobie najlepiej ze wszystkich. Najgorzej, oczywiście, wypadł estymator najmniejszych kwadratów, którego wartości błędów zarówno kwadratowego jak i średniokwadratowego wynosiły około 1000. Estymatory Jamesa-Staina faktycznie zmniejszały błąd, tak jak oczekiwane, jednak dla niego większej liczby wartości niezerowych zarówno SE jak i MSE bardzo zbliżały się do wartości dla $\hat{\beta}^{LS}$. Parametry $\gamma$ i $\tau$ również miały wpływ na wartości estymatorów, gdzie dla estymatorów Jamesa-Steina można było zauważyć znaczne pogorszenie, zarówno gdy wzrastała $\gamma$, jak i gdy mogliśmy zauważyć zwiększenie się wartości $\tau$. W przypadku obciętych estymatorów również można było zauważyć taką tendencję, która była związana bezpośrednio z liczbą błędów testowania. Bazując zatem na MSE (lub też SE) najlepszym estymatorem, bez względu na parametry $\gamma$ i $\tau$ jest estymator obcięty bazujący na klasyfikatorze Bayesowskim. Warto jednak mieć na uwadze, że w zależności od tego, na czym nam zależy przy wyborze estymatora nie powinniśmy się sugerować jedynie tą wielkością.
+

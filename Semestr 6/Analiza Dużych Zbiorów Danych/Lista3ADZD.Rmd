@@ -1,0 +1,967 @@
+---
+title: "Analiza estymatorów błędu predykcji oraz wpływu kryteriów informacyjnych na identyfikację zmiennych"
+author: "Amelia Olejniczak"
+output: 
+  pdf_document:
+    dev: cairo_pdf
+    latex_engine: lualatex
+header-includes:
+  - \usepackage{polyglossia}
+  - \setmainlanguage{polish}
+  - \usepackage{selnolig}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Wprowadzenie
+
+Ten raport będzie podzielony na dwie części. W pierwszej skupimy się na analizie estymatorów błędu predykcji dla różnych wymiarów macierzy. Druga część z kolei będzie oparta na analizie wpływu kryteriów informacyjnych na identyfikację istotnych zmiennych - sprawdzimy liczbę prawdziwych oraz fałszywych odkryć, a także kwadratowy błąd estymacji. 
+
+# Analiza estymatorów błędu predykcji
+
+W pierwszej kolejności zajmę się analizą estymatora błędu predykcji. Aby to zrobić w pierwszej kolejności wygeneruję macierz $X_{1000 \times 950}$, gdzie jej elementy będą niezależnymi zmiennymi losowymi z rozkładu $N(0, \sigma = \frac{1}{\sqrt{1000}})$. Następnie wygeneruję wektor odpowiedzi $Y = X \beta + \epsilon$, gdzie w wektorze $\beta$ pierwsze $20$ wartości wynosi $3.5$, a pozostałe są równe $0$, natomiast $\epsilon \sim N(0, 1)$. Następnie powtórzę wszystko dla $n = 5000$ (zatem macierzy $X_{5000 \times 950}$ o elementach z rozkładu $N(0, \sigma = \frac{1}{\sqrt{5000}})$).
+
+Dokonam analizy trzech estymatorów błędu predykcji. Pierwsze dwa z nich będą liczone ze wzoru $$\widehat{PE} = RSS + 2 \sigma^2 p$$ gdzie $p$ oznacza rozmiar modelu, $\sigma^2$ jest to wariancja $\epsilon$, natomiast $RSS = ||\hat{Y} - Y||^2$. W pierwszym przypadku wyestymujemy błąd predykcji korzystając z prawdziwej wartości $\sigma^2$, natomiast w drugim z nich wyestymujemy również wariancję korzystając ze wzoru $s^2 = \frac{1}{n - p} RSS$. Ostatnim estymatorem będzie ten wyliczony przy pomocy walidacji krzyżowej typu "leave-one-out", którą liczymy za pomocą wzoru $$CV = \sum_{i = 1}^n \left( \frac{Y_i - \hat{Y_i}}{1 - H_{ii}} \right)^2$$ gdzie $H_{ii}$ to odpowiedni element na przekątnej macierzy $H = X(X'X)^{-1}X'$. Wyniki dla modeli wykorzystujących $p$ zmiennych (gdzie $p \in \{ 10, 20, 30, 50, 100, 500, 950 \}$) przedstawię w tabeli. Oznaczę w niej pierwszy z estymatorów jako PE_1, drugi jako PE_2. Z kolei PE oznacza wartość oczekiwaną liczoną jako $PE = \mathbb{E}_{\epsilon^*}||Y^* - \hat{Y}||^2, \ Y^* = X \beta + \epsilon^*$, gdzie $\epsilon^* \sim N(0, I)$ jest wektorem losowym niezależnym od próby treningowej. Natomiast walidację krzyżową oznaczamy w tabeli jako CV.
+
+```{r, echo = FALSE}
+n <- 1000
+p <- 950
+set.seed(674564587)
+X <- matrix(rnorm(n * p, 0, 1/sqrt(n)), nrow = n, ncol = p, byrow = FALSE)
+beta <- c(rep(3.5, 20), rep(0, p - 20))
+epsilon <- rnorm(n, 0, 1)
+Y <- X %*% beta + epsilon
+k <- c(10, 20, 30, 50, 100, 500, 950)
+
+fun <- function(X, beta, epsilon, k) {
+  X_k <- X[, 1:k, drop = FALSE]
+  beta_k <- beta[1:k, drop = FALSE]
+  Y_k <- X_k %*% beta_k + epsilon
+  
+  return(list(X_k = X_k, beta_k = beta_k, Y_k = Y_k))
+}
+
+wyniki_i <- setNames(lapply(k, function(i) {
+  dane <- fun(X, beta, epsilon, i)
+  est_beta <- solve(t(dane$X_k) %*% dane$X_k) %*% t(dane$X_k) %*% dane$Y_k
+  return(est_beta)
+}), paste0("Model_", k))
+
+wyniki <- setNames(lapply(k, function(i) {
+  dane <- fun(X, beta, epsilon, i)
+  model <- lm(dane$Y_k ~ dane$X_k)
+  model_name <- paste0("Model_", i)
+  est_beta <- wyniki_i[[model_name]]
+  RSS <- sum((dane$Y_k - (dane$X_k %*% est_beta))**2)
+  epsilon_star <- rnorm(n, 0, 1)
+  Y_star <- dane$X_k %*% dane$beta_k + epsilon_star
+  PE <- sum((Y_star - (dane$X_k %*% est_beta))**2)
+  sigma_est_2 <- (1/(n-i))*RSS
+  PE_hat_true <- RSS + 2 * i
+  PE_hat_est <- RSS + 2 * sigma_est_2 * i
+  H_ii <- diag(dane$X_k %*% solve(t(dane$X_k) %*% dane$X_k) %*% t(dane$X_k))
+  CV <- sum(((dane$Y_k - (dane$X_k %*% est_beta))/(1 - H_ii))**2)
+  summ <- summary(model)
+  return(c(RSS = RSS, PE = PE, PE_hat_true = PE_hat_true, PE_hat_est = PE_hat_est, CV = CV))
+}), paste0("Model_", k))
+```
+
+\newpage
+
+```{r, echo = FALSE, warning = FALSE}
+library(knitr)
+library(kableExtra)
+
+tabela <- do.call(rbind, lapply(names(wyniki), function(model_name) {
+  model_data <- wyniki[[model_name]]
+  data.frame(
+    PE = model_data["PE"],
+    PE_1 = model_data["PE_hat_true"],
+    PE_2 = model_data["PE_hat_est"],
+    CV = model_data["CV"]
+  )
+}))
+
+rownames(tabela) <- c("10", "20", "30", "50", "100", "500", "950")
+tabela_trans <- t(tabela)
+
+tabela_trans %>%
+  kable(format = "latex", digits = 2, booktabs = TRUE, caption = "Porównanie modeli dla różnej liczby zmiennych (n = 1000)") %>%
+  kable_styling(latex_options = c("hold_position", "scale_down"))
+```
+
+Spójrzmy w pierwszej kolejności na wartość oczekiwaną błędu predykcji, co pozwoli określić, który z modeli jest najbardziej optymalny. Najmniejsza wartość $PE$ w pierwszym rzędzie jest dla $20$ zmiennych objaśniających, co nie jest zaskakujące. Patrząc na prawdziwe wartości wektora $\beta$ to właśnie pierwsze 20 zmiennych okazuje się istotnie statystyczna, gdyż to na pierwszych $20$ miejscach mamy wartości $\beta_i$ różne od zera. Spójrzmy teraz, jak estymatory $\widehat{PE}$ radzą sobie w tej sytuacji. 
+
+Jak można zauważyć, najlepiej przybliża pierwszy z estymatorów, czyli ten w którym znamy wariancję $\sigma^2$, jednak nie jest on idealny. Można zauważyć, że jego wartości nie są bardzo bliskie tym prawdziwym, w szcególności dla $20$, $30$ i $50$ zmiennych. Jeśli spojrzymy natomiast na estymator, w którym estymujemy wariancję możemy zobaczyć, że jest on nieco gorszy niż ten, w którym bierzemy prawdziwą wartość wariancji, jednak w większości przypadków jest on bardzo zbliżony do pierwszego z estymatorów. Jedyne znaczące różnice możemy zobaczyć dla największej liczby badanych zmiennych. Najgorzej ze wszystkich estymatorów radzi sobie ten bazujący na walidacji krzyżowej "leave-one-out", w którym to dla dwóch największych liczb zmiennych możemy zobaczyć znaczne pogorszenie się estymatora. Dla pierwszych pięciu rozmiarów próby nie można jednak zauważyć aż takiego pogorszenia. Można więc z tego wysnuć wnioski, że dla dużej liczby zmiennych, gdzie wiele z nich nie jest istotna te dwa estymatory mogą nie być najlepsze. Warto jednak wziąć pod uwagę, że pierwszy z estymatorów w wielu praktycznych sytuacjach trudno będzie wykorzystać, gdyż zazwyczaj nie znamy dokładnego rozkładu $\epsilon$.
+
+Aby dokładniej przyjrzeć się tym estymatorom zbadam teraz różnicę między poszczególnymi estymatorami, a wartością $PE$. W tym celu wyliczę 100 wartości $PE$ dla różnych wygenerowanych wektorów $\epsilon^*$. Chcąc, aby wyniki były bardziej czytelne, poniżej przedstawiam trzy wykresy - pierwszy, w którym przedstawiam wszystkie rozmiary oraz wszystkie estymatory, w drugim, w którym nie pojawia się rozmiar 950 oraz trzeci, w którym z kolei nie możemy zobaczyć estymatora CV. Ułatwi to odczytanie odpowiednich danych.
+
+```{r, echo = FALSE, fig.height = 3.5}
+results_c <- setNames(lapply(k, function(i) replicate(100, {
+  dane <- fun(X, beta, epsilon, i)
+  model_name <- paste0("Model_", i)
+  est_beta <- wyniki_i[[model_name]]
+  n <- nrow(dane$X_k)  
+  epsilon_star <- rnorm(n, 0, 1)
+  Y_star <- dane$X_k %*% dane$beta_k + epsilon_star
+  PE <- sum((Y_star - (dane$X_k %*% est_beta))**2)
+  return(PE)
+})), paste0("Model_", k))
+
+roznice <- setNames(lapply(k, function(i) {
+  model_name <- paste0("Model_", i)
+  PE <- results_c[[model_name]]
+  PE_hat_true <- wyniki[[model_name]][["PE_hat_true"]]
+  PE_hat_est <- wyniki[[model_name]][["PE_hat_est"]]
+  CV <- wyniki[[model_name]][["CV"]]
+  return(list(PE_hat_true = PE_hat_true - PE, PE_hat_est = PE_hat_est - PE, CV = CV - PE))
+}), paste0("Model_", k))
+
+library(ggplot2)
+
+dane_boxplot <- do.call(rbind, lapply(names(roznice), function(model_name) {
+  model_data <- roznice[[model_name]]
+  data.frame(
+    Model = model_name,
+    Estymator = rep(c("PE_1", "PE_2", "CV"), each = length(model_data[[1]])),
+    Roznica = c(model_data$PE_hat_true, model_data$PE_hat_est, model_data$CV)
+  )
+}))
+
+dane_boxplot$Model <- gsub("Model_", "", dane_boxplot$Model)
+dane_boxplot$Model <- factor(dane_boxplot$Model, levels = sort(as.numeric(unique(dane_boxplot$Model))))
+
+
+ggplot(dane_boxplot, aes(x = Estymator, y = Roznica, fill = Estymator)) +
+  geom_boxplot() +
+  facet_wrap(~ Model, nrow = 1) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(size = 12)
+  ) +
+  labs(
+    title = "Różnice estymatorów (n = 1000)",
+    y = "PE_hat - PE",
+    x = "Estymator"
+  ) +
+  scale_fill_brewer(palette = "Set2")
+```
+
+```{r, echo = FALSE, fig.height = 3.5}
+dane_boxplot_filtered <- subset(dane_boxplot, Model != "950")
+
+ggplot(dane_boxplot_filtered, aes(x = Estymator, y = Roznica, fill = Estymator)) +
+  geom_boxplot() +
+  facet_wrap(~ Model, nrow = 1) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(size = 12)
+  ) +
+  labs(
+    title = "Różnice estymatorów bez p = 950 (n = 1000)",
+    y = "PE_hat - PE",
+    x = "Estymator"
+  ) +
+  scale_fill_brewer(palette = "Set2")
+```
+
+```{r, echo = FALSE, fig.height = 3.5}
+dane_boxplot_filtered_2 <- subset(dane_boxplot, Estymator != "CV")
+
+ggplot(dane_boxplot_filtered_2, aes(x = Estymator, y = Roznica, fill = Estymator)) +
+  geom_boxplot() +
+  facet_wrap(~ Model, nrow = 1) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(size = 12)
+  ) +
+  labs(
+    title = "Różnice estymatorów bez CV (n = 1000)",
+    y = "PE_hat - PE",
+    x = "Estymator"
+  ) +
+  scale_fill_brewer(palette = "Set2")
+```
+
+Jak widać na poprzednich wykresach, zgodnie z poprzednio analizowaną tabelą możemy zobaczyć, że w przypadku modeli o rozmiarach 10, 20, 30, 50, a także 100 (chociaż w nieco mniejszym stopniu) różnice między estymatorem, a wartością oczekiwaną są bardzo podobne do siebie bez względu na wybrany estymator i raczej zbliżone do zera (z niewielkimi elementami odstającymi). Przyglądając się dwóm ostatnim rozmiarom modeli, a zatem 500 oraz 950, możemy zauważyć, że znacząco gorzej radzi sobie estymator CV, którego wartość różnicy dla największego z modeli dochodzi do wartości ponad $12000$. Potwierdza to nasze przypuszczenia z poprzednio wykonanej tabeli, że w tym przypadku walidacja krzyżowa "leave-one-out" zupełnie sobie nie radzi. W każdym przypadku najbliżej zera są estymatory ze znaną wariancją, z jednynie minimalnym pogorszeniem dla rozmiaru $500$ i $950$. Z kolei estymator z nieznaną wariancją jest widocznie gorszy od drugiego jedynie dla największego rozmiaru, co można zobaczyć na ostatnim z wykresów. W pozostałych przypadkach jest wystarczająco bliski najlepszego estymatora.
+
+Wynika z tego, że przy wzroście liczby nieistotnych zmiennych estymator CV zupełnie się nie nadaje. Również estymując wariancję dla dużej liczby nieistotnych zmiennych możemy oczekiwać nieadekwatnych wyników, jednak nie tak bardzo oddalonych od wartości oczekiwanej jak w przypadku walidacji krzyżowej. Najpewniejszy w każdym przypadku będzie estymator liczony znając wariancję $\sigma^2$, jednak taka sytuacja życiowo jest trudna do uzyskania. 
+
+Spójrzmy jednak, jak się zmienia sytuacja, gdy zwiększymy liczbę obserwacji z $n = 1000$ na $n = 5000$. Ponownie w pierwszej kolejności przeanalizuję tabelę, gdzie oznaczenia są takie same, jak w powyższych przypadkach.
+
+```{r, echo = FALSE}
+n2 <- 5000
+p2 <- 950
+set.seed(47868579)
+X2 <- matrix(rnorm(n2 * p2, 0, 1/sqrt(n2)), nrow = n2, ncol = p2, byrow = FALSE)
+beta2 <- c(rep(3.5, 20), rep(0, p2 - 20))
+epsilon2 <- rnorm(n2, 0, 1)
+Y2 <- X2 %*% beta2 + epsilon2
+
+dane_i2 <- setNames(lapply(k, function(i) fun(X2, beta2, epsilon2, i)), paste0("Model_", k))
+
+wyniki_i2 <- setNames(lapply(k, function(i) {
+  model_name <- paste0("Model_", i)
+  dane <- dane_i2[[model_name]]
+  est_beta <- solve(crossprod(dane$X_k)) %*% crossprod(dane$X_k, dane$Y_k)
+  return(est_beta)
+}), paste0("Model_", k))
+
+wyniki2 <- setNames(lapply(k, function(i) {
+  model_name <- paste0("Model_", i)
+  dane <- dane_i2[[model_name]]
+  model <- lm(dane$Y_k ~ dane$X_k)
+  est_beta <- wyniki_i2[[model_name]]
+  RSS <- sum((dane$Y_k - (dane$X_k %*% est_beta))**2)
+  epsilon_star <- rnorm(n2, 0, 1)
+  Y_star <- dane$X_k %*% dane$beta_k + epsilon_star
+  PE <- sum((Y_star - (dane$X_k %*% est_beta))**2)
+  sigma_est_2 <- RSS/(n2 - i)
+  PE_hat_true <- RSS + 2 * i * 1
+  PE_hat_est <- RSS + 2 * sigma_est_2 * i
+  XtX_inv <- solve(crossprod(dane$X_k))
+  H_ii <- rowSums((dane$X_k %*% XtX_inv) * dane$X_k)
+  CV <- sum(((dane$Y_k - (dane$X_k %*% est_beta))/(1 - H_ii))**2)
+  summ <- summary(model)
+  return(c(RSS = RSS, PE = PE, PE_hat_true = PE_hat_true, PE_hat_est = PE_hat_est, CV = CV))
+}), paste0("Model_", k))
+```
+
+```{r, echo = FALSE, warning = FALSE}
+tabela2 <- do.call(rbind, lapply(names(wyniki2), function(model_name) {
+  model_data <- wyniki2[[model_name]]
+  data.frame(
+    PE = model_data["PE"],
+    PE_1 = model_data["PE_hat_true"],
+    PE_2 = model_data["PE_hat_est"],
+    CV = model_data["CV"]
+  )
+}))
+
+rownames(tabela2) <- c("10", "20", "30", "50", "100", "500", "950")
+tabela_trans2 <- t(tabela2)
+
+tabela_trans2 %>%
+  kable(format = "latex", digits = 2, booktabs = TRUE, caption = "Porównanie modeli dla różnej liczby zmiennych (n = 5000)") %>%
+  kable_styling(latex_options = c("hold_position", "scale_down"))
+```
+
+Jak widać, porównując do poprzedniej sytuacji, wyniki są pięciokrotnie większe, niż w przypadku mniejszej liczby obserwacji. Tym razem według wartości oczekiwanej PE wyszło, że to model z $30$ zmiennymi objaśniającymi byłby najlepszy, jednak wszystkie estymatory jednoznacznie wskazują poprawny estymator. Wynik w wartości oczekiwanej prawdopodobnie wynika z konkretnego losowania $\epsilon^*$, ale w tym upewnimy się analizując wykresy pudełkowe. Przyjrzyjmy się jednak dokładniej każdemu z estymaytorów.
+
+Tym razem nie mamy wyraźnie jednego estymatora, który jest najbliższy PE dla każdej liczby predyktorów. W większości przypadków najlepszy jest pierwszy z estymatorów (zatem ten ze znaną $\sigma^2$), natomiast dla największej próby jest to ten, gdzie wariancja jest estymowana. Nie możemy wykluczyć, że jest to związane z konkretną wartością wylosowanego $\epsilon^*$, jednak będziemy mogli to potwierdzić dopiero na podstawie wykresów pudełkowych. Warto również zauważyć, że tym razem różnica między oczekiwanym PE, a tymi, które dostaliśmy przy pomocy estymatorów jest większa niż w pierwszym przypadku. Najważniejszą zmianą jednak jest duże i znaczące polepszenie się estymatora z nieznaną wariancją oraz tego, korzystającego z walidacji krzyżowej dla największej próby (i tym samym również próby, gdzie mamy 500 predyktorów). Wynikałoby z tego, że większa liczba obserwacji ma pozytywny wpływ na estymację błędu predykcji, nawet dla wielu nieznanych parametrów. Potwierdzimy tę tezę, analizując wykres pudełkowy. Tym razem jednak nie potrzebujemy umieszczać więcej niż jednego wykresu, gdyż wszystko jest wystarczająco czytelne.
+
+```{r, echo = FALSE}
+results_c2 <- setNames(lapply(k, function(i) replicate(100, {
+  model_name <- paste0("Model_", i)
+  dane <- dane_i2[[model_name]]
+  est_beta <- wyniki_i2[[model_name]]
+  epsilon_star <- rnorm(n2, 0, 1)
+  Y_star <- dane$X_k %*% dane$beta_k + epsilon_star
+  PE <- sum((Y_star - (dane$X_k %*% est_beta))**2)
+  return(PE)
+})), paste0("Model_", k))
+
+roznice2 <- setNames(lapply(k, function(i) {
+  model_name <- paste0("Model_", i)
+  PE <- results_c2[[model_name]]
+  PE_hat_true <- wyniki2[[model_name]][["PE_hat_true"]]
+  PE_hat_est <- wyniki2[[model_name]][["PE_hat_est"]]
+  CV <- wyniki2[[model_name]][["CV"]]
+  return(list(PE_1 = PE_hat_true - PE, PE_2 = PE_hat_est - PE, CV = CV - PE))
+}), paste0("Model_", k))
+```
+```{r, echo = FALSE, fig.height = 3.1}
+dane_boxplot2 <- do.call(rbind, lapply(names(roznice2), function(model_name) {
+  model_data <- roznice2[[model_name]]
+  data.frame(
+    Model = model_name,
+    Estymator = rep(c("PE_1", "PE_2", "CV"), each = length(model_data[[1]])),
+    Roznica = c(model_data$PE_1, model_data$PE_2, model_data$CV)
+  )
+}))
+
+dane_boxplot2$Model <- gsub("Model_", "", dane_boxplot2$Model)
+dane_boxplot2$Model <- factor(dane_boxplot2$Model, levels = sort(as.numeric(unique(dane_boxplot2$Model))))
+
+ggplot(dane_boxplot2, aes(x = Estymator, y = Roznica, fill = Estymator)) +
+  geom_boxplot() +
+  facet_wrap(~ Model, nrow = 1) +
+  theme_minimal(base_size = 14) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(size = 12)
+  ) +
+  labs(
+    title = "Różnice estymatorów (n = 5000)",
+    y = "PE_hat - PE",
+    x = "Estymator"
+  ) +
+  scale_fill_brewer(palette = "Set2")
+```
+
+Jak widać powyżej, widać znaczną poprawę dla dwóch największych rozmiarów próby. Trzeba jednak zauważyć inny element tych wykresów. Można zobaczyć, że wartości między odpowiednimi kwartylami dla modeli o rozmiarach mniejszych niż 100 (włącznie) znajdują się poniżej wartości $-200$, a zatem są o wiele niższe niż w przypadku, gdy mieliśmy do czynienia z mniejszą wartością $n$. Oznacza to, że tym razem estymatory są zbyt małe w stosunku do oczekiwanej wartości. Wynika z tego również, że to dla największej liczby zmiennych objaśniających każdy z estymatorów jest najlepszy, ponieważ ich różnica jest najbardziej zbliżona do zera. Można zauważyć w szczególności, że to dla poprzednio najgorzej sprawdzającego się w przypadku dużej liczby nieistotnych zmiennych estymatora bazującego na walidacji krzyżowej "leave-one-out" wartości różnicy są najbliższe zera. Kolejny jest estymator ze znaną wariancją, a najgorzej radzi sobie estymator z nieznaną wariancją, w którym wartości różnic tylko nieznacznie zbliżają się do zera, w znacznym stopniu oscylując jednak między $-200$, a $-400$. 
+
+# Analiza kryteriów informacyjnych na identyfikację istotnych zmiennych
+
+Skupmy się teraz na drugiej części raportu, zatem na analizie, jak konkretne kryteria informacyjne wpływają na identyfikację istotnych zmiennych. W tym celu wykorzystam modele dla wcześniej losowanych macierzy, jednak tym razem będziemy rozważać pierwsze $p \in \{ 50, 100, 200, 500, 950 \}$ kolumn macierzy X. Wszystko wykonam w pierwszej kolejności dla $n = 1000$, a następnie $n = 5000$. Kryteria informacyjne, którym będziemy się przyglądali to $AIC$, $BIC$, $RIC$, $mBIC$ oraz $mBIC2$. 
+
+Warto się zastanowić na czym same kryteria informacyjne polegają. Otóż opierają się one na sprawdzaniu, który model jest najlepszy, analizując otrzymane dane. Wyliczając konkretną statystykę i wybierając jej najmniejszą wartość możemy wskazać, która z nich jest najlepsza. Sprawdzamy zatem wszystkie modele o maksymalnie $p$ kolumnach i porównujemy ze sobą ich statystyki. A przynajmniej sprawdzalibyśmy, gdybyśmy chcieli wykoać to idealnie. W praktyce jest to bardzo czasochłonne i po prostu niepotrzebne. Zamiast tego, korzysta się z konkretnych metod klasyfikacji istotnych zmiennych jak np. *backward selection*, które usuwa po jednej zmiennej, dopóki nie przestanie się widzieć poprawy w modelu.
+
+Różne kryteria, podobnie jak różne korekty testowania, działają w różny sposób. Niektóre z nich skupiają się bardziej na odnalezieniu istotnych zmiennych, dzięki czemu z dużą skutecznością udaje się odnaleźć wszystkie zmienne, które mają wpływ na daną zmienną objaśnianą, jednak w konsekwencji mogą mieć bardzo dużą liczbę fałszywych odkryć. Z kolei inne mogą pozwolić na ograniczenie przyjmowania zmiennych, które tak naprawdę są nieistotne w modelu, jednak jednocześnie karą za to jest mniejsza liczba odkryć w ogóle, nie tylko tych fałszywych.
+
+Aby dokonać początkowej analizy, wyliczymy liczbę prawdziwych i fałszywych odkryć po skorzystaniu z każdego z modeli, a także ich błąd kwadratowy, liczony jako $$SE = ||X \hat{\beta} - X \beta||^2$$ Wszystkie wyniki przedstawię w tabelach. Następnie przeanalizuję wyestymowaną moc, FDR oraz średni błąd kwadratowy estymacji dla powtórzenia poprzednich obliczeń 100 razy. Te wyniki również przedstawię w odpowiednich tabelach.
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+library(bigstep)
+
+k1 <- c(50, 100, 200, 500, 950)
+
+wyniki2 <- setNames(lapply(k1, function(i) {
+  X_k <- fun(X, beta, epsilon, i)$X_k
+  beta_k <- fun(X, beta, epsilon, i)$beta_k
+  d <- prepare_data(Y, X_k)
+  cnames <- c("TD", "FD", "SE")
+  
+  wyn_aic <- fast_forward(d, crit = 'aic', maxf = 950)
+  ind_aic <- sort(as.numeric(wyn_aic$model))
+  TD_aic <- sum(ind_aic <= 20)
+  FD_aic <- sum(ind_aic > 20)
+  X_tylda_aic <- X_k[,ind_aic]
+  beta_hat_tylda_aic <- solve(t(X_tylda_aic)%*% X_tylda_aic)%*%t(X_tylda_aic)%*%Y
+  SE_aic <- sum((X_tylda_aic%*%beta_hat_tylda_aic - X_k%*%beta_k)^2)
+  
+  result_aic <- c(TD_aic, FD_aic, SE_aic)
+  names(result_aic) <- cnames
+  
+  wyn_bic <- fast_forward(d, crit = 'bic')
+  ind_bic <- sort(as.numeric(wyn_bic$model))
+  TD_bic <- sum(ind_bic <= 20)
+  FD_bic <- sum(ind_bic > 20)
+  X_tylda_bic <- X_k[,ind_bic]
+    beta_hat_tylda_bic <- solve(t(X_tylda_bic)%*% X_tylda_bic)%*%t(X_tylda_bic)%*%Y
+  SE_bic <- sum((X_tylda_bic%*%beta_hat_tylda_bic - X_k%*%beta_k)^2)
+  
+  result_bic <- c(TD_bic, FD_bic, SE_bic)
+  names(result_bic) <- cnames
+  
+  wyn_ric <- stepwise(d, crit = 'mbic', const=sqrt(n))
+  ind_ric <- sort(as.numeric(wyn_ric$model))
+  TD_ric <- sum(ind_ric <= 20)
+  FD_ric <- sum(ind_ric > 20)
+  X_tylda_ric <- X_k[,ind_ric]
+    beta_hat_tylda_ric <- solve(t(X_tylda_ric)%*% X_tylda_ric)%*%t(X_tylda_ric)%*%Y
+  SE_ric <- sum((X_tylda_ric%*%beta_hat_tylda_ric - X_k%*%beta_k)^2)
+  
+  result_ric <- c(TD_ric, FD_ric, SE_ric)
+  names(result_ric) <- cnames
+  
+  wyn_mbic <- stepwise(d, crit = 'mbic')
+  ind_mbic <- sort(as.numeric(wyn_mbic$model))
+  TD_mbic <- sum(ind_mbic <= 20)
+  FD_mbic <- sum(ind_mbic > 20)
+  X_tylda_mbic <- X_k[, ind_mbic, drop=FALSE]
+  beta_hat_tylda_mbic <- solve(t(X_tylda_mbic) %*% X_tylda_mbic) %*% t(X_tylda_mbic) %*% Y
+  SE_mbic <- sum((X_tylda_mbic %*% beta_hat_tylda_mbic - X_k %*% beta_k)^2)
+  
+  result_mbic <- c(TD_mbic, FD_mbic, SE_mbic)
+  names(result_mbic) <- cnames
+  
+  wyn_mbic2 <- stepwise(d, crit = 'mbic2')
+  ind_mbic2 <- sort(as.numeric(wyn_mbic2$model))
+  TD_mbic2 <- sum(ind_mbic2 <= 20)
+  FD_mbic2 <- sum(ind_mbic2 > 20)
+  X_tylda_mbic2 <- X_k[,ind_mbic2]
+  beta_hat_tylda_mbic2 <- solve(t(X_tylda_mbic2)%*% X_tylda_mbic2)%*%t(X_tylda_mbic2)%*%Y
+  SE_mbic2 <- sum((X_tylda_mbic2%*%beta_hat_tylda_mbic2 - X_k%*%beta_k)^2)
+  
+  result_mbic2 <- c(TD_mbic2, FD_mbic2, SE_mbic2)
+  names(result_mbic2) <- cnames
+  
+  beta_k <- beta[1:i, drop=FALSE] 
+  EY_k <- X_k %*% beta_k
+  beta_hat <- solve(t(X_k) %*% X_k) %*% t(X_k) %*% Y
+  XB_hat <- X_k %*% beta_hat
+  SE <- sum((XB_hat - EY_k)^2) 
+  
+  Result <- rbind(result_aic,result_bic,result_ric,result_mbic,result_mbic2, SE)
+  return(Result)
+}), paste0("Model_", k1))
+
+results_df <- data.frame(
+  TD_AIC = sapply(wyniki2, function(x) x["result_aic", "TD"]),
+  FD_AIC = sapply(wyniki2, function(x) x["result_aic", "FD"]),
+  SE_AIC = sapply(wyniki2, function(x) x["result_aic", "SE"]),
+  TD_BIC = sapply(wyniki2, function(x) x["result_bic", "TD"]),
+  FD_BIC = sapply(wyniki2, function(x) x["result_bic", "FD"]),
+  SE_BIC = sapply(wyniki2, function(x) x["result_bic", "SE"]),
+  TD_RIC = sapply(wyniki2, function(x) x["result_ric", "TD"]),
+  FD_RIC = sapply(wyniki2, function(x) x["result_ric", "FD"]),
+  SE_RIC = sapply(wyniki2, function(x) x["result_ric", "SE"]),
+  TD_mBIC = sapply(wyniki2, function(x) x["result_mbic", "TD"]),
+  FD_mBIC = sapply(wyniki2, function(x) x["result_mbic", "FD"]),
+  SE_mBIC = sapply(wyniki2, function(x) x["result_mbic", "SE"]),
+  TD_mBIC2 = sapply(wyniki2, function(x) x["result_mbic2", "TD"]),
+  FD_mBIC2 = sapply(wyniki2, function(x) x["result_mbic2", "FD"]),
+  SE_mBIC2 = sapply(wyniki2, function(x) x["result_mbic2", "SE"])
+)
+aic_df <- data.frame(
+  TD = sapply(wyniki2, function(x) x["result_aic", "TD"]),
+  FD = sapply(wyniki2, function(x) x["result_aic", "FD"]),
+  SE = sapply(wyniki2, function(x) x["result_aic", "SE"])
+)
+ 
+bic_df <- data.frame(
+  TD = sapply(wyniki2, function(x) x["result_bic", "TD"]),
+  FD = sapply(wyniki2, function(x) x["result_bic", "FD"]),
+  SE = sapply(wyniki2, function(x) x["result_bic", "SE"])
+)
+ 
+ric_df <- data.frame(
+  TD = sapply(wyniki2, function(x) x["result_ric", "TD"]),
+  FD = sapply(wyniki2, function(x) x["result_ric", "FD"]),
+  SE = sapply(wyniki2, function(x) x["result_ric", "SE"])
+)
+ 
+mbic_df <- data.frame(
+  TD = sapply(wyniki2, function(x) x["result_mbic", "TD"]),
+  FD = sapply(wyniki2, function(x) x["result_mbic", "FD"]),
+  SE = sapply(wyniki2, function(x) x["result_mbic", "SE"])
+)
+ 
+mbic2_df <- data.frame(
+  TD = sapply(wyniki2, function(x) x["result_mbic2", "TD"]),
+  FD = sapply(wyniki2, function(x) x["result_mbic2", "FD"]),
+  SE = sapply(wyniki2, function(x) x["result_mbic2", "SE"])
+)
+```
+
+```{r, echo = FALSE, warning= FALSE, message = FALSE, results="asis"}
+t1 <- kable(aic_df, format = "latex", align = "ccc")
+t2 <- kable(bic_df, format = "latex", align = "ccc")
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","AIC","}",
+          t1,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","BIC","}",
+          t2,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+
+t3 <- kable(ric_df, format = "latex", align = "ccc")
+t4 <- kable(mbic_df, format = "latex", align = "ccc")
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","RIC","}",
+          t3,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","mBIC","}",
+          t4,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+
+t5 <- kable(mbic2_df, format = "latex", align = "ccc")
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","mBIC2","}",
+          t5,
+      "\\end{minipage}
+  \\end{table}"
+  ))
+```
+
+Spójrzmy w pierwszej kolejności na liczbę prawdziwych odkryć. W przypadku $AIC$ oraz $BIC$ jest ona stała niezależnie od modelu. Widzimy również, że dla drugiego z tych kryteriów jest ona znacząco mniejsza. Z kolei dla pozostałych przypadków widzimy różnicę w zależności od rozmiaru modelu i możemy zaobserwować coraz mniejszą liczbę prawdziwych odkryć dla modeli z większą liczbą nieistotnych zmiennych. Jest to podobny problem jak ten, gdy badaliśmy korektę Bonferroniego oraz Benjaminiego-Hochberga. W przypadku liczby prawdziwych odkryć najgorzej radzi sobie kryterium $mBIC$, które nawet w najlepszym przypadku poprawnie identyfikuje jedynie 7 zmiennych.
+
+Z kolei jeśli spojrzymy na liczbę fałszywych odkryć to dla $AIC$ jest ona największa i rośnie wraz z rozmiarem próby. Mamy więc tutaj do czynienia z przypadkiem, że poprawnie identyfikuje ono istotne zmienne, ale kosztem wielu, które istotne nie są. Nie jest to zatem dobre kryterium, gdy mamy modele z dużą liczbą nieistotnych zmiennych. Model $BIC$ radzi sobie w tym przypadku nieco lepiej, choć również w pewnym stopniu wzrasta liczba fałszywych odkryć wraz z rozmiarem modelu. Jest on zatem lepszą decyzją, gdy chcemy identyfikować modele z dużą liczbą zmiennych. Pozostałe modele radzą sobie najlepiej w przypadku fałszywych odkryć, ponieważ jest ich 0 w każdej sytuacji, jednak ich mała liczba fałszywych odkryć dla większych modeli sprawia że nie są zbyt dobre w takich sytuacjach.
+
+Spójrzmy teraz na wartość błędu kwadratowego. Jak można zauważyć, $mBIC$ wypada najgorzej dla najmniejszej liczby zmiennych w porównaniu do pozostałych zmiennych - zatem dla modelu z 50 oraz 100 kolumnami macierzy $X$. W tym przypadku najlepiej z kolei radzi sobie AIC, co nie jest zaskakujące, biorąc pod uwagę, że ten model zidentyfikował poprawnie wszystkie istotne zmienne, co przy niewielkiej liczbie fałszywych odkryć ma widocznie pozytywny wpływ na błąd kwadratowy. Radzi sobie nawet lepiej niż np. $RIC$ bądź $mBIC2$, które mimo braku fałszywych odkryć i nieco mniejszej niż prawdziwa liczbie prawdziwych odkryć, możemy sposprzec, że w przypadku błędu $SE$ radzą sobie nieco gorzej. 
+
+Aby dokładniej opisać pokazane tutaj prawidłowości, powtórzymy doświadczenie $100$ razy i wyestymujemy moc (jako średnia stosunku liczby prawdziwych odkryć do 20), statystykę FDR - wartość oczekiwaną fałszywych odkryć w stosunku do wszystkich odkryć, a także średni błąd kwadratowy SE. Wyniki przedstawię w podobnych tabelach jak poprzednio.
+
+```{r, echo = FALSE, message = FALSE}
+n <- 1000
+EY <- X %*% beta
+ 
+wyniki2_funkcja <- function(Y) {
+  lapply(k1, function(k) {
+    X_k <- X[, 1:k, drop = FALSE]
+    beta_k <- beta[1:k, drop = FALSE]
+    d <- prepare_data(Y, X_k)
+
+    fit_stats <- function(indices) {
+      if (length(indices) == 0) return(c(TD = 0, FD = 0, SE = NA))
+      
+      TD <- sum(indices <= 20)
+      FD <- sum(indices > 20)
+
+      X_sel <- X_k[, indices, drop = FALSE]
+      beta_hat_sel <- tryCatch(
+        solve(t(X_sel) %*% X_sel) %*% t(X_sel) %*% Y,
+        error = function(e) return(rep(NA, length(indices)))
+      )
+
+      if (any(is.na(beta_hat_sel))) {
+        SE <- NA
+      } else {
+        y_hat <- X_sel %*% beta_hat_sel
+        y_true <- X_k %*% beta_k
+        SE <- sum((y_hat - y_true)^2)
+      }
+
+      c(TD = TD, FD = FD, SE = SE)
+    }
+
+    list(
+      aic   = fit_stats(sort(as.numeric(fast_forward(d, crit = "aic", maxf = 950)$model))),
+      bic   = fit_stats(sort(as.numeric(fast_forward(d, crit = "bic")$model))),
+      ric   = fit_stats(sort(as.numeric(stepwise(d, crit = "mbic", const = sqrt(n))$model))),
+      mbic  = fit_stats(sort(as.numeric(stepwise(d, crit = "mbic")$model))),
+      mbic2 = fit_stats(sort(as.numeric(stepwise(d, crit = "mbic2")$model)))
+    )
+  })
+}
+```
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+n_iter <- 100
+results_list <- readRDS("C:\\Users\\ameli\\Documents\\R\\analiza duzych zbiorow danych\\results_list.RDS")
+```
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+library(purrr)
+library(dplyr)
+library(tibble)
+
+flat_results <- map2_dfr(results_list, 1:n_iter, function(one_sim, sim_id) {
+  map2_dfr(one_sim, k1, function(res_k, k_val) {
+    map_dfr(res_k, ~ as.data.frame(t(.x)), .id = "kryt") %>%
+      mutate(sim = sim_id, k = k_val)
+  })
+})
+
+summary_stats <- flat_results %>%
+  group_by(k, kryt) %>%
+  summarise(
+    Power = mean(TD) / 20,
+    FDR = ifelse(mean(TD) == 0, 0, mean(FD) / (mean(FD) + mean(TD))),
+    Mean_SE = mean(SE, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+get_criteria_table <- function(crit_name) {
+  subset(summary_stats, kryt == crit_name) %>%
+    transmute(
+      Model = paste0("Model_", k),
+      Power,
+      FDR,
+      Mean_SE
+    )
+}
+ 
+tabela_aic   <- get_criteria_table("aic")
+tabela_bic   <- get_criteria_table("bic")
+tabela_ric   <- get_criteria_table("ric")
+tabela_mbic  <- get_criteria_table("mbic")
+tabela_mbic2 <- get_criteria_table("mbic2")
+```
+
+\newpage
+
+```{r, echo = FALSE, warning= FALSE, message = FALSE, results="asis"}
+t1 <- kable(tabela_aic, format = "latex", align = "ccc")
+t2 <- kable(tabela_bic, format = "latex", align = "ccc")
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","AIC","}",
+          t1,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","BIC","}",
+          t2,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+
+t3 <- kable(tabela_ric, format = "latex", align = "ccc")
+t4 <- kable(tabela_mbic, format = "latex", align = "ccc")
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","RIC","}",
+          t3,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","mBIC","}",
+          t4,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+
+t5 <- kable(tabela_mbic2, align = "ccc", format = "latex")
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","mBIC2","}",
+          t5,
+      "\\end{minipage}
+  \\end{table}"
+  ))
+```
+
+Jak widać, moc testu w przypadku AIC jest najwyższa i równa bez względu na liczbę zmiennych w modelu. Z podobną sytuacją mamy do czynienia w przypadku $BIC$, jednak tutaj ta moc jest dużo mniejsza. Jest to zgodne z tym, co zauważyliśmy wcześniej - że liczba prawdziwych odkryć jest niezależna od liczby badanych zmiennych w tych dwóch modelach. Z kolei gdy spojrzymy na pozostałe przypadki możemy zauważyć, że moc testu maleje wraz ze wzrostem liczby kolumn w macierzy $X$. Nie jest to wynik zaskakujący dla nas, gdyż, jak zauważyliśmy wcześniej, w tym przypadku liczba prawdziwych odkryć maleje wraz ze wzrostem $k$. Ciekawym jest przyjrzenie się $mBIC$, dla którego te wartości są znacząco najmniejsze i wydaje się, jakby ten model pod tym względem sobie zupełnie nie radził. Ciekawym jest rónież, że $BIC$, mimo tego, że ma stosunkowo wysoką moc, to dla najmniejszego modelu, jest to druga najgorsza wartość. 
+
+Przyglądając się statystyce $FDR$ możemy zobaczyć, że jest ona największa dla $AIC$ niezależnie od rozmiaru modelu. Również nas to nie zaskakuje, gdyż to właśnie dla tego kryterium mogliśmy zauważyć największą liczbę fałszywych odkryć. Jeśli chodzi o kryteria $RIC$ oraz $mBIC2$, to w ich przypadku $FDR$ jest oscyluje między $0.02$, a $0.04$, co również nas nie zaskakuje, gdyż liczba fałszywych odkryć wynosiła dla nas 0. Różnice między nimi są nieznaczące. Najlepsze jednak pod tym względem jest kryterium $mBIC$, dla którego $FDR$ nie rośnie powyżej $0.01$. 
+
+Jeśli chodzi o średni błąd kwadratowy $SE$ to możemy zauważyć, że tym razem również jest najmniejszy dla $AIC$. Z kolei w pozostałych przypadkach wartości są podobne jak zaobserwowane w poprzedniej tabeli. Dla małych modeli $SE$ jest najgorsze dla $mBIC$, natomiast jest ono bardzo zbliżone do siebie w każdym przypadku. Z kolei dla $mBIC2$ oraz $RIC$ wyniki są do siebie bardzo podobne w tym przypadku. 
+
+Spójrzmy teraz na dane otrzymane z modelu, dla którego $n = 5000$. Warto jednak tutaj zwrócić uwagę na ważny element zanim przedstawię odpowiednie dane. W przypadku $RIC$ mamy warunek, aby $\frac{p}{\sqrt{n}} > 1$, co nie jest spełnione w przypadku, gdy $p = 50$, przez co R nie wykona komendy zawartej w bibliotece `bigstep`. Z tego względu ominiemy ten rozmiar modelu dla $RIC$, z kolei dla pozostałych modeli zostanie to bez zmian.
+
+```{r, echo = FALSE, message = FALSE}
+wyniki22 <- setNames(lapply(k1, function(i) {
+  X_k <- fun(X2, beta2, epsilon2, i)$X_k
+  beta_k <- fun(X2, beta2, epsilon2, i)$beta_k
+  d <- prepare_data(Y2, X_k)
+  cnames <- c("TD", "FD", "SE")
+  
+  wyn_aic <- fast_forward(d, crit = 'aic', maxf = 950)
+  ind_aic <- sort(as.numeric(wyn_aic$model))
+  TD_aic <- sum(ind_aic <= 20)
+  FD_aic <- sum(ind_aic > 20)
+  X_tylda_aic <- X_k[,ind_aic]
+  beta_hat_tylda_aic <- solve(t(X_tylda_aic)%*% X_tylda_aic)%*%t(X_tylda_aic)%*%Y2
+  SE_aic <- sum((X_tylda_aic%*%beta_hat_tylda_aic - X_k%*%beta_k)^2)
+  
+  result_aic <- c(TD_aic, FD_aic, SE_aic)
+  names(result_aic) <- cnames
+  
+  wyn_bic <- fast_forward(d, crit = 'bic')
+  ind_bic <- sort(as.numeric(wyn_bic$model))
+  TD_bic <- sum(ind_bic <= 20)
+  FD_bic <- sum(ind_bic > 20)
+  X_tylda_bic <- X_k[,ind_bic]
+  beta_hat_tylda_bic <- solve(t(X_tylda_bic)%*% X_tylda_bic)%*%t(X_tylda_bic)%*%Y2
+  SE_bic <- sum((X_tylda_bic%*%beta_hat_tylda_bic - X_k%*%beta_k)^2)
+  
+  result_bic <- c(TD_bic, FD_bic, SE_bic)
+  names(result_bic) <- cnames
+  
+  if (i != 50) {
+    wyn_ric <- stepwise(d, crit = 'mbic', const=sqrt(n2))
+    ind_ric <- sort(as.numeric(wyn_ric$model))
+    TD_ric <- sum(ind_ric <= 20)
+    FD_ric <- sum(ind_ric > 20)
+    X_tylda_ric <- X_k[,ind_ric]
+    beta_hat_tylda_ric <- solve(t(X_tylda_ric)%*% X_tylda_ric)%*%t(X_tylda_ric)%*%Y2
+    SE_ric <- sum((X_tylda_ric%*%beta_hat_tylda_ric - X_k%*%beta_k)^2)
+  
+    result_ric <- c(TD_ric, FD_ric, SE_ric)
+    names(result_ric) <- cnames
+  }
+  else {
+    result_ric <- c(0, 0, 0)
+    names(result_ric) <- cnames
+  }
+  
+  wyn_mbic <- stepwise(d, crit = 'mbic')
+  ind_mbic <- sort(as.numeric(wyn_mbic$model))
+  TD_mbic <- sum(ind_mbic <= 20)
+  FD_mbic <- sum(ind_mbic > 20)
+  X_tylda_mbic <- X_k[, ind_mbic, drop=FALSE]
+  beta_hat_tylda_mbic <- solve(t(X_tylda_mbic) %*% X_tylda_mbic) %*% t(X_tylda_mbic) %*% Y2
+  SE_mbic <- sum((X_tylda_mbic %*% beta_hat_tylda_mbic - X_k %*% beta_k)^2)
+  
+  result_mbic <- c(TD_mbic, FD_mbic, SE_mbic)
+  names(result_mbic) <- cnames
+  
+  wyn_mbic2 <- stepwise(d, crit = 'mbic2')
+  ind_mbic2 <- sort(as.numeric(wyn_mbic2$model))
+  TD_mbic2 <- sum(ind_mbic2 <= 20)
+  FD_mbic2 <- sum(ind_mbic2 > 20)
+  X_tylda_mbic2 <- X_k[,ind_mbic2]
+  beta_hat_tylda_mbic2 <- solve(t(X_tylda_mbic2)%*% X_tylda_mbic2)%*%t(X_tylda_mbic2)%*%Y2
+  SE_mbic2 <- sum((X_tylda_mbic2%*%beta_hat_tylda_mbic2 - X_k%*%beta_k)^2)
+  
+  result_mbic2 <- c(TD_mbic2, FD_mbic2, SE_mbic2)
+  names(result_mbic2) <- cnames
+  
+  beta_k <- beta2[1:i, drop=FALSE] 
+  EY_k <- X_k %*% beta_k
+  beta_hat <- solve(t(X_k) %*% X_k) %*% t(X_k) %*% Y2
+  XB_hat <- X_k %*% beta_hat
+  SE <- sum((XB_hat - EY_k)^2) 
+  
+  Result <- rbind(result_aic,result_bic,result_ric,result_mbic,result_mbic2, SE)
+  return(Result)
+}), paste0("Model_", k1))
+
+results_df <- data.frame(
+  TD_AIC = sapply(wyniki22, function(x) x["result_aic", "TD"]),
+  FD_AIC = sapply(wyniki22, function(x) x["result_aic", "FD"]),
+  SE_AIC = sapply(wyniki22, function(x) x["result_aic", "SE"]),
+  TD_BIC = sapply(wyniki22, function(x) x["result_bic", "TD"]),
+  FD_BIC = sapply(wyniki22, function(x) x["result_bic", "FD"]),
+  SE_BIC = sapply(wyniki22, function(x) x["result_bic", "SE"]),
+  TD_RIC = sapply(wyniki22, function(x) x["result_ric", "TD"]),
+  FD_RIC = sapply(wyniki22, function(x) x["result_ric", "FD"]),
+  SE_RIC = sapply(wyniki22, function(x) x["result_ric", "SE"]),
+  TD_mBIC = sapply(wyniki22, function(x) x["result_mbic", "TD"]),
+  FD_mBIC = sapply(wyniki22, function(x) x["result_mbic", "FD"]),
+  SE_mBIC = sapply(wyniki22, function(x) x["result_mbic", "SE"]),
+  TD_mBIC2 = sapply(wyniki22, function(x) x["result_mbic2", "TD"]),
+  FD_mBIC2 = sapply(wyniki22, function(x) x["result_mbic2", "FD"]),
+  SE_mBIC2 = sapply(wyniki22, function(x) x["result_mbic2", "SE"])
+)
+aic_df <- data.frame(
+  TD = sapply(wyniki22, function(x) x["result_aic", "TD"]),
+  FD = sapply(wyniki22, function(x) x["result_aic", "FD"]),
+  SE = sapply(wyniki22, function(x) x["result_aic", "SE"])
+)
+ 
+bic_df <- data.frame(
+  TD = sapply(wyniki22, function(x) x["result_bic", "TD"]),
+  FD = sapply(wyniki22, function(x) x["result_bic", "FD"]),
+  SE = sapply(wyniki22, function(x) x["result_bic", "SE"])
+)
+ 
+ric_df <- data.frame(
+  TD = sapply(wyniki22, function(x) x["result_ric", "TD"]),
+  FD = sapply(wyniki22, function(x) x["result_ric", "FD"]),
+  SE = sapply(wyniki22, function(x) x["result_ric", "SE"])
+)
+
+ric_df <- ric_df[rownames(ric_df) != "Model_50", ]
+ 
+mbic_df <- data.frame(
+  TD = sapply(wyniki22, function(x) x["result_mbic", "TD"]),
+  FD = sapply(wyniki22, function(x) x["result_mbic", "FD"]),
+  SE = sapply(wyniki22, function(x) x["result_mbic", "SE"])
+)
+ 
+mbic2_df <- data.frame(
+  TD = sapply(wyniki22, function(x) x["result_mbic2", "TD"]),
+  FD = sapply(wyniki22, function(x) x["result_mbic2", "FD"]),
+  SE = sapply(wyniki22, function(x) x["result_mbic2", "SE"])
+)
+```
+\newpage
+```{r, echo = FALSE, warning= FALSE, message = FALSE, results="asis"}
+t1 <- kable(aic_df, format = "latex", align = "ccc")
+t2 <- kable(bic_df, format = "latex", align = "ccc")
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","AIC","}",
+          t1,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","BIC","}",
+          t2,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+
+t3 <- kable(ric_df, format = "latex", align = "ccc")
+t4 <- kable(mbic_df, format = "latex", align = "ccc")
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","RIC","}",
+          t3,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","mBIC","}",
+          t4,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+
+t5 <- kable(mbic2_df, format = "latex", align = "ccc")
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","mBIC2","}",
+          t5,
+      "\\end{minipage}
+  \\end{table}"
+  ))
+```
+
+Znów w pierwszej kolejności spójrzmy na liczbę prawdziwych odkryć. Jak widać, ponownie to $AIC$ jest pod tym względem najlepsze, ponieważ w każdym przypadku ma ich aż 19, co oznacza, że tylko jednego odkrycia nie udało się poprawnie zidentyfikować. W pozostałych przypadkach, jest ich mniej. Znów możemy zobaczyć, że zarówno dla $AIC$, jak i $BIC$ liczba prawdziwych odkryć jest stała i dla kryterium $BIC$ jest również stosunkowo mniejsza. DLa $RIC$ oraz $mBIC2$ mamy dużo poprawnie zidentyfikowanych zmiennych dla najmniejszych modeli. W przypadku $RIC$ jest to model, gdzie bierzemy 100 kolumn macierzy, z kolei dla $mBIC2$ jest to model z 50 zmiennymi. Pogarszają się one z czasem. Najgorzej w tej sytuacji wypada kryterium $mBIC$, gdzie mamy najmniejszą liczbę fałszywych odkryć ze wszystkich. 
+
+Jeśli natomiast przyjrzymy się fałszywym odkryciom, to znów wnioski są analogiczne dla mniejszej liczby obserwacji. Ponownie dla $AIC$ mamy najgorszą sytuację, szczególnie dla największego modelu. W przypadku $BIC$ również mamy wzrost liczby fałszywych odkryć wraz ze wzrostem rozmiaru modelu, jednak są to o wiele mniejsze liczby niż dla $AIC$. W tym przypadku, w pozostałych kryteriach jedynie dla $RIC$ możemy zobaczyć jakieś fałszywe odkrycia, jednak jak mogliśmy zauważyć, $FDR$ w poprzednim przypadku nie wynosiło 0, więc mogą się takie sytuacje pojawić. 
+
+Wartości $SE$ są natomiast amalogiczne jak w poprzednim przypadku, z zaznaczeniem, że można zobaczyć pewne niewielkie pogorszenie się dla najmniejszego modelu w kryterium $mBIC2$. 
+
+Spójrzmy teraz na dane dla doświadczenia powtórzonego 100 razy.
+
+```{r, echo = FALSE, message = FALSE}
+n <- 5000
+EY <- X2 %*% beta2
+ 
+wyniki2_funkcja <- function(Y) {
+  lapply(k1, function(k) {
+    X_k <- X2[, 1:k, drop = FALSE]
+    beta_k <- beta2[1:k, drop = FALSE]
+    d <- prepare_data(Y, X_k)
+    
+    fit_stats <- function(indices) {
+      if (length(indices) == 0) return(c(TD = 0, FD = 0, SE = 0))  
+ 
+      TD <- sum(indices <= 20)
+      FD <- sum(indices > 20)
+      
+      X_sel <- X_k[, indices, drop = FALSE]
+      beta_hat_sel <- tryCatch(
+        solve(t(X_sel) %*% X_sel) %*% t(X_sel) %*% Y,
+        error = function(e) return(rep(NA, length(indices)))
+      )
+
+      if (any(is.na(beta_hat_sel))) {
+        SE <- NA
+      } else {
+        y_hat <- X_sel %*% beta_hat_sel
+        y_true <- X_k %*% beta_k
+        SE <- sum((y_hat - y_true)^2)
+      }
+      c(TD = TD, FD = FD, SE = SE)
+    }
+    
+    list(
+      aic   = fit_stats(sort(as.numeric(fast_forward(d, crit = "aic", maxf = 950)$model))),
+      bic   = fit_stats(sort(as.numeric(fast_forward(d, crit = "bic")$model))),
+      ric   = if (k == 50) c(TD = NA, FD = NA, SE = NA) else fit_stats(sort(as.numeric(stepwise(d, crit = "mbic", const = sqrt(n))$model))),
+      mbic  = fit_stats(sort(as.numeric(stepwise(d, crit = "mbic")$model))),
+      mbic2 = fit_stats(sort(as.numeric(stepwise(d, crit = "mbic2")$model)))
+    )
+  })
+}
+```
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE}
+n_iter <- 100
+ 
+results_list <- readRDS("C:\\Users\\ameli\\Documents\\R\\analiza duzych zbiorow danych\\results_list2.RDS")
+```
+
+```{r, echo = FALSE, message= FALSE}
+flat_results <- map2_dfr(results_list, 1:n_iter, function(one_sim, sim_id) {
+  map2_dfr(one_sim, k1, function(res_k, k_val) {
+    map_dfr(res_k, ~ as.data.frame(t(.x)), .id = "kryt") %>%
+      mutate(sim = sim_id, k = k_val)
+  })
+})
+
+summary_stats <- flat_results %>%
+  group_by(k, kryt) %>%
+  summarise(
+    Power = mean(TD) / 20,
+    FDR = ifelse(mean(TD) == 0, 0, mean(FD) / (mean(FD) + mean(TD))),
+    Mean_SE = mean(SE, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+get_criteria_table <- function(crit_name) {
+  subset(summary_stats, kryt == crit_name) %>%
+    transmute(
+      Model = paste0("Model_", k),
+      Power,
+      FDR,
+      Mean_SE
+    )
+}
+
+tabela_aic   <- get_criteria_table("aic")
+tabela_bic   <- get_criteria_table("bic")
+tabela_ric   <- get_criteria_table("ric")
+tabela_mbic  <- get_criteria_table("mbic")
+tabela_mbic2 <- get_criteria_table("mbic2")
+```
+\newpage
+```{r, echo = FALSE, warning= FALSE, message = FALSE, results="asis"}
+t1 <- kable(tabela_aic, format = "latex", align = "ccc")
+t2 <- kable(tabela_bic, format = "latex", align = "ccc")
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","AIC","}",
+          t1,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","BIC","}",
+          t2,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+
+t3 <- kable(tabela_ric, format = "latex", align = "ccc")
+t4 <- kable(tabela_mbic, format = "latex", align = "ccc")
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","RIC","}",
+          t3,
+      "\\end{minipage}%
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+          \\caption{","mBIC","}",
+          t4,
+      "\\end{minipage} 
+  \\end{table}"
+  ))
+
+t5 <- kable(tabela_mbic2, align = "ccc", format = "latex")
+
+cat(c("\\begin{table}[!htb]
+      \\begin{minipage}{.5\\linewidth}
+      \\centering
+        \\caption{","mBIC2","}",
+          t5,
+      "\\end{minipage}
+  \\end{table}"
+  ))
+```
+
+
+
+W pierwszej kolejności, ponownie skupiając się najpierw na estymowanej mocy, możemy zauważyć pogorszenie się jej w przypadku $BIC$. Dla $AIC$, również niezaskakująco, otrzymaliśmy najlepszy możliwy wynik w tej kolumnie, natomiast najgorszy, bez względu na rozmiar, w przypadku $mBIC$. Dla $mBIC2$ również można zobaczyć pogorszenie się mocy testu, jednak nie jest ono znaczące. 
+
+Patrząc teraz na wartość statystyki $FDR$, mamy tutaj ponownie najgorsze wyniki dla $AIC$ oraz najlepsze dla $mBIC$, gdzie dla największych modeli można było zobaczyć, że wynosi ona $0$. W przypadku $FDR$, w przeciwieństwie do estymowanej mocy, można zauważyć, że nastąpiła poprawa dla każdego z modeli, za wyłączeniem modelu o rozmiarze 100 dla kryterium $RIC$. 
+
+Z kolei średnie $SE$ ponownie jest takie jak poprzednio. W tym przypadku jednak, poprawa w stosunku do mniejszej liczby obserwacji nie jest jednoznaczna. Możemy ją zobaczyć dla większych modeli w przypadku kryterium $BIC$, dla kryterium $RIC$ w całości oraz niektórych modeli $mBIC$. W pozostałych przypadkach możemy zobaczyć pogorszenie lub nieznaczącą zmianę. 
+
+# Podsumowanie
+
+Analiza estymatorów błędu predykcji pokazała, że dla mniejszej liczby obserwacji bez względu na rozmiar modelu najlepiej sprawdza się estymator, w którym znamy wariancję. Warto jednak zauważyć, że estymator z nieznaną wariancją, poza modelem z wieloma nieostotnymi zmiennymi, nie był znaczągo gorszy. Z kolei walidacja krzyżowa zupełnie nie nadaje się dla modeli z wieloma nieistotnymi zmiennymi i mniejszą liczbą obserwacji. Dla $n = 5000$ z kolei mogliśmy zauważyć, że w większości otrzymywaliśmy niedoszacowane o około 200 estymatory dla każdego estymatora oraz rozmiarów modelu od $10$ do $500$. Duża liczba obserwacji najpewniej sprawia, że wybija się różnica zwiążana z losowanym na nowo parametrem $\epsilon^*$, co nie było aż tak widoczne dla mniejszej liczby obserwacji. 
+
+Z kolei jeśli chodzi o badanie dotyczące kryteriów informacji, możemy zauważyć, że radzą sobie różnie w zależności od tego, na czym nam zależy oraz na jakim modelu pracujemy. Jeśli oczekujemy poprawnego wytypowania istotnych zmiennych to najlepiej w tym celu wykorzystać kryterium AIC, jednak mieć świadomość, że dla większych modeli popełnia on wiele fałszywych odkryć. Dla nich lepiej się sprawdzi kryterium BIC, w którym otrzymujemy mniejszą liczbę fałszywych odkryć, a średnie $SE$ jest najmniejsze ze wszystkich. $RIC$ oraz $BIC$ dają podobne wyniki i można z nich korzystać przy mniejszych modelach, jeśli chcemy znacząco ograniczyć liczbę fałszywych odkryć, bez dużej straty tych prawdziwych (tym samym również nieiwelkiej wartości $SE$). Trzeba jednak wziąć pod uwagę, że nie zawsze jesteśmy w stanie skorzystać z kryterium $RIC$, ze względu na podany wcześniej warunek w R. Model $mBIC$, mimo, że najlepiej radzi sobie z odrzucaniem nieistotnych zmiennych, to wydaje się dość bezużyteczny, ze względu na to, że bez względu na liczbę obserwacji ma stosunkowo małą moc (poniżej 50% bez względu na analizowany model), co sprawia, że osobiście nie widzę dla niego dobrego zastosowania. Zatem wybór dobrego kryterium powinien być dla nas podyktowany potrzebami na podstawie naszych danych.

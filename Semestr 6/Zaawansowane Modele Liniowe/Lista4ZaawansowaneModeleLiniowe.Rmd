@@ -1,0 +1,978 @@
+---
+title: "Lista 4."
+author: "Amelia Olejniczak"
+output: 
+  pdf_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Wprowadzenie
+
+Poniższy raport dotyczy analizy właściwości ogólnych modeli liniowych. Będziemy badać różne przypadki, związane z liczbą obiektów ($n$), liczbą pomiarów dla każdego obiekru ($k$) oraz liczbą kolumn w macierzy planu ($p$), a także, jak na wyniki wpływa sposób estymacji macierzy kowariancji $\Sigma$ (a zatem macierzy kowariancji między obserwacjami dla jednego obiektu). 
+
+Symulację danych zaczniemy od wygenerowania macierzy $X \in \mathbb{M}_{N \times p - 1}$ o elementach niezależnych z rozkładu $N \left( 0, \sigma = \frac{1}{\sqrt{N}} \right)$, gdzie $N = n * k$. Następnie podzielimy macierz $X$ na $n = \frac{N}{k}$ podmacierzy $X_1, ..., X_n \in \mathbb{M}_{k \times p - 1}$ w taki sposób, że $X_1$ zawiera pierwszych $k$ wierszy z macierzy $X$, $X_2$ zawiera kolejnych $k$ wierszy i tak dalej, aż do podmacierzy $X_n$ zawierającej ostatnie $k$ wierszy z macierzy $X$. Następnie generujemy $n$ niezależnych wektorów losowych $$y_i = (y_{i1}, ..., y_{ik})' \sim N(X_i\beta, \Sigma) \in \mathbb{R}^k \quad i = 1, 2, ..., n$$ gdzie $\beta = (3, 3, 0)' \in \mathbb{R}^{p-1}$ oraz $$\Sigma = \gamma^2 \begin{pmatrix} 1 & \rho & \cdots & \rho \\ \rho $ 1 $ \cdots & \rho \\ \vdots & \vdots & \ddots & \vdots \\ \rho & \rho & \cdots & 1 \end{pmatrix} \in \mathbb{M}_{k \times k}$$ gdzie $\rho = 0.3$ oraz $\gamma = 2$.
+
+Następnie wykonamy 500 powtórzeń eksperymentu i przeanalizujemy własności estymatorów $\hat{\beta}$, $\hat{\gamma}$, $\hat{\rho}$. 
+
+# Zadanie 1.
+
+Pierwsza analiza dotyczyć będzie sytuacji, gdzie $n = 20$, $k = 3$ oraz $p = 4$, a estymator macierzy kowariancji $\hat{\Sigma}$ konstuujemy przy pomocy metody "REML". Dane, generowane jak opisaliśmy wyżej, przedstawimy w jednowymiarowej reprezentacji danych. W pierwszej kolumnie utworzonej ramki danych umieścimy dane obserwacje, w drugiej numer obiektu, w trzeciej moment pomiaru, a na koniec - macierz powiązana z danym obiektem. Ze względu na wykorzystanie ogólnych modelów liniowych to zakładamy, że dane są kompletne i pomiary wykonywane były w tych samych momentach. Poniżej przedstawiam pierwsze kilka wierszy ramki danych, przechowującej nasze informacje.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+set.seed(3785842)
+library(MASS)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+n <- 20
+k <- 3
+p <- 4
+N <- n * k
+
+X <- matrix(rnorm(N * (p-1), mean = 0, sd = 1/sqrt(N)), nrow = N, ncol = p - 1)
+
+v <- 1:N
+n_vector <- v %% 3 == 1
+n_vector <- v[n_vector]
+
+matrices <- lapply(n_vector, function(n) {
+  X[n:(n + 2), ]
+})
+
+matrices_first_col <- lapply(n_vector, function(n) {
+  X[n:(n + 2), 1]
+})
+
+matrices_second_col <- lapply(n_vector, function(n) {
+  X[n:(n + 2), 2]
+})
+
+matrices_third_col <- lapply(n_vector, function(n) {
+  X[n:(n + 2), 3]
+})
+
+beta <- c(3, 3, 0)
+rho <- 0.3
+gamma <- 2
+sigma <- matrix(rho, nrow = k, ncol = k)
+diag(sigma) <- c(1, 1, 1)
+sigma <- gamma^2 * sigma
+
+y <- lapply(matrices, function(x) {
+  mvrnorm(mu = x %*% beta, Sigma = sigma)  
+})
+
+table <- data.frame(
+  y = unlist(y),
+  id = rep(1:n, each = k),
+  t = rep(1:k, n),
+  x1 = unlist(matrices_first_col),
+  x2 = unlist(matrices_second_col),
+  x3 = unlist(matrices_third_col)
+)
+
+table$x <- paste0(
+  format(round(table$x1, 4), nsmall = 4), " ",
+  format(round(table$x2, 4), nsmall = 4), " ",
+  format(round(table$x3, 4), nsmall = 4)
+)
+
+table_simplified <- table[, c("y", "id", "t", "x")]
+```
+
+```{r, echo = FALSE}
+kable(table_simplified[1:9, ],
+      format = "latex",
+      caption = "Jednowymiarowa reprezentacja danych",
+      col.names = c("y", "id", "t", "x"),
+      digits = 4, align = "cccc") %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+```
+
+Do wyznaczenia modelu wykorzystamy funkcję `gls` z biblioteki `nlme` ze strukturą kowatiancji:
+
+\begin{center}
+\textit{correlation} = \textbf{corCompSymm}($form = \sim 1|id$)
+
+\textit{weights} $=$ \textit{varIdent}($form = \sim 1$)
+\end{center}
+
+## Analiza dla estymatora $\hat{\beta}$
+
+Następnie wyznaczymy estymator $\hat{\beta}$ poszerzony o intercept. Możemy go policzyć ze wzoru $$\hat{\beta} = \left( \sum^n_{i = 1} X_i' \hat{\Sigma}^{-1} X_i \right)^{-1} \left( \sum^n_{i = 1} X_i' \hat{\Sigma}^{-1} y_i \right)$$ gdzie do każdej podmacierzy $X_i$ dodamy jeszcze kolumnę z jedynkami, aby poprawnie dodać do niej potrzebny intercept. Elementem brakującym do poprawnego wyznaczenia estymatora $\hat{\beta}$ jest estymator $\hat{\Sigma}$, który na szczęście możemy wyczytać, korzystając z funkcji `getVarCov()` i wykonując ją na wcześniej wyznaczonym modelu. Estymator $\hat{\beta}$ ma asymptotyczny rozkład: $$\hat{\beta} \overset{d}\rightarrow N \left( \beta, \left( \sum^n_{i = 1} X_i' \Sigma^{-1} X_i\right)^{-1} \right)$$
+
+Zatem potrzebujemy również wyznaczyć macierz kowariancji dla estymatora $\hat{\beta}$. Jej wartość estymowaną możemy wyznaczyć na dwa sposoby. Pierwszym z nich będzie wyznaczenie jej ze wzoru podanego wyżej (oczywiście zamieniając prawdziwą wartość macierzy kowariancji $\Sigma$ na jej estymator). Natomiast drugim sposobem na uzyskanie żądanej macierzy jest skorzystanie z funkcji `vcov()`. Poniżej w tabelach umieszczam wyniki odpowiednich wyliczeń, gdzie każdy element macierzy jest przybliżony do 4 miejsca po przecinku. 
+
+```{r, echo = FALSE, message = FALSE}
+require(nlme)
+
+model <- gls(y ~ x1 + x2 + x3, data = table, correlation = corCompSymm(form =~1|id), weights = varIdent(form =~1))
+
+sigma_hat <- getVarCov(model)
+
+x_with_intercept <- cbind(1, X)
+beta_with_intercept <- c(0, beta)
+
+matrices2 <- lapply(n_vector, function(n) {
+  x_with_intercept[n:(n + 2), ]
+})
+
+suma1 <- 0
+suma2 <- 0
+
+for (i in 1:length(matrices2)) {
+  suma1 <- suma1 + (t(matrices2[[i]]) %*% solve(sigma) %*% matrices2[[i]])
+  suma2 <- suma2 + (t(matrices2[[i]]) %*% solve(sigma) %*% y[[i]])
+}
+
+beta_hat <- solve(suma1)%*% suma2
+cov_beta_hat <- solve(suma1)
+
+suma1 <- 0
+suma2 <- 0
+
+for (i in 1:length(matrices2)) {
+  suma1 <- suma1 + (t(matrices2[[i]]) %*% solve(sigma_hat) %*% matrices2[[i]])
+  suma2 <- suma2 + (t(matrices2[[i]]) %*% solve(sigma_hat) %*% y[[i]])
+}
+
+beta_hat <- solve(suma1) %*% suma2
+beta_dif <- max(abs(beta_with_intercept - beta_hat))
+cov_beta_hat_theor <- solve(suma1)
+
+cov_beta_hat_r <- vcov(model)
+
+cov_theor_dif <- max(abs(cov_beta_hat - cov_beta_hat_theor))
+cov_r_dif <- max(abs(cov_beta_hat - cov_beta_hat_r))
+
+rho_hat <- sigma_hat[2, 1] / sigma_hat[1, 1]
+
+rho_dif <- max(abs(rho_hat - rho))
+
+gamma_hat <- sqrt(sigma_hat[1, 1])
+
+gamma_dif <- max(abs(gamma_hat - gamma))
+```
+
+```{r, echo = FALSE}
+kable(cov_beta_hat_theor, format = "latex", caption = "Macierz kowariancji - wzór", digits = 4, align = "cccc") %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+  
+
+kable(cov_beta_hat_r, format = "latex", caption = "Macierz kowariancji - funkcja vcov()", digits = 4, align = "cccc", col.names = NULL, row.names = FALSE) %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+```
+
+Jak widać powyżej wartości w odpowiadających miejscach macierzy są takie same dla określonej przez nas dokładności przybliżenia. Określając dokładną wartość maksymalnej różnicy między współrzędnymi macierzy otrzymujemy `r max(abs(cov_beta_hat_theor - cov_beta_hat_r))`, co jest wartością pomijalną, związaną z pewnymi przybliżeniami w obliczeniach dokonywanych przez R. 
+
+Spójrzmy teraz na wartości estymatora wektora $\beta$. W tabeli poniżej możemy zobaczyć wartość odpowiedniego estymatora $\hat{\beta}$ oraz prawdziwą wartość odpowiednich współrzędnych wektora $\beta$. Poniżej zapiszę normę supremum tych wartości. Ponownie, chcemy aby wektor $\beta$ był rozszerzony o intercept, zatem dodajemy wartość $0$ na początku wektora, aby to reprezentował.
+
+```{r, echo = FALSE}
+beta_table <- data.frame(
+  true_beta = beta_with_intercept,
+  est_beta = beta_hat
+)
+
+kable(beta_table, format = "latex", digits = 4, align = "cccc", col.names = c("Prawdziwe", "Estymator")) %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+```
+
+Patrząc na tabelę można zobaczyć, że różnice między prawdziwymi wartościami, a estymatorami jest stosunkowo duża. Norma supremum tej różnicy wynosi `r beta_dif`, zatem faktycznie jest to dość duża różnica, jednak związana z wariancją widoczną w macierzy kowariancji. Dokładniejsze wyliczenia zobaczymy dla powtórzenia eksperymentu $500$ razy,
+
+## Analiza dla estymatora $\hat{\Sigma}$
+
+Pozostaje nam teraz jedynie przeanalizować wartości dla estymacji macierzy $\Sigma$. Poniżej przedstawiam wyliczony wcześniej estymator:
+
+```{r, echo = FALSE}
+kable(sigma_hat[1:3, 1:3], format = "latex", digits = 4, align = "cccc", col.names = NULL, row.names = FALSE) %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+```
+
+Na tej podstawie możemy wyznaczyć estymowane wartości $\hat{\rho}$ oraz $\hat{\gamma}$. Na przekątnej powyższej macierzy mamy wartości $\hat{\gamma}^2$, zatem $\hat{\gamma} =$ `r round(gamma_hat, 4)` (różnica - `r round(gamma_dif, 4)`). Z kolei aby wyznaczyć drugi z estymatorów musimy podzielić wartość poza przekątną przez kwadrat wskazanego wcześniej estymatora. Zatem $\hat{\rho} =$ `r round(rho_hat, 4)` (różnica - `r round(rho_dif, 4)`). Wiedząc, że wartości prawdziwe każdego z tych estymatorów wynoszą $\gamma = 2$ oraz $\rho = 0.3$ możemy stwierdzić, że różnice nie są stosunkowo duże. 
+
+# Zadanie 2.
+
+Aby odpowiednio przyjrzeć się jednak własnościom danych estymatorów, powtórzę wyznaczanie powyższych własności $500$ razy dla $500$ różnych wartości zmiennej zależnej $y$. 
+
+## Estymator $\hat{\beta}$
+
+Na podstawie wyznaczonych estymatorów, w pierwszej kolejności, umieszczę histogramy dla $\hat{\beta}_0$ (którego prawdziwa wartość wynosi $0$) oraz $\hat{\beta}_1$, (którego prawdziwa wartość wynosi $3$). Na nie naniosę asymptotyczne gęstości tych estymatorów (rozkład asymptotyczny podany został wcześniej). Poniżej możemy zobaczyć gotowe histogramy.
+
+```{r, echo = FALSE}
+n <- 20
+k <- 3
+p <- 4
+N <- n * k
+
+X <- matrix(rnorm(N * (p - 1), mean = 0, sd = 1/sqrt(N)), nrow = N, ncol = p - 1)
+
+v <- 1:N
+n_vector <- v %% 3 == 1
+n_vector <- v[n_vector]
+
+matrices <- lapply(n_vector, function(n) {
+  X[n:(n + 2), ]
+})
+
+matrices_first_col <- lapply(n_vector, function(n) {
+  X[n:(n + 2), 1]
+})
+
+matrices_second_col <- lapply(n_vector, function(n) {
+  X[n:(n + 2), 2]
+})
+
+matrices_third_col <- lapply(n_vector, function(n) {
+  X[n:(n + 2), 3]
+})
+
+beta <- c(3, 3, 0)
+rho <- 0.3
+gamma <- 2
+sigma <- matrix(rho, nrow = k, ncol = k)
+diag(sigma) <- c(1, 1, 1)
+sigma <- gamma^2 * sigma
+
+x_with_intercept <- cbind(1, X)
+beta_with_intercept <- c(0, beta)
+
+matrices2 <- lapply(n_vector, function(n) {
+  x_with_intercept[n:(n + 2), ]
+})
+```
+
+```{r, echo = FALSE}
+rep = 500
+replications <- function() {
+  y <- lapply(matrices, function(x) {
+    mvrnorm(mu = x %*% beta, Sigma = sigma) 
+  })
+
+  table <- data.frame(
+    id = rep(1:n, each = k),
+    t = rep(1:k, n),
+    y = unlist(y),
+    x1 = unlist(matrices_first_col),
+    x2 = unlist(matrices_second_col),
+    x3 = unlist(matrices_third_col)
+  )
+  
+  model <- gls(y ~ x1 + x2 + x3, data = table, correlation = corCompSymm(form =~1|id), weights = varIdent(form =~1))
+
+  sigma_hat <- getVarCov(model)
+
+  suma1 <- 0
+  suma2 <- 0
+
+  for (i in 1:length(matrices2)) {
+    suma1 <- suma1 + (t(matrices2[[i]]) %*% solve(sigma_hat) %*% matrices2[[i]])
+    suma2 <- suma2 + (t(matrices2[[i]]) %*% solve(sigma_hat) %*% y[[i]])
+  }
+
+  beta_hat <- solve(suma1) %*% suma2
+  cov_beta_hat_theor <- solve(suma1)
+
+  cov_beta_hat_r <- vcov(model)
+
+  rho_hat <- sigma_hat[2, 1] / sigma_hat[1, 1]
+  gamma_hat <- sqrt(sigma_hat[1, 1])
+  
+  return(c(beta0 = beta_hat[1], beta1 = beta_hat[2], beta2 = beta_hat[3], beta3 = beta_hat[4], rho_hat = rho_hat, gamma_hat = gamma_hat))
+}
+
+question2 <- data.frame(t(replicate(500, replications())))
+```
+```{r, echo = FALSE, message = FALSE, warning = FALSE, fig.height = 3.5}
+library(gridExtra)
+p1 <- ggplot(question2, aes(x = beta0)) +
+  geom_histogram(aes(y = ..density..), fill = "coral2", color = "black", bins = 40) +
+  stat_function(fun = dnorm, args = list(mean = 0, sd = sqrt(cov_beta_hat[1, 1])), color = "blue") + 
+  geom_vline(xintercept = beta_with_intercept[1], color = "blue") +
+  theme_minimal() +
+  labs(title = "Histogram beta0")
+
+p2 <- ggplot(question2, aes(x = beta1)) +
+  geom_histogram(aes(y = ..density..), fill = "coral2", color = "black", bins = 40) +
+  stat_function(fun = dnorm, args = list(mean = 3, sd = sqrt(cov_beta_hat[2, 2])), color = "blue") +
+  geom_vline(xintercept = beta_with_intercept[2], color = "blue") +
+  theme_minimal() +
+  labs(title = "Histogram beta1")
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Jak widać, histogramy estymatorów, zarówno $\beta_0$, jak i $\beta_1$ układają się bardzo podobnie do asymptotycznego rozkładu estymatora $\hat{\beta}$. Pionowa linia wskazuje na wartość oczekiwaną odpowiednich estymatorów i jak widać, jest ona bardzo zbliżona do najwyższych słupków histogramów. 
+
+```{r, echo = FALSE}
+beta0_bias <- mean(question2$beta0 - beta_with_intercept[1])
+beta1_bias <- mean(question2$beta1 - beta_with_intercept[2])
+beta2_bias <- mean(question2$beta2 - beta_with_intercept[3])
+beta3_bias <- mean(question2$beta3 - beta_with_intercept[4])
+
+beta_sup_norm <- max(c(question2$beta0, question2$beta1, question2$beta2, question2$beta3) - beta_with_intercept)
+```
+
+Zabierzmy się teraz za wyznaczenie średniego obciążenia odpowiednich estymatorów wektora $\beta$ oraz normę supremum tego estymatora. Poniżej możemy zobaczyć wartości obciążeń w tabeli.
+
+```{r, echo = FALSE}
+beta_bias <- data.frame(
+  beta0_bias = beta0_bias,
+  beta1_bias = beta1_bias,
+  beta2_bias = beta2_bias, 
+  beta3_bias = beta3_bias
+)
+
+kable(beta_bias, format = "latex", digits = 4, align = "cccc", caption = "Wartości obciążenia dla beta") %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+```
+
+Jak widać powyżej, wartości w tabeli są bardzo niewielkie, co wiąże się z tym, że według teorii estymator jest nieobciążony. Z kolei norma supremum wynosi `r round(beta_sup_norm, 4)`. Zgadza się to z powyższymi wykresami, gdzie widzimy, że w przpadku $\hat{\beta}_1$ najdalsze wartości są dość daleko od średnich. Warto zauważyć, że wartości $\hat{\beta}_0$ są dużo bardziej do siebie zbliżone, w porównaniu do $\hat{\beta}_1$.
+
+## Estymator $\hat{\Sigma}$
+
+Na koniec tej części zajmijmy się ponownie estymatorami $\hat{\rho}$ i $\hat{\gamma}$, które wiążą się bezpośrednio z estymowaną wartości macierzy kowariancji. Poniżej przedstawiam dwa histogramy z wartościami estymatorów, na których widać również pionową linię wyznaczającą prawdziwą wartość tych wielkości. 
+
+```{r, echo = FALSE, message = FALSE, fig.height = 3.5}
+p1 <- ggplot(question2, aes(x = rho_hat)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "lightgray") +
+  theme_minimal() +
+  labs(title = "Rho") +
+  geom_vline(xintercept = 0.3, color = "coral2")
+  
+p2 <- ggplot(question2, aes(x = gamma_hat)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "lightgray") +
+  theme_minimal() +
+  labs(title = "Gamma") +
+  geom_vline(xintercept = 2, color = "coral2")
+
+grid.arrange(p1, p2, ncol = 2)
+
+rho_bias <- mean(question2$rho_hat - rho)
+gamma_bias <- mean(question2$gamma_hat - gamma)
+```
+
+Powyższe histogramy są ułożone w dzwon przypominający krzywą Gaussa, zatem jest pewna szansa, że te zmienne mają rozkład normalny. Jeśli chodzi o średnie obciążenie, to dla $\hat{\rho}$ wynosi ono `r round(rho_bias, 4)`, natomiast dla $\hat{\gamma}$ jest to `r round(gamma_bias, 4)`. Wartości, podobnie jak dla $\beta$ są bardzo niewielkie, zatem (z pewnym błędem) można stwierdzić, że te estymatory są nieobciążone. 
+
+# Zadanie 3.
+
+Spójrzmy teraz, jak powyższe własności się zmieniają, gdy zmienimy liczbę obiektów z $n = 20$, na $n = 500$. 
+
+## Estymator $\hat{\beta}$
+
+Ponownie zacznijmy od przyjrzenia się histogramom dla $\hat{\beta}_0$ oraz $\hat{\beta}_1$. 
+
+```{r, echo = FALSE, fig.height=3.5, warning = FALSE, message = FALSE}
+n <- 500
+k <- 3
+p <- 4
+N <- n * k
+
+X <- matrix(rnorm(N * (p-1), mean = 0, sd = 1/sqrt(N)), nrow = N, ncol = p - 1)
+
+v <- 1:N
+n_vector <- v %% 3 == 1
+n_vector <- v[n_vector]
+
+matrices <- lapply(n_vector, function(n) {
+  X[n:(n + 2), ]
+})
+
+matrices_first_col <- lapply(n_vector, function(n) {
+  X[n:(n + 2), 1]
+})
+
+matrices_second_col <- lapply(n_vector, function(n) {
+  X[n:(n + 2), 2]
+})
+
+matrices_third_col <- lapply(n_vector, function(n) {
+  X[n:(n + 2), 3]
+})
+
+beta <- c(3, 3, 0)
+rho <- 0.3
+gamma <- 2
+sigma <- matrix(rho, nrow = k, ncol = k)
+diag(sigma) <- c(1, 1, 1)
+sigma <- gamma^2 * sigma
+
+x_with_intercept <- cbind(1, X)
+beta_with_intercept <- c(0, beta)
+
+matrices2 <- lapply(n_vector, function(n) {
+  x_with_intercept[n:(n + 2), ]
+})
+
+suma1 = 0
+
+for (i in 1:length(matrices2)) {
+  suma1 <- suma1 + (t(matrices2[[i]]) %*% solve(sigma) %*% matrices2[[i]])
+}
+
+cov_beta_hat <- solve(suma1)
+
+question3 <- data.frame(t(replicate(500, replications())))
+
+p1 <- ggplot(question3, aes(x = beta0)) +
+  geom_histogram(aes(y = ..density..), fill = "tan1", color = "black", bins = 40) +
+  stat_function(fun = dnorm, args = list(mean = 0, sd = sqrt(cov_beta_hat[1, 1])), color = "blue") +
+  geom_vline(xintercept = beta_with_intercept[1], color = "blue") +
+  theme_minimal() +
+  labs(title = "Histogram beta0")
+  
+
+p2 <- ggplot(question3, aes(x = beta1)) +
+  geom_histogram(aes(y = ..density..), fill = "tan1", color = "black", bins = 40) +
+  stat_function(fun = dnorm, args = list(mean = 3, sd = sqrt(cov_beta_hat[2, 2])), color = "blue") + 
+  geom_vline(xintercept = beta_with_intercept[2], color = "blue") +
+  theme_minimal() +
+  labs(title = "Histogram beta1")
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Możemy zobaczyć, że wśród prawdziwych wartości tym razem dużo częściej otrzymywaliśmy bardzo zbliżone wartości do poprzednich, w porównaniu do poprzedniego wykresu. Wciąż jesteśmy jednak w stanie zobaczyć, że kształt histogramu jest bardzo zbliżony do krzywej przedstawiającej asymptotyczną gęstość. Ponownie możemy zobaczyć, że wartości dla $\hat{\beta}_0$ są dużo bliżej siebie (również w stosunku do wartości otrzymywanych w poprzednim zadaniu). Z kolei dla $\hat{\beta}_1$ nie można zobaczyć znaczącej poprawy w tej kwestii.
+
+Przyjrzyjmy się teraz wartościom obciążenia estymatora wektora $\beta$ oraz przeanalizujmy jego normę supremum.
+
+```{r, echo = FALSE}
+beta0_bias <- mean(question3$beta0 - beta_with_intercept[1])
+beta1_bias <- mean(question3$beta1 - beta_with_intercept[2])
+beta2_bias <- mean(question3$beta2 - beta_with_intercept[3])
+beta3_bias <- mean(question3$beta3 - beta_with_intercept[4])
+
+beta_sup_norm <- max(c(question3$beta0, question3$beta1, question3$beta2, question3$beta3) - beta_with_intercept)
+
+beta_bias <- data.frame(
+  beta0_bias = beta0_bias,
+  beta1_bias = beta1_bias,
+  beta2_bias = beta2_bias, 
+  beta3_bias = beta3_bias
+)
+
+kable(beta_bias, format = "latex", digits = 4, align = "cccc", caption = "Wartości obciążenia dla beta") %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+```
+
+Jak widać w powyższej tabeli, wartości obciążenia są porównywalne lub w niektórych przypadkach znacząco lepsze niż w poprzednim przypadku. Widzimy zatem poprawę wśród wartości estymatorów. Norma supremum z kolei wynosi `r round(beta_sup_norm, 4)`, co z kolei jest dość dużą wartością, ale bardzo zbliżoną do tej otrzymanej w poprzednim przypadku. 
+
+## Estymator $\hat{\Sigma}$
+
+Ponownie przyjrzyjmy się teraz wartościom estymowanym dla parametrów związanych z macierzą $\Sigma$ - $\hat{\rho}$ oraz $\hat{\gamma}$.
+
+```{r, echo = FALSE, fig.height = 3, message = FALSE, warning = FALSE}
+p1 <- ggplot(question3, aes(x = rho_hat)) +
+  geom_histogram(aes(y = ..density..), color  = "black", fill = "lightgrey") +
+  geom_vline(xintercept = 0.3, color = "orange") +
+  labs(title = "Rho") +
+  theme_minimal()
+  
+p2 <- ggplot(question3, aes(x = gamma_hat)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "lightgrey") +
+  geom_vline(xintercept = 2, color = "orange") +
+  labs(title = "Gamma") +
+  theme_minimal()
+
+grid.arrange(p1, p2, ncol = 2)
+
+rho_bias <- mean(question3$rho_hat - rho)
+gamma_bias <- mean(question3$gamma_hat - gamma)
+```
+
+Na tych wykresach z kolei, możemy zobaczyć zbliżenie się ich kształtu do krzywej Gaussa, jak również zmniejszenie się rozrzutu między zmiennymi. Poprzednio mogliśmy zobaczyć, że wartości dla $\hat{\rho}$ znajdują się między $-0.25$, a $0.75$, natomiast teraz są one między około $0.23$, a $0.37$. Jest to znacząco pozytywna zmiana. Podobną tendencję możemy zobaczyć dla zmiennej $\hat{\gamma}$. Obciążenie tych wartości wynosi `r round(rho_bias, 4)` dla $\hat{\rho}$ oraz `r round(gamma_bias, 4)` dla $\hat{\gamma}$. Ponownie jest ono mniejsze niż w poprzednim przypadku.
+
+# Zadanie 4.
+
+Tym razem zajmiemy się podobną analizą, gdy zmienimy liczbę pomiarów dla poszczególnych obiektów z $k = 3$ na $k = 30$. 
+
+## Estymator $\hat{\beta}$
+
+Ponownie przyjrzyjmy się histogramom dla estymatorów pierwszych dwóch współrzędnych w wektorze wartości $\beta$.
+
+```{r, echo = FALSE, fig.height = 3, message = FALSE, warning = FALSE}
+n <- 20
+k <- 30
+p <- 4
+N <- n * k
+
+X <- matrix(rnorm(N * (p - 1), mean = 0, sd = 1/sqrt(N)), nrow = N, ncol = p - 1)
+
+v <- 1:N
+n_vector <- v %% k == 1
+n_vector <- v[n_vector]
+
+matrices <- lapply(n_vector, function(n) {
+  X[n:(n + 29), ]
+})
+
+matrices_first_col <- lapply(n_vector, function(n) {
+  X[n:(n + 29), 1]
+})
+
+matrices_second_col <- lapply(n_vector, function(n) {
+  X[n:(n + 29), 2]
+})
+
+matrices_third_col <- lapply(n_vector, function(n) {
+  X[n:(n + 29), 3]
+})
+
+beta <- c(3, 3, 0)
+rho <- 0.3
+gamma <- 2
+sigma <- matrix(rho, nrow = k, ncol = k)
+diag(sigma) <- rep(1, 30)
+sigma <- gamma^2 * sigma
+
+x_with_intercept <- cbind(1, X)
+beta_with_intercept <- c(0, beta)
+
+matrices2 <- lapply(n_vector, function(n) {
+  x_with_intercept[n:(n + 29), ]
+})
+
+suma1 = 0
+
+for (i in 1:length(matrices2)) {
+  suma1 <- suma1 + (t(matrices2[[i]]) %*% solve(sigma) %*% matrices2[[i]])
+}
+
+cov_beta_hat <- solve(suma1)
+
+question4 <- data.frame(t(replicate(500, replications())))
+
+p1 <- ggplot(question4, aes(x = beta0)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "lightgoldenrod1", bins = 40) +
+  stat_function(fun = dnorm, args = list(mean = 0, sd = sqrt(cov_beta_hat[1, 1])), color = "blue") +
+  geom_vline(xintercept = 0, color = "blue") +
+  theme_minimal() +
+  labs(title = "Histogram beta0")
+
+p2 <- ggplot(question4, aes(x = beta1)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "lightgoldenrod1", bins = 40) +
+  stat_function(fun = dnorm, args = list(mean = 3, sd = sqrt(cov_beta_hat[2, 2])), color = "blue") +
+  geom_vline(xintercept = 3, color = "blue") +
+  theme_minimal() +
+  labs(title = "Histogram beta1")
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Jak widać powyższe histogramy są ponownie bardzo zbliżone do teoretycznej krzywej rozkładu. Wartości ponownie są bardziej zbliżone do krzywej. Tym razem $\hat{\beta}_0$ przyjmuje wartości dla wartości podobnych jak w pierwszym z przypadków. 
+
+Spójrzmy teraz na wartości obciążenia dla wektora $\beta$ oraz wartość normy supremum, które umieszczę poniżej.
+
+```{r, echo = FALSE}
+beta0_bias <- mean(question4$beta0 - beta_with_intercept[1])
+beta1_bias <- mean(question4$beta1 - beta_with_intercept[2])
+beta2_bias <- mean(question4$beta2 - beta_with_intercept[3])
+beta3_bias <- mean(question4$beta3 - beta_with_intercept[4])
+
+beta_sup_norm <- max(c(question4$beta0, question4$beta1, question4$beta2, question4$beta3) - beta_with_intercept)
+
+beta_bias <- data.frame(
+  beta0_bias = beta0_bias,
+  beta1_bias = beta1_bias,
+  beta2_bias = beta2_bias, 
+  beta3_bias = beta3_bias
+)
+
+kable(beta_bias, format = "latex", digits = 4, align = "cccc", caption = "Wartości obciążenia dla beta") %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+```
+
+Ponownie obciążenie jest bardzo małe, porównywalne do poprzednich przypadków. Z kolei norma supremum dla tego przypadku wynosi `r round(beta_sup_norm, 4)`, które jest najmniejszą wartością ze wszystkich. 
+
+## Estymator $\hat{\Sigma}$
+
+Spójrzmy teraz na kolejne histogramy z wartościami estymatorów $\hat{\rho}$ oraz $\hat{\gamma}$.
+
+```{r, echo = FALSE, fig.height = 3.5, message = FALSE, warning = FALSE}
+p1 <- ggplot(question4, aes(x = rho_hat)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "lightgrey") +
+  geom_vline(xintercept = 0.3, color = "lightgoldenrod1") +
+  labs(title = "Rho") +
+  theme_minimal()
+  
+p2 <- ggplot(question4, aes(x = gamma_hat)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "lightgrey") +
+  geom_vline(xintercept = 2, color = "lightgoldenrod1") +
+  labs(title = "Gamma") +
+  theme_minimal()
+
+rho_bias <- mean(question4$rho_hat - rho)
+gamma_bias <- mean(question4$gamma_hat - gamma)
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Ponownie widać, że histogram ma kształt podobny do krzywej Gaussa. Estymatory tym razem znajdują się między wartościami około $0.1$ i $0.5$ dla $\hat{\rho}$ oraz między `r round(min(question4$gamma_hat), 4)` i `r round(max(question4$gamma_hat), 4)` . Widać, że dla $\rho$ przedział wartości estymatorów jest mniejszy niż w pierwszym z przypadków, jednak większy niż w drugim. Z kolei dla $\gamma$ wydaje się być porównywalny do pierwszego z przypadków i większy od drugiego z nich. Jeśli chodzi o obciążenie to możemy zobaczyć, że wynosi ono tutaj `r round(rho_bias, 4)` dla $\hat{\rho}$ oraz `r round(gamma_bias, 4)` dla $\hat{\gamma}$. W tym przypadku zatem jest ono najmniejsze ze wszystkich. 
+
+# Zadanie 5.
+
+Przedostatnim przypadkiem, który będziemy rozpatrywać będzie przeanalizowanie, jak na wyniki wpływa zmiana liczby kolumn macierzy planu z $p = 4$ na $p = 40$. Zauważmy, że w takim wypadku otrzymamy więcej elementów w wektorze $\beta$. Z tego względu zakładam, że wektor $\beta$ należy uzupełnić wartościami $0$ po ostatniej podanej wartości.
+
+## Estymator $\hat{\beta}$
+
+Przyjrzyjmy się zatem, jak prezentuje się histogram wartości dla $\hat{\beta}_0$ oraz $\hat{\beta}_1$.
+
+```{r, echo = FALSE}
+set.seed(378436)
+n <- 20
+k <- 3
+p <- 40
+N <- n * k
+
+X <- matrix(rnorm(N * (p - 1), mean = 0, sd = 1/sqrt(N)), nrow = N, ncol = p - 1)
+
+v <- 1:N
+n_vector <- v %% k == 1
+n_vector <- v[n_vector]
+
+matrices <- lapply(n_vector, function(n) {
+  X[n:(n + 2), ]
+})
+
+beta <- c(3, 3, rep(0, p - 3))
+rho <- 0.3
+gamma <- 2
+sigma <- matrix(rho, nrow = k, ncol = k)
+diag(sigma) <- rep(1, k)
+sigma <- gamma^2 * sigma
+
+x_with_intercept <- cbind(1, X)
+beta_with_intercept <- c(0, beta)
+
+matrices2 <- lapply(n_vector, function(n) {
+  x_with_intercept[n:(n + 2), ]
+})
+
+replications2 <- function() {
+  y <- lapply(matrices, function(x) {
+    mvrnorm(mu = x %*% beta, Sigma = sigma)  
+  })
+  
+  X_full <- do.call(rbind, matrices)
+
+  table <- data.frame(
+    id = rep(1:n, each = k),
+    t = rep(1:k, n),
+    y = unlist(y)
+  )
+
+  X_df <- as.data.frame(X_full)
+  colnames(X_df) <- paste0("x", 1:(p - 1))
+
+  table <- cbind(table, X_df)
+
+  formul <- as.formula(paste("y ~", paste(colnames(X_df), collapse = " + "))  
+  )
+
+  model <- gls(
+    formul,
+    data = table,
+    correlation = corCompSymm(form = ~1 | id),
+    weights = varIdent(form = ~1)
+  )
+
+  sigma_hat <- getVarCov(model)
+
+  suma1 <- 0
+  suma2 <- 0
+
+  for (i in 1:length(matrices2)) {
+    suma1 <- suma1 + (t(matrices2[[i]]) %*% solve(sigma_hat) %*% matrices2[[i]])
+    suma2 <- suma2 + (t(matrices2[[i]]) %*% solve(sigma_hat) %*% y[[i]])
+  }
+
+  beta_hat <- solve(suma1) %*% suma2
+  cov_beta_hat_theor <- solve(suma1)
+
+  cov_beta_hat_r <- vcov(model)
+
+  rho_hat <- sigma_hat[2, 1] / sigma_hat[1, 1]
+  gamma_hat <- sqrt(sigma_hat[1, 1])
+  
+  return(list(beta0 = beta_hat[1], beta1 = beta_hat[2], beta_hat = beta_hat, rho_hat = rho_hat, gamma_hat = gamma_hat))
+}
+
+results <- replicate(500, replications2(), simplify = FALSE)
+
+question5 <- do.call(rbind, lapply(results, function(res) {
+  c(beta0 = res$beta_hat[1],
+    beta1 = res$beta_hat[2],
+    rho_hat = res$rho_hat,
+    gamma_hat = res$gamma_hat)
+})) |> as.data.frame()
+
+suma1 <- 0
+
+for (i in 1:length(matrices2)) {
+  suma1 <- suma1 + (t(matrices2[[i]]) %*% solve(sigma) %*% matrices2[[i]])
+}
+
+cov_beta_hat <- solve(suma1)
+```
+
+```{r, echo = FALSE, fig.height = 3.5, message = FALSE, warning = FALSE}
+p1 <- ggplot(question5, aes(x = beta0)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "darkolivegreen3") +
+  stat_function(fun = dnorm, args = list(mean = 0, sd = sqrt(cov_beta_hat[1, 1])), color = "blue") +
+  geom_vline(xintercept = 0, color = "blue") +
+  theme_minimal() +
+  labs(title = "Histogram beta0")
+  
+p2 <- ggplot(question5, aes(x = beta1)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "darkolivegreen3") +
+  stat_function(fun = dnorm, args = list(mean = 3, sd = sqrt(cov_beta_hat[2, 2])), color = "blue") +
+  geom_vline(xintercept = 3, color = "blue") +
+  theme_minimal() +
+  labs(title = "Histogram beta1")
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Wykresy w tych przypadkach są bardzo podobne do tych, które widzieliśmy w pierwszym przypadku. Dla interceptu wartości estymatorów są bardzo zbliżone, jednak dla $\beta_1$ estymatory mają nieco większe wielkości (w pierwszym przypadku było to między `r round(min(question2$beta1), 4)`, a `r round(max(question2$beta1), 4)`, z kolei tym razem jest to między `r round(min(question5$beta1), 4)`, a `r round(max(question5$beta1), 4)`. Krzywe z asymprotycznym rozkładem również są bardzo bliskie wartościom na histogramie. 
+
+Spójrzmy teraz na obciążenie dla $\hat{\beta}$. Tabelę tym razem wykonam w pionie, aby wszystkie wartości dobrze się zmieściły.
+
+```{r, echo = FALSE}
+n_repl <- length(results)
+n_beta <- length(results[[1]]$beta_hat)
+
+beta_bias_matrix <- matrix(NA, nrow = n_beta, ncol = n_repl)
+beta_hat_matrix <- matrix(NA, nrow = n_beta, ncol = n_repl)
+
+for (i in 1:n_repl) {
+  beta_hat_matrix[, i] <- results[[i]]$beta_hat
+  beta_bias_matrix[, i] <- results[[i]]$beta_hat - beta_with_intercept
+}
+
+mean_beta_bias <- rowMeans(beta_bias_matrix)
+beta_bias <- data.frame(mean_beta_bias)
+
+colnames <- paste0("beta", 0:39, "_bias")
+rownames(beta_bias) <- colnames
+
+kable(t(beta_bias[1:8, ]), format = "latex", digits = 4, align = "c", caption = "Wartości obciążenia dla beta", col.names = colnames[1:8]) %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+
+kable(t(beta_bias[9:16, ]), format = "latex", digits = 4, align = "c", col.names = colnames[9:16]) %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+
+kable(t(beta_bias[17:24, ]), format = "latex", digits = 4, align = "c", col.names = colnames[17:24]) %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+
+kable(t(beta_bias[25:32, ]), format = "latex", digits = 4, align = "c", col.names = colnames[25:32]) %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+
+kable(t(beta_bias[33:40, ]), format = "latex", digits = 4, align = "c", col.names = colnames[33:40]) %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+
+sup_norm_beta <- sapply(results, function(x) max(abs(x$beta_hat - beta_with_intercept)))
+sup_norm_beta <- max(sup_norm_beta)
+```
+
+Jak widać powyżej, wartości obciążenia są większe niż w poprzednich przypadkach. tym razem wartości osiągają nawet około $0.3$. Wynika to najpewniej z tego, że mając dużo prawdziwych wartości $0$, możemy widzieć błędne przypisywanie istotności zmiennym nieistotnym. Z kolei norma supremum estymatora $\hat{\beta}$ w tym przypadku wynosi aż `r round(sup_norm_beta, 4)`, co jest zgodne z powyższą tezą.
+
+## Estymator $\hat{\Sigma}$
+
+Spójrzmy teraz na histogramy z wartościami $hat{\rho}$ oraz $\hat{\gamma}$
+
+```{r, echo = FALSE, fig.height=3.5, warning = FALSE, message = FALSE}
+p1 <- ggplot(question5, aes(x = rho_hat)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "lightgray") +
+  geom_vline(xintercept = 0.3, color = "darkolivegreen3") +
+  labs(title = "Rho") +
+  theme_minimal()
+  
+p2 <- ggplot(question5, aes(x = gamma_hat)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "lightgray") +
+  geom_vline(xintercept = 2, color = "darkolivegreen3") +
+  labs(title = "Gamma") +
+  theme_minimal()
+
+rho_bias <- mean(question5$rho_hat - rho)
+gamma_bias <- mean(question5$gamma_hat - gamma)
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Na histogramach, tym razem, nie możemy zobaczyć krzywej gaussa, jeśli chodzi o estymator $\hat{\rho}$ w tym przypadku nie jest widoczna żadna struktura. W szczególności dane są dość mocno oddalone od prawdziwych. W przypadku $\hat{\gamma}$ jest temu histogramowi znacznie bliżej do krzywej rozkładu normalnego, ale również nie jest to idealny rozkład. Dane również są dość oddalone od prawdziwej wartości. Z kolei patrząc na obciążenia, dla $\hat{\rho}$ wynosi ono `r round(rho_bias, 4)`, natomiast dla $\hat{\gamma}$ jest to `r round(gamma_bias, 4)`. Jest ono ponownie bardzo małe, dla $\hat{\gamma}$ jest wręcz jednym z najmniejszych wyników.
+
+# Zadanie 6.
+
+Na koniec sprawdźmy jak na wyniki wpływa zmiana metody konstrukcji macierzy na metodę największej wiarogodności w porównaniu do poprzedniej metody REML.
+
+```{r, echo = FALSE}
+n <- 20
+k <- 3
+p <- 4
+N <- n * k
+
+X <- matrix(rnorm(N * (p - 1), mean = 0, sd = 1/sqrt(N)), nrow = N, ncol = p - 1)
+
+v <- 1:N
+n_vector <- v %% 3 == 1
+n_vector <- v[n_vector]
+
+matrices <- lapply(n_vector, function(n) {
+  X[n:(n + 2), ]
+})
+
+matrices_first_col <- lapply(n_vector, function(n) {
+  X[n:(n + 2), 1]
+})
+
+matrices_second_col <- lapply(n_vector, function(n) {
+  X[n:(n + 2), 2]
+})
+
+matrices_third_col <- lapply(n_vector, function(n) {
+  X[n:(n + 2), 3]
+})
+
+beta <- c(3, 3, 0)
+rho <- 0.3
+gamma <- 2
+sigma <- matrix(rho, nrow = k, ncol = k)
+diag(sigma) <- c(1, 1, 1)
+sigma <- gamma^2 * sigma
+
+x_with_intercept <- cbind(1, X)
+beta_with_intercept <- c(0, beta)
+
+matrices2 <- lapply(n_vector, function(n) {
+  x_with_intercept[n:(n + 2), ]
+})
+
+suma1 = 0
+
+for (i in 1:length(matrices2)) {
+  suma1 <- suma1 + (t(matrices2[[i]]) %*% solve(sigma) %*% matrices2[[i]])
+}
+
+cov_beta_hat <- solve(suma1)
+
+rep = 500
+replications3 <- function() {
+  y <- lapply(matrices, function(x) {
+    mvrnorm(mu = x %*% beta, Sigma = sigma) 
+  })
+
+  table <- data.frame(
+    id = rep(1:n, each = k),
+    t = rep(1:k, n),
+    y = unlist(y),
+    x1 = unlist(matrices_first_col),
+    x2 = unlist(matrices_second_col),
+    x3 = unlist(matrices_third_col)
+  )
+  
+  model <- gls(y ~ x1 + x2 + x3, data = table, correlation = corCompSymm(form =~1|id), weights = varIdent(form =~1), method = "ML")
+
+  sigma_hat <- getVarCov(model)
+
+  suma1 <- 0
+  suma2 <- 0
+
+  for (i in 1:length(matrices2)) {
+    suma1 <- suma1 + (t(matrices2[[i]]) %*% solve(sigma_hat) %*% matrices2[[i]])
+    suma2 <- suma2 + (t(matrices2[[i]]) %*% solve(sigma_hat) %*% y[[i]])
+  }
+
+  beta_hat <- solve(suma1) %*% suma2
+  cov_beta_hat_theor <- solve(suma1)
+
+  cov_beta_hat_r <- vcov(model)
+
+  rho_hat <- sigma_hat[2, 1] / sigma_hat[1, 1]
+  gamma_hat <- sqrt(sigma_hat[1, 1])
+  
+  return(c(beta0 = beta_hat[1], beta1 = beta_hat[2], beta2 = beta_hat[3], beta3 = beta_hat[4], rho_hat = rho_hat, gamma_hat = gamma_hat))
+}
+
+question6 <- data.frame(t(replicate(rep, replications3())))
+```
+
+## Estymator $\hat{\beta}$
+
+W pierwszej kolejności przyjrzyjmy się, ponownie, histogramom dla dwóch pierwszych współrzędnych estymatora $\hat{\beta}$.
+
+```{r, echo = FALSE, fig.height=3.5, warning=FALSE, message=FALSE}
+p1 <- ggplot(question6, aes(x = beta0)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "lightsteelblue") +
+  stat_function(fun = dnorm, args = list(mean = 0, sd = sqrt(cov_beta_hat[1, 1])), color = "blue") +
+  geom_vline(xintercept = 0, color = "blue") +
+  theme_minimal() +
+  labs(title = "Histogram beta0")
+  
+p2 <- ggplot(question6, aes(x = beta1)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "lightsteelblue") +
+  stat_function(fun = dnorm, args = list(mean = 3, sd = sqrt(cov_beta_hat[2, 2])), color = "blue") +
+  geom_vline(xintercept = 3, color = "blue") +
+  theme_minimal() +
+  labs(title = "Histogram beta1")
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Jak widać, histogramy są bardzo bliskie teoretycznym wartościom asymptotycznego rozkładu tych estymatorów. Wyniki w tym przypadku są bardzo podobne do pierwszego z przypadków. 
+
+Przyjrzyjmy się teraz tabeli z obciążeniami oraz normie supremum estymatora wektora $\beta$.
+
+```{r, echo = FALSE}
+beta0_bias <- mean(question6$beta0 - beta_with_intercept[1])
+beta1_bias <- mean(question6$beta1 - beta_with_intercept[2])
+beta2_bias <- mean(question6$beta2 - beta_with_intercept[3])
+beta3_bias <- mean(question6$beta3 - beta_with_intercept[4])
+
+beta_sup_norm <- max(c(question6$beta0, question6$beta1, question6$beta2, question6$beta3) - beta_with_intercept)
+
+beta_bias <- data.frame(
+  beta0_bias = beta0_bias,
+  beta1_bias = beta1_bias,
+  beta2_bias = beta2_bias, 
+  beta3_bias = beta3_bias
+)
+
+kable(beta_bias, format = "latex", digits = 4, align = "cccc", caption = "Wartości obciążenia dla beta") %>%
+  kable_styling(latex_options = "hold_position", position = "center")
+```
+
+Patrząc na powyższą tabelę można zobacztć, że tym razem wartości są porównywalne do tych z pierwszego przypadku. Nie można zobaczyć znaczącej zmiany. Norma supremum dla $\hat{\beta}$ wynosi `r round(beta_sup_norm, 4)` i ponownie jest dość podobna do poprzednio otrzymywanych.
+
+## Estymator $\hat{\Sigma}$
+
+Przyjrzyjmy się na koniec histogramom dla $\hat{\rho}$ oraz $\hat{\gamma}$.
+
+```{r, echo = FALSE, fig.height=3.5, message = FALSE, warning = FALSE}
+p1 <- ggplot(question6, aes(x = rho_hat)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "lightgray") +
+  geom_vline(xintercept = 0.3, color = "lightsteelblue") +
+  labs(title = "Rho") +
+  theme_minimal()
+  
+p2 <- ggplot(question6, aes(x = gamma_hat)) +
+  geom_histogram(aes(y = ..density..), color = "black", fill = "lightgray") +
+  geom_vline(xintercept = 2, color = "lightsteelblue") +
+  labs(title = "Gamma") +
+  theme_minimal()
+
+rho_bias <- mean(question6$rho_hat - rho)
+gamma_bias <- mean(question6$gamma_hat - gamma)
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Ponownie nie możemy powiedzieć, że widoczne na histogramach wartości w znaczący sposób różnią się od poprzednich.
+
+# Podsumowanie
+
+Z powyższych rozważań możemy zauważyć, że empiryczne działania są zgodne z teorią. Przede wszystkim można zobaczyć, że rozkłady estymatora $\hat{\beta}$ są bardzo zbliżone do gęstości swojego asymptotycznego rozkładu. Dodatkowo, mogliśmy zobaczyć, że w większości przypadków (poza większą liczbą regresorów) mamy histogramy dla $\hat{\rho}$ oraz $\hat{\gamma}$ bardzo zbliżone do gęstości rozkładu normalnego. 
+
+Zastanówmy się jednak jak poszczególne parametry również wpływają na wartości estymatorów. Pierwszym co spostrzegliśmy było to, że dla większej liczby obiektów, estymatory $\beta$, jak i $\rho$ i $\gamma$ są bliżej siebie (i tym samym prawdziwej wartości), jak również maleje norma supremum estymatora $\hat{\beta}$. Dla zwiększonej liczby pomiarów dla poszczególnych obiektów mogliśmy zaobserwować najniższą ze wszystkich wartość normy supremum. Obciążenie również było jednym z najniższych, zarówno dla $\beta$ jak i $\rho$ czy $\gamma$. Zwiększenie liczby nieistotnych regresorów wpływa na pogorszenie się estymatorów $\beta$ (w tym dość duże obciążenie i norma supremum), a także utratę normalności w przypadku parametru $\hat{\rho}$. Z kolei zmiana metody z REML na ML nie wskazuje na żadne znaczące różnice

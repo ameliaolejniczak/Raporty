@@ -1,0 +1,421 @@
+---
+title: "Lista 3."
+author: "Amelia Olejniczak"
+output: 
+  pdf_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\newpage
+
+# Wprowadzenie
+
+Poniższy raport dotyczyć będzie uogólnionej regresji Poissona. Podzielony będzie na dwie części. Pierwsza część, bazowana na symulacjach, pozwoli testować rozkład statystyk $\chi^2$ oraz $\hat{\alpha}$ dla badania hipotezy $$H_0: \text{dane pochodzą z rozkładu Poissona}$$ $$vs$$ $$H_1: \text{dane pochodzą z rozkł. ujemnego dwumianowego}$$ Druga część z kolei, opierać się będzie na danych z pliku, w których mamy informacje o 4406 osobach w wieku 66+ lat, które korzystają z publicznego ubezpieczenia zdrowotnego. Będziemy badać związek między liczbą wyzyt w gabinecie lekarskim (oznaczone jako `ofp`), a zmiennymi niezależnymi opisującymi pacjenta:
+
+- `hosp` - liczba pobytów w szpitalu
+- `health` - subiektywne odczucie pacjenta o swoim zdrowiu
+- `numchron` - liczba przewlekłych stanów chorobowych
+- `gender` - płeć
+- `school` - liczba lat edukacji
+- `privins` - indykator opisujący ewentualne dodatkowe ubezpieczenie zdrowotne pacjenta
+
+Spróbujemy dla powyższych danych dopasować odpowiedni model.
+
+# Symulacje
+
+Aby dokonać odpowiedniej analizy rozkładu statystyk testowych potrzebujemy najpierw wygenerować macierz $X$ rozmiaru $1000 \times 2$, gdzie elementy macierzy są niezależnymi zmiennymi losowymi z rozkładu $N \left( 0, \sigma = \frac{1}{\sqrt{1000}} \right)$. Po wyznaczeniu ciągu predyktorów liniowych $\eta = X \beta$, gdzie $\beta = (3, 3)$ na ich podstawie wygeneruję $10000$ niezależnych replikacji wektora odpowiedzi $Y$ z rozkładu Poissona z parametrem $\lambda = e^{\eta}$, a zatem przy założeniu hipotezy zerowej. Dla każdej replikacji dopasuję model regresji ujemnej dwumianowej, a następnie regresji Poissona i na ich podstawie wyznaczę statystykę $\chi^2$ oraz estymator $\hat{\alpha}$. 
+
+```{r, echo = FALSE, warning = FALSE}
+library(MASS)
+n <- 1000
+p <- 2
+X <- matrix(rnorm(n * p, 0, 1/sqrt(1000)), nrow = n, ncol = p)
+beta <- c(3, 3)
+eta <- X %*% beta
+N <- 10000
+lambda <- exp(eta)
+Y <- matrix(rpois(N * n, lambda), ncol = N, nrow = n)
+
+stats <- readRDS("C:\\Users\\ameli\\Documents\\R\\zaawansowane modele liniowe\\stats.RDS")
+```
+
+## Statystyka $\chi^2$
+
+Statystykę $\chi^2$, jako statystykę testową do wcześniej podanego testu liczymy jako $$\chi^2 = D(M_1) - D(M_0)$$ gdzie $D(M_1)$ oraz $D(M_0)$ oznaczają statystyki deviance do odpowiednich modeli. Aby przeanalizować rozkład tej statystyki, jej wyliczenie powtórzone 10000 razy (jako $\chi^2 = -2 \left( (l_1(\hat{\beta}^{(1)}) - (l_2(\hat{\beta}^{(2)}))) \right)$, gdzie $l_i()$ jest logarytmem funkcji wiarogodności dla odpowiedniego modelu) porównamy histogram statystyki $\chi^2$ z teoretyczną krzywą rozkładu. 
+
+Według teorii, statystyka $\chi^2$ ma rozkład będący złożeniem rozkładu $\chi^2$ z jednym stopniem swobody oraz innego rozkładu skoncentrowanego w zerze. Oczekujemy zatem, że histogram tej zmiennej będzie rozłożony podobnie do gęstości rozkładu $\chi^2$ z jednym stopniem swobody oraz będzie można spostrzec znacząco wyższy słupek dla 0. Przyjrzyjmy się wykresowi aby zobaczyć, czy faktycznie możemy zauważyć taką tendencję.
+
+```{r, echo = FALSE, warning = FALSE, fig.height = 2.5, fig.width = 4.5, fig.align='center'}
+library(ggplot2)
+library(gridExtra)
+chi2 <- sapply(stats, function(s) {
+  s[1]*(s[1] > 0)
+})
+chi22 <- sapply(stats, function(s) {
+  s[1]
+})
+
+df <- data.frame(stat = chi2)
+
+ggplot(df, aes(x = stat)) +
+  geom_histogram(aes(y = ..density..), bins = 50, fill = "lightblue", color = "lightblue4") +
+  stat_function(fun = function(x) 0.5 * dchisq(x, df = 1), color = "tomato3", size = 1) +
+  labs(x = expression(chi^2), y = "Gęstość", 
+       title = expression("Histogram statystyki " ~ chi^2 ~ " i gęstość teoretyczna")) +
+  theme_minimal()
+```
+
+Jak widać na powyższym histogramie, możemy zobaczyć zgodny z teorią rozkład statystyki $\chi^2$. Dane na histogramie rozkładają się dokładnie tak samo, jak teoretyczna prosta, wyznaczająca $\frac{1}{2} F_{\chi^2}$ z jednym stopniem swobody, a zatem teoretyczną część rozkładu zmiennej. Wskazuje to na poprawność w stosunku do teoretycznego rozkładu. 
+
+Przyjrzyjmy się teraz również wykresowi kwantylowo-kwantylowemu dla naszych danych, w porównaniu do teoretycznego rozkładu mieszanego. 
+
+```{r, echo = FALSE, fig.height = 2.5, fig.width = 4.5, fig.align='center'}
+df_qq <- data.frame(
+  theoretical = sort(rchisq(N, 1) * rbinom(N, 1, 1/2)),
+  empirical = sort(chi2)
+)
+
+ggplot(df_qq, aes(x = theoretical, y = empirical)) +
+  geom_point(size = 1.5, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, color = "tomato3", size = 1) +
+  labs(
+    x = "Kwantyle teoretyczne (rozkład mieszany)",
+    y = "Kwantyle empiryczne",
+    title = expression("Wykres kwantylowo-kwantylowy dla statystyki " ~ chi^2)
+  ) +
+  theme_minimal()
+```
+
+Jak widać powyżej, wykres kwantylowo kwantylowy również układa się bardzo blisko teoretycznych wartości. Widać również, że otrzymane wykresy są bardzo bliskie tym, które otrzymaliśmy na wykładzie, zatem empiryczne doświadczenie potwierdziło teoretyczny rozkład danych. 
+
+## Statystyka $\hat{\alpha}$
+
+Zajmijmy się teraz statystyką $\hat{\alpha}$. Liczymy ją jako odwrotność estymatora $\theta$ dla modelu regresji ujemnej dwumianowej. Oczekujemy, że histogram będzie miał bardzo wysoki słupek dla zera, a pozostałe wartości będą układać się w połowę rozkładu normalnego, dla którego $\hat(\sigma)$ liczymy jako $$\hat{\sigma} \approx \frac{F^{-1}(0.75)}{\Phi^{-1}(0.75)}$$ gdzie $F^{-1}(q)$ jest kwantylem rzędu $q$. Spójrzmy zatem na histogram z wartościami alpha i porównajmy go z gęstością połowy rozkładu normalnego.
+
+```{r, echo = FALSE, fig.height = 2.5, fig.width = 4.5, fig.align='center'}
+alpha <- sapply(stats, function(s) {
+  s[2]
+})
+sig <- quantile(alpha, 0.75)/qnorm(0.75)
+
+df <- data.frame(alpha = alpha)
+
+ggplot(df, aes(x = alpha)) +
+  geom_histogram(aes(y = ..density..), bins = 50, fill = "lightblue", color = "lightblue4") +
+  stat_function(fun = function(x) dnorm(x, mean = 0, sd = sig), color = "tomato3", size = 1) +
+  labs(
+    title = expression("Histogram estymatora " * hat(alpha) * 
+                       " z gęstością teoretyczną"),
+    x = expression(hat(alpha)), 
+    y = "Gęstość"
+  ) +
+  theme_minimal()
+```
+
+Jak widać, ponownie można zobaczyć, że dane są zgodne z teoretycznymi wartościami. Widzimy wysoki słupek oznaczający wartość, a pozostałe wartości w znacznym stopniu nakładają się z oczekiwanym rozkładem normalnym. 
+
+Spójrzmy jeszcze na wykres kwantylowo-kwantylowy. Tym razem nie oczekujemy zobaczyć pewnej prostej, a krzywą, która w jednej połowie ma wartości w zerze, a od połowy zgodne z rozkładem normalnym z $\hat{\sigma}$ takim jak poprzednio. 
+
+```{r, echo = FALSE, fig.height = 2.5, fig.width = 4.5, fig.align='center'}
+df_qq <- data.frame(
+  theoretical = sort(rnorm(N, sd = sig)),
+  empirical = sort(alpha)
+)
+
+ggplot(df_qq, aes(x = theoretical, y = empirical)) +
+  geom_point(size = 1.5, color = "steelblue") +
+  geom_abline(slope = 1, intercept = 0, color = "tomato3", size = 1) +
+  labs(
+    x = "Kwantyle teoretyczne",
+    y = "Kwantyle empiryczne",
+    title = expression("Wykres kwantylowo-kwantylowy dla statystyki " ~ hat(alpha))
+  ) +
+  theme_minimal()
+```
+
+Jak widać, wykres jest zgodny z naszymi oczekiwaniami. Możemy zatem stwierdzić na tej podstawie, że rozkład estymatora $\hat{\alpha}$ jest zgodny z oczekiwaniami. Oba wykresy wyglądają w ten sam sposób, co wykresy otrzymane na wykładzie. 
+
+# Analiza danych
+
+W tej części skupimy się na analizie danych z pliku **DebTrivedi.csv**, w którym posiadany dane na temat pewnych osób korzystających z publicznego ubezpieczenia zdrowotnego. Wiemy, że badane są jedynie osoby w wieku 66 lat lub więcej. Spróbujemy wybrać odpowiedni model opisujący związek między liczbą wizyt w gabinecie lekarskim (zmienna `ofp` w pliku), a zmiennymi niezależnymi, którymi są:
+
+- `hosp` - liczba pobytów w szpitalu
+- `health` - subiektywne odczucie pacjenta o swoim zdrowiu
+- `numchron` - liczba przewlekłych stanów chorobowych
+- `gender` - płeć
+- `school` - liczba lat edukacji
+- `privins` - indykator opisujący ewentualne dodatkowe ubezpieczenie zdrowotne pacjenta
+
+## Wstępna analiza
+
+Rozpoczynając wstępną analizę danych, która pozwoli nam oswoić się z tym, jak wyglądają, wykonam w pierwszej kolejności histogram zmiennej `ofp` (zatem liczba wizyt w gabinecie lekarskim). Przyjrzymy się, czy występuje tutaj zjawisko nadmiernej dyspersji lub inflacji w zerze. 
+
+```{r, echo = FALSE, fig.height = 2.5, fig.width = 4.5, fig.align='center'}
+data <- read.csv("C:\\Users\\ameli\\Documents\\R\\zaawansowane modele liniowe\\DebTrivedi.csv")
+
+n <- nrow(data)
+ggplot(data, aes(x = ofp)) + 
+  geom_histogram(aes(y = ..density..), bins = 50, fill = "lightblue", color = "lightblue4") +
+  labs(title ="Histogram zmiennej ofp", x = "Liczba wizyt u lekarza", y = "Gęstość") +
+  theme_minimal()
+```
+
+Na podstawie powyższego wykresu możemy stwierdzić, że zachodzi w tym przypadku zjawisko nadmiernej dyspersji. Większość danych znajduje się wśród mniejszych wartości, ale pojawiają się również wartości bardzo wysokie. Z tego względu możemy założyć występowanie zjawiska nadmiernej dyspersji, co możemy potwierdzić wyliczając wariancję oraz średnią z powyższych danych. Otrzymujemy wtedy $Var(ofp) = 45.687$ oraz $\overline{ofp} = 5.774$, co potwierdza występowanie zjawiska nadmiernej dyspersji. 
+
+Jeśli chodzi o inflację w zerze, to nie możemy wykluczyć podejrzenia o jej występowaniu. Słupek z wartościami w pobliżu zera jest wysoki, jednak nie wydaje się dużo wyższy niż kolejne z nich. Gdy przeliczymy liczbę wartości $0$ w tych danych otrzymujemy $683$, co stanowi około $15.5\%$ wszystkich wartości. W takim przypadku, może to sugerować występowanie również tego zjawiska.
+
+Ze względu na znaczącą liczbę zer wykorzystamy funkcję pomocniczą $f(ofp) = \log(ofp + 0.5)$, która pozwoli nam łatwiej zbadać zależności między `ofp` i opisanymi wcześniej regresorami. Przyjrzyjmy się w tym przypadku wykresom pudełkowym $f(ofp)$ w zależności zmiennych niezależnych. 
+
+W pierwszej kolejności spójrzmy na wykres ze zmienną opisującą liczbę pobytów w szpitalu. W tym przypadku, aby jak najlepiej opisać dane pogrupuję je do kategorii "0", "1", "2" oraz "3 i więcej". Spójrzmy na tak skonstruowane wykreys pudełkowe.
+
+```{r, echo = FALSE, fig.height = 2.5, fig.width = 4.5, fig.align='center'}
+data$fofp <- log(data$ofp + 0.5)
+
+data$hosp1 <- data$hosp
+data$hosp1[data$hosp1 >= 3] <- "3 i więcej"
+
+ggplot(data, aes(x = hosp1, y = fofp)) +
+  geom_boxplot(color = "lightblue4", fill = "lightblue") +
+  labs(title = "Wykres pudełkowy dla zmiennej hosp", x = "Liczba pobytów w szpitalu", y = "f(ofp)") +
+  theme_minimal()
+```
+
+Z powyższego wykresu można wyciągnąć już pewne wnioski. W pierwszej kolejności - widać, że osoby, które nie chodziły do szpitala, rzadziej również odwiedzali lekarza. Dla tych osób mamy również największy rozrzut, zatem możemy znaleźć w tej grupie osoby, które nie odwiedzały szpitala, ale odbywały dużo wizyt lekarskich. Można również zauważyć tendencję w drugą stronę - osoby odwiedzające szpital więcej niż 3 razy, również częściej odbywają wizyty w gabinecie lekarskim. Warto również zauważyć, że mediana dla każdego boxplotu jest dość podobna. 
+
+Kolejną zmienną, którą będziemy obserować jest zmienna `health`, która opisuje subiektywne odczucie pacjenta o swoim zdrowiu. W tym przypadku mamy trzy możliwe wartości `poor`, `average` oraz `excellent`. Możemy się zatem spodziewać, że osoby, które źle oceniają swój stan zdrowia, rzadziej chodzą do lekarza, a osoby w ostatniej grupie robią to rzadziej. Przyjrzyjmy się kolejnemu wykresowi pudełkowemu, aby potwierdzić tę tezę. 
+
+```{r, echo = FALSE,  fig.height = 2.5, fig.width = 4.5, fig.align='center'}
+data$health <- factor(data$health, levels = c("poor", "average", "excellent"))
+
+ggplot(data, aes(x = health, y = fofp)) +
+  geom_boxplot(fill = "lightblue", color = "lightblue4") +
+  labs(title = "Wykres pudełkowy dla zmiennej health", x = "Subiektywna ocena stanu zdrowia", y = "f(ofp)") +
+  theme_minimal()
+```
+
+Gdy przyjrzymy się tym wykresom możemy zobaczyć, że faktycznie jest tak jak oczekiwaliśmy. Wykres pudełkowy dla słabszej oceny swojego zdrowia jest znacznie wyżej, niż ten dla pozytywnej oceny. Wynika z tego, że faktycznie może występować zależność, jak opisana wyżej. Dla średniej oceny zdrowia występuje największy rozrzut, co ponownie jest takie, jak moglibyśmy oczekiwać, gdyż w tym przypadku mogą być zarówno osoby, które nieco zaniżają swoją ocenę zdrowia, jak i ją zawyżają.
+
+Następny boxplot będzie dotyczył zmiennej `numchron`, czyli liczba przewlekłych stanów chorobowych. Ponownie ustalimy tutaj cztery grupy, gdzie liczba przewlekłych stanów chorobowych to 0, 1, 2 lub 3 i więcej. Spójrzmy, jak rozkłada się to na liczbę wizyt w gabinecie lekarskim. 
+
+```{r, echo = FALSE, fig.height = 2.5, fig.width = 4.5, fig.align='center'}
+data$numchron1 <- data$numchron
+data$numchron1[data$numchron1 >= 3] <- "3 i więcej"
+
+ggplot(data, aes(x = numchron1, y = fofp)) +
+  geom_boxplot(fill = "lightblue", color = "lightblue4") +
+  labs(title = "Wykres pudełkowy dla zmiennej numchron", x = "Liczba przewlekłych stanów chorobowych", y = "f(ofp)") +
+  theme_minimal()
+```
+
+Gdy spojrzymy na powyższy wykres, możemy zobaczyć spodziewane wyniki. Jeśli osoba nie ma przewlekłych stanów chorobowych, do raczej rzadziej odwiedza lekarza. Jeśli chodzi natomiast o dużą liczbę przewlekłych stanów chorobowych, widać również, że częśćiej odwiedzają oni lekarza (z pojedynczymi wartościami odstającymi). Jest to oczekiwany rezultat, te wykresy utworzyły pewne "schodki", co nie jest zaskakującym wynikiem.
+
+Spójrzmy teraz na zmienną określającą płeć.
+
+```{r, echo = FALSE, fig.height = 2.5, fig.width = 4.5, fig.align='center'}
+ggplot(data, aes(x = gender, y = fofp)) +
+  geom_boxplot(fill = "lightblue", color = "lightblue4") +
+  labs(title = "Wykres pudełkowy dla zmiennej gender", x = "Płeć", y = "f(ofp)") +
+  theme_minimal()
+```
+
+W powyższych wykresach nie możemy wskazać na znaczące różnice między liczbą odwiedzin u lekarza kobiet a mężczyzn. W obu przypadkach mediana jest na podobnym poziomie, rozrzut również (chociaż jest delikatnie mniejszy w przypadku kobiet). 
+
+Kolejna zmienna opisuje liczbę lat edukacji. Ponieważ mamy tutaj wartości między 0 a 18 lat, to dobrym pomysłem będzie pewne pogrupowanie tych danych. Możemy zatem podzielić te dane na trzy grupy. Pierwsza z nich będzie dotyczyła osób, które przeszły maksymalnie 6 lat edukacji, kolejna między 7 a 12 lat edukacji włącznie, a ostatnia dotyczyć będzie osób, uczących się powyżej 13 lat. W ten sposób nie otrzymamy żadnych grup, w których znajduje się niewiele danych. Przyjrzyjmy się teraz tym grupom na wykresie pudełkowym.
+
+```{r, echo = FALSE, fig.height = 2.5, fig.width = 4.5, fig.align='center'}
+data$school1 <- as.numeric(data$school)
+data$school1[data$school1 <= 6] <- 1
+data$school1[data$school1 >= 7 & data$school1 <= 12] <- 2
+data$school1[data$school1 >= 13] <- 3
+
+data$school1 <- factor(data$school1, levels = c(1, 2, 3), labels <- c("0-6", "7-12", "13-18"))
+
+ggplot(data, aes(x = school1, y = fofp)) +
+  geom_boxplot(fill = "lightblue", color = "lightblue4") +
+  labs(title = "Wykres pudełkowy dla zmiennej school", x = "Liczba lat edukacji", y = "f(ofp)") +
+  theme_minimal()
+```
+Jak widać w tym przypadku, podobnie jak dla płci, nie można zauważyć żadnej zależności między liczbą wizyt u lekarza, a liczbą lat edukacji, podobnie jak w przypadku płci. Dwie nieznaczące różnice mogą polegać na tym, że mediana dla pierwszej grupy jest nieco mniejsza niż dla dwóch pozostałych, oraz dla trzeciej grupy otrzymujemy najmniejsze zróżnicowanie danych. 
+
+Na koniec pozostaje analiza informacji, czy osoba ubezpiecza się również prywatnie. Spójrzmy poniżej.
+
+```{r, echo = FALSE, fig.height = 2.5, fig.width = 4.5, fig.align='center'}
+ggplot(data, aes(x = privins, y = fofp)) +
+  geom_boxplot(fill = "lightblue", color  = "lightblue4") +
+  labs(title = "Wykres pudełkowy dla zmiennej privins", x = "Posiadanie prywatnego ubezpieczenia", y = "f(ofp)") +
+  theme_minimal()
+```
+
+Powyższy wykres, ponownie, nie wskazuje na znaczącą różnicę na liczbę wizyt w gabinecie lekarskim. Można powiedzieć, że delikatnie więcej osób odwiedza gabinety lekarskie, jeśli jednocześnie posiada prywatne ubezpieczenie, jednak nie jest to w żaden sposób znacząca różnica.
+
+## Wybór modelu
+
+Po wstępnej analizie, nadszedł czas abyśmy spróbowali wybrać odpowiedni model do danych. Spróbujemy to zrobić dla sześciu różnych modeli:
+
+- **Model Poissona**
+- **Model ujemny dwumianowy**
+- **Model ZIPR**
+- **Model ZINBR**
+- **Model Poissona z barierą**
+- **Model ujemny dwumianowy z barierą**
+
+Na podstawie wstępnej analizy możemy już domyślić się, że dobrym wyborem będzie któryś z modeli, który pozwoli kontrolować nadmierną dyspersję danych, jak i również inflację w zerze. Poza tym, część zmiennych (m.in. liczba lat edukacji, czy płeć) mogą nie wpływać istotnie na liczbę wizyt lekarskich, przez co można je ominąć. W pierwszej kolejności zredukujemy model o odpowiednie zmienne, które testy statystyczne wskażą jako nieistotne. Sprawdzimy to przy pomocy funkcji `summary()` na odpowiedni model.
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+library(pscl)
+
+ps <- glm(ofp~hosp+health+numchron+gender+school+privins, data=data, family="poisson")
+ud <- glm.nb(ofp~hosp+health+numchron+gender+school+privins, data=data)
+zipr <- zeroinfl(ofp~hosp+health+numchron+gender+school+privins, data=data)
+zinbr <- zeroinfl(ofp~hosp+health+numchron+gender+school+privins, data=data, dist = "negbin")
+psb <- hurdle(ofp~hosp+health+numchron+gender+school+privins, data=data)
+udb <- hurdle(ofp~hosp+health+numchron+gender+school+privins, data=data, dist="negbin")
+
+s1<-summary(ps)
+s2<-summary(ud)
+s3<-summary(zipr) 
+s4<-summary(zinbr) 
+s5<-summary(psb)
+s6<-summary(udb)
+```
+
+Po przeprowadzeniu testów ($\alpha = 0.05$) dla modelu regresji Poissona oraz modelu ujemnego dwumianowego wszystkie zmienne są znaczące. Gdy przyjrzymy się modelom z inflacją w zerze, w przypadku $ZIPR$, jak i $ZINBR$ możemy zobaczyć, że część zmiennych jest nieistotna przy testowaniu parametru $\gamma$. W przypadku pierwszego z nich dla przyjętego poziomu istotności jest to zmienna `health`, z kolei dla drugiego nieistotne są zmienne `health`, ale także `hosp`. Zmienna `health` okazała się w tych testach nieistotna również dla obu modeli z barierą.
+
+Sprawdźmy to jednak. Dla modeli $ZIPR$ oraz $ZINBR$ stwórzmy nowe modele, zredukowane o niepotrzebne zmienne.
+
+```{r, echo = FALSE}
+zipr2 <- zeroinfl(ofp~hosp+health+numchron+gender+school+privins|hosp+numchron+gender+school+privins-1, data=data)
+s33 <- summary(zipr2)
+
+chi2 <- 2*(logLik(zipr)-logLik(zipr2))
+quan <- qchisq(1-0.05,4)
+
+aic <- AIC(zipr,zipr2)
+bic <- BIC(zipr,zipr2)
+
+zinbr2 <- zeroinfl(ofp~hosp+health+numchron+gender+school+privins|numchron+gender+school+privins-1, data=data, dist = "negbin")
+s44 <- summary(zinbr2)
+
+chi22 <- 2*(logLik(zinbr)-logLik(zinbr2))
+quan2 <- qchisq(1-0.05,3)
+
+aic2 <- AIC(zinbr,zinbr2)
+bic2 <- BIC(zinbr,zinbr2)
+```
+
+Podobna sytuacja jest dla dwóch ostatnich modeli, zatem tych z barierą. Również w tym przypadku zmienna `health jest nieistotna w drugim z testów. Tutaj również możemy usunąć te zmienne. 
+
+```{r, echo = FALSE}
+psb2 <- hurdle(ofp~hosp+health+numchron+gender+school+privins|hosp+numchron+gender+school+privins-1, data=data)
+s55 <- summary(psb2)
+
+chi23 <- 2*(logLik(psb)-logLik(psb2))
+quan3 <- qchisq(1-0.05,2)
+
+aic3 <- AIC(psb,psb2)
+bic3 <- BIC(psb,psb2)
+
+udb2 <- hurdle(ofp~hosp+health+numchron+gender+school+privins|hosp+numchron+gender+school+privins-1, data=data, dist="negbin")
+s66 <- summary(udb2)
+
+chi24 <- 2*(logLik(udb)-logLik(udb2))
+quan4 <- qchisq(1-0.05,2)
+
+aic4 <- AIC(udb,udb2)
+bic4 <- BIC(udb,udb2)
+```
+
+Aby w każdym z tych czterech przypadków potwierdzić wykonane obcięcia modeli wykonam testy $\chi^2$ bazujące na statystyce Deviance. Jeśli statystyka $\chi^2$ będzie większa od odpowiedniego kwantyla, to możemy odrzucić hipotezę zerową ($H_0:$ obcięty model jest lepiej dopasowany do danych) na rzecz alternatywy ($H_1$ pełny model jest lepiej dopasowany do danych). Test wykonuję na poziomie istotności $\alpha = 0.05$. Poniżej w tabeli przedstawiam wyniki tego testowania. 
+
+```{r, echo = FALSE, warning = FALSE}
+library(knitr)
+library(kableExtra)
+
+table_test <- data.frame(
+  "ZIPR" = c(chi2, quan),
+  "ZINBR" = c(chi22, quan2),
+  "Poissona z barierą" = c(chi23, quan3),
+  "NB z barierą" = c(chi24, quan4)
+)
+
+table_test <- t(table_test)
+colnames(table_test) <- c("Statystyka", "Kwantyl")
+
+kable(table_test, format = "latex", align = "ccc") %>%
+  kable_styling(position = "center", latex_options = 'HOLD_position')
+```
+
+Jak widać w powyższej tabeli, dla każdej ze statystyk kwantyl jest większy od wyliczonej statystyki $\chi^2$. Wynika z tego, że obcięcie było dobrym pomysłem w każdym z tych modeli.
+
+Spójrzmy teraz na ostatnią tabelę, która umożliwi ostatecznie przeanalizować, który z modeli jest najlepszy dla naszych danych. W tabeli umieszczę informacje o estymatorze parametru $\alpha$ (jeśli taki istnieje), liczbie parametrów w modelu, logarytm funkcji wiarogodności, $AIC$, $BIC$ oraz oczekiwaną liczbę zer generowanych przez model. Na tej podstawie zobaczymy, który z modeli będzie najbardziej odpowiedni do danych, z którymi mamy do czynienia.
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE}
+library(pscl)
+library(MASS)
+library(dplyr)
+
+models <- list(ps, ud, zipr2, zinbr2, psb2, udb2)
+model_names <- c("Poisson", "NB", "ZIPR", "ZINBR", "Poisson z barierą", "NB z barierą")
+
+num_params <- sapply(models, function(m) length(coef(m)))
+
+ll <- sapply(models, logLik)
+
+aic <- sapply(models, AIC)
+bic <- sapply(models, BIC)
+
+alpha <- sapply(models, function(m) {
+  cls <- class(m)
+  
+  if ("negbin" %in% cls || "negbinomial" %in% cls || "hurdle" %in% cls || "zeroinfl" %in% cls) {
+    summ <- tryCatch(summary(m), error = function(e) NULL)
+    if (!is.null(summ) && !is.null(summ$theta)) {
+      return(round(1 / summ$theta, 3))
+    }
+  }
+  return(NA_real_)
+})
+
+expected_zeros <- sapply(models, function(m) {
+  if (inherits(m, "zeroinfl") || inherits(m, "hurdle")) {
+    pr <- predict(m, type = "prob")
+    sum(pr[, "0"])
+  } else if (inherits(m, "negbin")) {
+    mu <- predict(m, type = "response")
+    theta <- summary(m)$theta
+    sum(dnbinom(0, mu = mu, size = theta))
+  } else {
+    mu <- predict(m, type = "response")
+    sum(dpois(0, lambda = mu))
+  }
+})
+
+summary_table <- data.frame(
+  Alpha = alpha,
+  NumParameters = num_params,
+  LogLik = round(ll, 2),
+  AIC = round(aic, 2),
+  BIC = round(bic, 2),
+  ExpectedZeros = round(expected_zeros, 1)
+)
+
+summary_table <- t(summary_table)
+colnames(summary_table) <- model_names
+
+kable(summary_table, format = "latex", align = "ccc") %>%
+  kable_styling(position = "center", latex_options = "HOLD_position")
+```
+
+W pierwszej kolejności warto zauważyć, że ze względu na niezerowość parametru $\alpha$ tam, gdzie mogliśmy go obliczyć, możemy wykluczyć tezę, że zmienne pochodzą z rozkładu Poissona, a zamiast tego pochodzą one z rozkładu ujemnego dwumianowego. 
+
+Jeśli przyjrzymy się liczbie zmiennych, to widać, że po obcięciu ich dla $ZIPR$, $ZINBR$ oraz obu modeli z barierą w zerze zmienna "NumParameters" oznaczająca liczbę parametrów jest mniejsza. Otrzymane liczby mają sens, gdyż dla naszych danych mamy intercept oraz zmienne objaśniające, które są uznawane za faktory w przypadku zmiennej `gender`, `privins` oraz `health`. Dla tej ostatniej otrzymujemy ten jeden dodatkowy predyktor. 
+
+Patrząc na kryteria wyboru możemy zobaczyć, że żaden z modeli nie wydaje się znacząco odstawać. Wartości zarówno $AIC$, jak i $BIC$ są duże i dość podobne do siebie. Możemy jednak wskazać, że model Poissona (w tym również $ZIPR$ oraz Poisson z barierą) radzi sobie gorzej od tych korzystających z rozkładu ujemnego dwumianowego. Najbardziej porównywalnie dobrze radzą sobie modele $ZINBR$ oraz model ujemny dwumianowy z barierą. 
+
+Biorąc pod uwagę również ostatni rząd możemy wskazać najlepszy model, którym będzie model ujemny dwumianowy z barierą, ponieważ przewidywana liczba zer jest dokładnie taka, jak prawdziwa liczba zer wynikająca z danych. Zatem na podstawie wszystkich kryteriów to właśnie ten model najlepiej opisuje dane. 
