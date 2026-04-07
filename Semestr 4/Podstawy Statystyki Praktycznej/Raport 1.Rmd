@@ -1,0 +1,360 @@
+---
+title: "Raport 1"
+author: "Amelia Olejniczak"
+date: "2024-02-28"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{=html}
+<style>
+body {
+text-align: justify} 
+</style>
+```
+<!--Kod powyżej jest wstawiony w celu wyjustowania całego tekstu. W dalszej części raportu czasem pojawiają się obliczenia w środku tekstu, których nie będę tłumaczyć, tutaj umieszczę jedynie informację na temat znaczenia pojedynczych komend. format(liczba, science=FALSE) zostało umieszczone w niektórych miejscach aby liczby zostały zapisane bez użycia notacji naukowej. sd(wektor) oznacza odchylenie standardowe, quantile(wektor)[n] oznacza kwartyl n-1. Pozostałe komendy których używam to minimum, maksimum czy średnia, których znaczenie wydaje mi się oczywiste.-->
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE}
+data <- read.table('income.txt') #ustalenie pliku z danymi jako zmienną w R
+colnames(data) = c('id', 'age', 'education', 'sex', 'salary', 'sector') #zmiana nazw kolumn dla ułatwienia pracy 
+women <- subset(data, sex == 2) #tworzymy pomocniczą tabelę tylko dla kobiet
+men <- subset(data, sex == 1) #podobnie dla mężczyzn
+data$sex <- as.factor(data$sex) #zapisujemy płeć jako factor
+levels(data$sex) <- c('mężczyźni', 'kobiety') #zmieniamy nazwy, żeby płcie się wyświetlały jako mężczyzna i kobieta, a nie 1 i 2
+data$education <- as.factor(data$education) #analogicznie dla edukacji
+levels(data$education) <- c('podstawowe', 'niepełne średnie', 'średnie', 'niepełne wyższe', 'licencjat', 'magisterium')
+data$sector <- as.factor(data$sector) #i sektora
+levels(data$sector) <- c('sektor prywatny', 'sektor publiczny', 'samozatrudnienie')
+age_group <- dplyr::case_when(
+      data$age <= 29            ~ "20s",
+      data$age > 29 & data$age <= 39 ~ "30s",
+      data$age > 39 & data$age <= 49 ~ "40s",
+      data$age > 49 & data$age <= 59 ~ "50s",
+      data$age > 59 ~ "60s"
+    ) #ustawiamy przedziały dla wieku, aby nie wyświetlało lat oddzielnie, tylko w grupach 25-29, 30-39, 40-49, 50-59 i 60-65
+data$age_group = factor(age_group, level = c('20s', '30s', '40s', '50s', '60s')) #tworzę nową kolumnę będącą faktorem grup wiekowych
+```
+
+# Wprowadzenie
+
+Przedstawiony niżej raport dotyczy analizy zarobków w USA w 2000 roku na podstawie ankiety z Bureau of Labor Statistics wykonanej na grupie n = 55899 osób (w tym `r length(women$salary)` kobiet i `r length(men$salary)` mężczyzn) w wieku od 25 do 65 lat.
+
+# Wstępna analiza
+
+Aby rozpocząć analizę, wykonam histogram przedstawiający rozkład wszystkich zarobków zawartych w tabeli z danymi. Aby histogram był czytelny, sporządzam go na maksymalnym przedziale, gdzie szerokość słupków wynosi 7.5 tys. $. Dzięki temu unikniemy zarówno zbyt szerokich słupków, które mogą wpłynąć na mniej dokładne wnioski, jak i zbyt wąskich, które sprawią, że większość informacji będzie niemożliwa do zauważenia.
+
+```{r, echo=FALSE}
+library(ggplot2) #otwarcie biblioteki umożliwiającej rysowanie wykresów
+library(scales) #otwarcie biblioteki umożliwiającej zmianę skali na wykresie; użyta ze względów estetycznych
+
+
+ggplot(data, aes(x=salary)) + #określenie tabeli danych, a także jej konkretnej zmiennej, dla której rysujemy wykres
+  geom_histogram(binwidth = 7500, color='wheat4', fill='wheat') + #określamy typ wykresu, szerokość słupków, a także jego kolor aby był jak najbardziej czytelny
+  geom_vline(aes(xintercept=mean(salary)), linetype='dashed', color = 'wheat4') + #rysujemy linię, która wskazuje średni zarobek 
+  labs(title='Rozkład zarobków w USA w roku 2000 w $ (n = 55899)', x = 'Roczne zarobki', y = 'Liczba osób') + #tytułujemy histogram oraz jego osie
+  scale_x_continuous(labels=comma) #określamy skalę osi x, aby nie pokazywały się wartości w notacji naukowej
+```
+
+Powyższy histogram przedstawia rozkład zarobków w USA w roku 2000. Na pierwszy rzut oka można stwierdzić, że wykres ma kształt asymetryczny skośny w prawo, co oznacza, że zarówno średnia, jak i mediana będą bliżej minimalnej niż maksymalnej wartości. Histogram nie zaczyna się w zerze, z czego wynika, że w tabeli z danymi znajdują się zarobki mniejsze od zera. Można je rozumieć jako długi pewnej niewielkiej grupy osób. Z drugiej strony, wśród wysokich zarobków, gdzie liczba osób zbliża się do zera, następuje nagły wzrost dla wartości około 230 tys. \$. Obie te grupy przeanalizuję w późniejszej części raportu. Z tego wykresu można również odczytać dominantę, znajdującą się w słupku między 20 tys. a 27,5 tys. $, zatem wynosi około `r format(mean(c(20000, 27500)), science=FALSE)`. Na histogramie pojawia się również pionowa linia przerywana, oznaczająca średnią. Jej wartość (razem z wartościami minimalnymi i maksymalnymi, a także kwartylami i medianą) możemy odczytać z poniższej tabeli.
+
+```{r, echo=FALSE}
+summary(data) #tabela z wybranymi statystykami, a także liczbą poszczególnych zmiennych jakościowych
+```
+
+Powyższa tabela przedstawia podsumowanie wszystkich zebranych w ankiecie danych, tj. podstawowych statystyk zmiennych ilościowych oraz liczbę osób w każdej kategorii zmiennych jakościowych. Tymi drugimi zajmę się w pierwszej kolejności, aby dokładnie uświadomić sobie, z jaką grupą mamy do czynienia.
+
+Zacznę od wieku. Liczba osób w różnych etapach życiowych jest do siebie zbliżona. Mniejsze liczby znajdują się wśród osób między 25 a 29 rokiem życia, a także powyżej 60 roku życia. Jest to całkiem zrozumiałe, biorąc pod uwagę fakt, że są to o połowę mniejsze przedziały od pozostałych. Poza tym w przypadku osób starszych jest to wiek przedemerytalny, zatem może być duża grupa osób już niezdolnych do pracy w tym wieku. Ludzie również są mniej chętni zatrudniać starsze osoby, wolą szukać nowych, młodych głów. W przypadku płci liczba badanych kobiet i mężczyzn jest zbliżona do siebie, natomiast jeśli chodzi o wykształcenie, to większość badanych ma wykształcenie średnie, niepełnie wyższe, bądź posiadają licencjat, natomiast znacznie mniej osób ma wykształcenie podstawowe, bądź niepełne średnie. Wynika to prawdopodobnie z faktu, że w przypadku niższego wykształcenia, trudniej jest znaleźć pracę. Nie ma także tak wielu osób posiadających magisterium, co powiązałabym z wysokimi kosztami studiowania w Stanach Zjednoczonych. Nie każdy może sobie pozwolić na kolejne dwa lata tak dużych wydatków. W sektorze zatrudnienia przewyższa zatrudnienie prywatnie, co stoi w zgodie z panującym w USA systemem ekonomicznym.
+
+W przypadku własności samych zarobków, to najmniejszą wartością jest -24998 $, a największą 425510 $, co daje nam rozrzut równy `r max(data$salary) - min(data$salary)` $. Mediana wynosi 29717 $, a średnia 37865 $. Pierwszy i trzeci kwartyl mają wartości 17000 $ oraz 46504 $, co oznacza, że w tym przedziale znajduje się aż 50% próby, podczas gdy rozrzut międzykwartylowy to zaledwie `r format(quantile(data$salary)[4] - quantile(data$salary)[2], science = FALSE)`. Odchylenie standardowe wynosi `r format(sd(data$salary), science=FALSE)` $, a współczynnik zmienności `r format(sd(data$salary)/mean(data$salary), science=FALSE)`, jest to więc silnie zróżnicowana próba. W przypadku zarobków, trudno o to, aby losowa grupa tak wielu osób miała zbliżone do siebie zarobki, zatem jest to jak najbardziej zrozumiałe.
+
+Sporządzę teraz bazujący na tych danych wykres pudełkowy, aby wizualnie przedstawić powyższe statystyki.
+
+```{r, echo=FALSE}
+ggplot(data, aes(x=salary)) + #ustalenie tabeli danych, z której korzystamy przy badaniu
+  geom_boxplot(color='wheat4', fill='wheat') + #określamy typ wykresu, w tym przypadku wykres pudełkowy, a także wybieramy jego kolor
+  geom_vline(aes(xintercept=mean(salary)), linetype='dashed', color = 'wheat4') + #linia wyznaczająca średnią zarobkową
+  labs(title='Zarobki w USA w roku 2000 w $ (n=55899)', x = 'Roczne zarobki') + #tytułujemy wykres oraz jego oś
+  scale_x_continuous(labels=comma) #analogia do histogramu powyżej
+```
+
+Na powyższym wykresie pojawia się wiele wartości odstających, w szczególności większych od 100000 \$, co tylko dowodzi, że znaczna większość zarabia poniżej tej kwoty. Można na nim dobrze zauważyć różnicę między rozrzutem, a rozrzutem międzykwartylowym - pudełko jest naprawdę wąskie w stosunku do całej osi. Ponownie pojawia się przerywana linia wskazująca średnią wartość zarobków całej grupy. Aby lepiej widoczne było samo pudełko, sporządzę ten sam wykres, jednak bez widocznych wartości odstających, które znacząco zaburzają czytelność wykresu.
+
+```{r, echo=FALSE, warning=FALSE}
+ggplot(data, aes(x=salary)) + #analogicznie
+  geom_boxplot(color='wheat4', fill='wheat', outlier.shape=NA) + #analogicznie + ustawiamy kształt wartości odstających na NA, zatem aby były niewidoczne
+  geom_vline(aes(xintercept=mean(salary)), linetype='dashed', color = 'wheat4') + #analogicznie
+  labs(title='Zarobki w USA w roku 2000 w $ bez wartości odstających', x='Roczne zarobki') + #analogicznie
+  scale_x_continuous(labels=comma, limits=c(-11000,100000)) #analogicznie + zmiana limitu osi na (-11000, 100000), aby pudełko było większe
+```
+
+Patrząc na powyższy wykres, można wyraźnie zauważyć, że średnia wartość zbliża się raczej do trzeciego kwartyla, a nie mediany, co najpewniej jest spowodowane liczbą wartości odstających wśród dużych zarobków, podczas gdy wśród niewielkich wartości nie było zaznaczonych takich zarobków, które znacząco by się różniły od wszystkich wartości. Oznacza to, że średnia została mocno naruszona przez wartości odstające.
+
+## Wpływ zmiennych, różnych od płci, na zarobki
+
+Aby przebadać wpływ sektora zatrudnienia, wykształcenia i wieku od zarobków, przeanalizuję wykresy słupkowe, gdzie wskażę średnie zarobki, a także mediany dla każdej z tych zmiennych. Płeć tymczasowo pominę i przeanalizuję w dalszej części raportu.
+
+```{r, echo=FALSE}
+library(ggpubr) #biblioteka umożliwiająca mi umieszczenie wielu wykresów na niewielkim obszarze
+
+w1 <- ggplot(data, aes(education, salary)) +
+  geom_bar(position = 'dodge', stat = 'summary', fun = 'mean', color='wheat4', fill='wheat') + #sporządzenie wykresu słupkowego, którego wysokość to średnie zarobki, wszystkie robione analogicznie
+  labs(title = 'Średnie zarobki x wykształcenie', x = 'Wykształcenie', y = 'Średnie zarobki') + #tytuł wykresu oraz osi
+  scale_y_continuous(labels = comma) + #zmiana wyświetlanych liczb
+  scale_x_discrete(labels=c('p', 'nś', 'ś', 'nw', 'l', 'm')) #na koniec smieniam nazwy na skróty, aby wykres był czytelniejszy
+
+#wszystkie kolejne wykresy robię analogicznie do pierwszego, zmieniając jedynie nazwę wykresu i osi y oraz funkcję ze średniej na medianę
+
+w3 <- ggplot(data, aes(age_group, salary)) +
+  geom_bar(position = 'dodge', stat = 'summary', fun = 'mean', color='wheat4', fill='wheat') +
+  labs(title = 'Średnie zarobki x wiek', x = 'Wiek', y = 'Średnie zarobki')+
+  scale_y_continuous(labels = comma)
+
+w5 <- ggplot(data, aes(sector, salary)) +
+  geom_bar(position = 'dodge', stat = 'summary', fun = 'mean', color='wheat4', fill='wheat') +
+  labs(title = 'Średnie zarobki x sektor zatrudnienia', x = 'Sektor zatrudnienia', y = 'Średnie zarobki') +
+  scale_y_continuous(labels = comma)
+
+w2 <- ggplot(data, aes(education, salary)) +
+  geom_bar(position = 'dodge', stat = 'summary', fun = 'median', color='wheat4', fill='wheat') + #sporządzenie wykresu słupkowego, którego wysokość to średnie zarobki, wszystkie robione analogicznie
+  labs(title = 'Mediana zarobków x wykształcenie', x = 'Wykształcenie', y = 'Mediana zarobków') +
+  scale_y_continuous(labels = comma) +
+  scale_x_discrete(labels=c('p', 'nś', 'ś', 'nw', 'l', 'm'))
+
+w4 <- ggplot(data, aes(age_group, salary)) +
+  geom_bar(position = 'dodge', stat = 'summary', fun = 'median', color='wheat4', fill='wheat') +
+  labs(title = 'Mediana zarobków x wiek', x = 'Wiek', y = 'Mediana zarobków')+
+  scale_y_continuous(labels = comma)
+
+w6 <- ggplot(data, aes(sector, salary)) +
+  geom_bar(position = 'dodge', stat = 'summary', fun = 'median', color='wheat4', fill='wheat') +
+  labs(title = 'Mediana zarobków x sektor zatrudnienia', x = 'Sektor zatrudnienia', y = 'Mediana zarobków') +
+  scale_y_continuous(labels = comma)
+
+ggarrange(w1, w2, w3, w4, w5, w6, ncol = 2, nrow = 3) #ustawienie wykresów w dwóch kolumnach po trzy wykresy każda
+```
+
+Pierwszy rząd wykresów przedstawiają średnie zarobki oraz medianę dla konkretnego poziomu wykształcenia. Dość oczywistym wnioskiem wydaje się, że im wyższe wykształcenie, tym wyższe zarobki. Oba wykresy są asymetryczne skośne w lewo, zatem poziom wykształcenia ma duże znaczenie na zarobki. Zarówno średnia jak i mediana w pierwszej i ostatniej grupie różnią się od siebie znacząco.
+
+W przypadku wieku, na obu wykresach można zaobserwować wzrost do wieku 50 lat, a następnie spadek w momencie gdy zaczyna się mieć ich 60. Można się doszukiwać powodów takiego stanu rzeczy w rosnącym z wiekiem doświadczeniu zawodowym, a w późniejszych latach niewielki spadek może mieć wpływ z utratą zdolności do wykonywania części ze swoich poprzednich obowiązków, a także przedwczesną emeryturą, która jednak jest znacznie niższa od wysokości wynagrodzenia.
+
+Natomiast w przypadku ostatniego rzędu wykresów, przedstawiającego sektor zatrudnienia, to największe średnie zarobki są dla osób samozatrudnionych, a najmniejsze w sektorze prywatnym, jednak bardzo zbliżone do sektora publicznego. Biorąc pod uwagę dużą liczbę osób zatrudnionych w sektorze prywatnym (aż 73% osób), możemy stwierdzić, że jego średnie zarobki bardzo zbliżone do średnich zarobków ogółem nie są zaskakujące. Ciekawy jest jednak fakt, że mediana zarobków jest największa w sektorze publicznym. Prawdopodobnie wynika to z tego, że w tym sektorze zarobki mają w dużej mierze dość podobne do siebie wartości. W przypadku zarówno samozatrudnienia, jak i sektora prywatnego, mogą tam się pojawić zarówno bardzo małe liczby, jak i bardzo duże, z czego może wynikać na przykład bardzo wysoka średnia właśnie osób samozatrudnionych.
+
+## Analiza długów
+
+```{r, include=FALSE}
+debt <- subset(data, salary<0) #stworzenie tabeli, gdzie jedyne wartości zarobkowe to wartości ujemne
+str(debt) #sprawdzenie liczby osób mających długi
+```
+
+W tabeli danych znajduje się 170 osób, które mają długi. Nie jest to dużo, jedynie 0,03% wszystkich badanych, jednak warto się przyjrzeć z czego mogą one wynikać. Przeanalizuję wykresy słupkowe każdej z kategorii, a następnie sporządzę tabelę przedstawiającą podstawowe statystyki długów w naszej próbie.
+
+```{r, echo=FALSE}
+#wykresy wykonuję analogicznie do poprzednich, zmieniając jedynie nazwy, oraz typ wykresu (stat = count pokazujący wykres pokazujący liczebność danej kategorii)
+d1 <- ggplot(debt, aes(age_group)) +
+  geom_bar(stat='count', color = 'wheat4', fill = 'wheat') +
+  labs(title = 'Długi w zależności od wieku', x = 'Wiek', y='Liczba osób')
+
+d2 <- ggplot(debt, aes(education)) +
+  geom_bar(stat='count', color='wheat4', fill = 'wheat') +
+  labs(title='Długi w zależności od wykształcenia', x='Wykształcenie', y='Liczba osób') +
+  scale_x_discrete(labels=c('p', 'nś', 'ś', 'nw', 'l', 'm'))
+
+d3 <- ggplot(debt, aes(sector)) +
+  geom_bar(stat='count', color = 'wheat4', fill = 'wheat') +
+  labs(title='Długi w zależności od sektora zatrudnienia.', x = 'Sektor zatrudnienia', y='Liczba osób') 
+
+d4 <- ggplot(debt, aes(sex)) +
+  geom_bar(stat='count', color = 'wheat4', fill='wheat') +
+  labs(title='Długi w zależności od płci.', x='Płeć', y='Liczba osób')
+
+ggarrange(d1, d2, d3, d4, ncol=2, nrow=2) #4 wykresy w 2 kolumnach i 2 rzędach
+```
+
+W lewym górnym rogu pojawia się wykres analizujący wiek tej grupy osób. Już na pierwszy rzut oka widać, że ten wykres ma kształt symetryczny, więc najwięcej osób ma długi w wieku około 40 lat, zarówno wcześniej jak i później liczba osób maleje. Może to mieć związek z chęcią zakupu mieszkania. Innym prawdopodobnym tokiem zdarzeń jest nagła utrata stałych dochodów, która może się zdarzyć.
+
+W przypadku wykształcenia z analizy wykresu w prawym górnym rogu, większość osób plasujących się w ujemnych wartościach ma wykształcenie średnie, wyższe lub niepełne wyższe. Wynika to prawdopodobnie w dużym stopniu z kosztów studiowania w Stanach Zjednoczonych, gdzie pójście na studia wiąże się najczęściej z braniem kredytów, których bardzo często nie udaje się spłacić w całości i ciągną się one za ludźmi przez następne lata. Osoby ze średnim wykształceniem mogą próbować założyć własne działalności właśnie po to, aby uniknąć studiów i nie zawsze musi się to skończyć sukcesem.
+
+Jeśli chodzi o wykres w lewym dolnym rogu, przedstawiający liczbę osób mających długi rozłożony na sektor zatrudnienia, nie jest on zaskakujący. Znacząca większość osób mających długi jest samozatrudniona. Najbardziej prawdopodobnie są to firmy, gdzie osoby nie były w stanie spłacić kosztów ich utrzymania w pełni.
+
+Wykres w zależności od płci pokazuje, że kobiety mają częściej długi niż mężczyźni. Różnica jest jednak na tyle niewielka, że nie powinno się wnioskować takiej zależności. Ciekawy jednak fakt można spostrzec, gdy spojrzy się na wykres przedstawiający średnie wartości.
+
+```{r, echo=FALSE}
+#wykresy analogiczne
+b1 <- ggplot(debt, aes(x=age_group, y=salary)) +
+  geom_bar(position = 'dodge', stat = 'summary', fun = 'mean', color='wheat4', fill='wheat') +
+  labs(title='Średnie długi x wiek', x='Wiek', y='Średnie długi')
+
+b2 <- ggplot(debt, aes(x=education, y=salary)) +
+  geom_bar(position = 'dodge', stat = 'summary', fun = 'mean', color='wheat4', fill='wheat') +
+  labs(title='Średnie długi x wykształcenie', x='Wykształcenie', y='Średnie długi') +
+  scale_x_discrete(labels=c('p', 'nś', 'ś', 'nw', 'l', 'm'))
+
+b3 <- ggplot(debt, aes(x=sector, y=salary)) +
+  geom_bar(position = 'dodge', stat = 'summary', fun = 'mean', color='wheat4', fill='wheat') +
+  labs(title='Średnie długi x sektor zatrudnienia', x='Sektor zatrudnienia', y='Średnie długi')
+
+b4 <- ggplot(debt, aes(x=sex, y=salary)) +
+  geom_bar(position = 'dodge', stat = 'summary', fun = 'mean', color='wheat4', fill='wheat') +
+  labs(title='Średnie długi x płeć', x='Płeć', y='Średnie długi')
+
+ggarrange(b1, b2, b3, b4, ncol=2, nrow=2)
+```
+
+Wykresy średnich długów w przypadku sektora zatrudnienia, jak i wieku nie są zaskakujące i wyglądają podobnie do wykresów wyżej, zatem mogą potwierdzać moje poprzednie rozumowanie.
+
+W przypadku wykształcenia widać jedynie, że długi w przypadku wysokiego wykształcenia są znacznie wyższe, co, znów, jest spowodowane naprawdę wysokimi kosztami studiów w Stanach Zjednoczonych.
+
+Najciekawszy jest jednak wykres średnich długów w zależności od płci. Bazując na nim można zobaczyć, że mimo że kobiety w naszej próbie częściej miały długi, to średnio mężczyźni mieli te długi większe i to aż o 1,5 tys. $.
+
+```{r, echo=FALSE}
+summary(debt$salary) #podsumowanie jedynie dla kolumny z zarobkami
+```
+
+Powyższa tabela pokazuje maksymalną oraz minimalną wartość długów, gdzie minimalna wartość jest taka sama jak minimalna wartość całej tabeli danych, a maksymalna to jedynie -1 $, co jest prawdopodobne, gdyż banki w Stanach zezwalają na pożyczkę jedynie 1 $. Mediana wynosi -3799 $, natomiast średnia -4429.9 $. Rozrzut wynosi `r -1-(-24998)` $, natomiast rozrzut międzykwartylowy (gdzie pierwszy i trzeci kwartyl to kolejno -7376.2 $ oraz -994.8 $) to `r -994.8-(-7376.2)` $. Odchylenie standardowe wynosi `r format(sd(debt$salary), science=FALSE)` $, a współczynnik zmienności `r format(sd(debt$salary)/(abs(mean(debt$salary))), science=FALSE)`, więc dalej mamy do czynienia ze zróżnicowaną grupą, co jest charakterystyczne dla analizy zarobkowej.
+
+## Analiza wysokich wartości
+
+```{r, include=FALSE}
+hill <- subset(data, salary>=225000 & salary<=250000) #poniższe kody będą analogiczne do analizy długów, zatem ominę komentarze
+str(hill)
+```
+
+W tym momencie zajmę się analizą wyjątkowo wysokich zarobków. Nie będę jednak brała pod uwagę wszystkich wysokich wartości, ponieważ byłby to zbyt duży rozrzut, a grupa między 225 a 250 tys. $, przy której następuje nagły wzrost słupka, będzie dobrym reprezentantem wysokich wynagrodzeń. Jest to grupa licząca aż 464 osoby, zatem stanowczo więcej osób zarabia wysokie stawki niż ma długi, co jest pozytywnym wnioskiem. Analiza tej części będzie wyglądała podobnie do analizy długów, jednak ominę wnioskowanie ze statystyk, ze względu na niewielki przedział zarobkowy.
+
+```{r, echo=FALSE}
+#analogicznie do długów
+g1 <- ggplot(hill, aes(age_group)) +
+  geom_bar(stat='count', color = 'wheat4', fill='wheat') +
+  labs(title='Wysokie zarobki w zależności od wieku', x='Wiek', y='Liczba osób') 
+
+g2 <- ggplot(hill, aes(education)) +
+  geom_bar(stat='count', color = 'wheat4', fill='wheat') +
+  labs(title='Wysokie zarobki w zależności od wykształcenia', x='Wykształcenie', y='Liczba osób') +
+  scale_x_discrete(labels=c('p', 'nś', 'ś', 'nw', 'l', 'm'))
+
+g3 <- ggplot(hill, aes(sector)) +
+  geom_bar(stat='count', color = 'wheat4', fill='wheat') +
+  labs(title='Wysokie zarobki w zależności od sektora zatrudnienia', x='Sektor zatrudnienia', y='Liczba osób')
+
+g4 <- ggplot(hill, aes(sex)) +
+  geom_bar(stat='count', color = 'wheat4', fill='wheat') +
+  labs(title='Wysokie zarobki w zależności od płci', x='Płci', y='Liczba osób')
+
+ggarrange(g1, g2, g3, g4, ncol=2, nrow=2)
+```
+
+Zaczynając od wykresu wysokich zarobków a wieku, widzimy od razu, że jest podobny do poprzedniego przypadku. Jego kształt jest również symetryczny. Prawdopodobnie wynika to z faktu, że znaczna większość osób, które zarabiają duże kwoty, to osoby z dużym doświadczeniem zawodowym, które zdobywa się z wiekiem.
+
+Wykształcenie również nie jest zaskakujące - im wyższe wykształcenie, tym łatwiej nam zdobyć lepiej płatną pracę, ponieważ dostajemy więcej ofert zawodowych i możemy wybierać te, które najbardziej nam odpowiadają. Z tego samego względu tak niewiele jest osób bez wysokiego wykształcenia, które tyle zarabiają. Nie ma zbyt wielu pracodawców, którzy chcieliby zatrudnić osobę bez studiów na tak dobrze płatne stanowisko, przez to, że nie opłaca im się to ze względu na koszty kursów, które musiałyby takie osoby odbyć.
+
+W przypadku sektora zatrudnienia, najmniej osób jest w sektorze publicznym, co prawdopodobnie jest spowodowane faktem, że w tym przypadku zarobki są mało zróżnicowane, natomiast w sektorze prywatnym jest znaczna większość tak bardzo dobrze zarabiających osób. Jest to jednak również najliczniejsza grupa, więc nie ma pewności, czy nie był to jedynie przypadek.
+
+Natomiast jeśli chodzi o płeć, to znacząca większość osób to mężczyźni. Pokazuje to nieco pesymistyczny obraz tego, że kobietom trudno było trafić na najlepiej płatne stanowiska, a na pewno dużo trduniej niż mężczyznom.
+
+
+# Analiza zarobkowa ze względu na płeć
+
+Powyższe wnioskowanie jest dobrym wstępem do analizy zarobków ze względu na płeć. Warto zacząć je od sporządzenia podobnego histogramu jak na początku, jednak tym razem weźmiemy pod uwagę rozróżnienie płci. Sporządzę dwa histogramy nałożone na siebie, dzięki którym będzie łatwo można dostrzec różnice między zarobkami poszczególnych płci.
+
+```{r, echo=FALSE}
+ggplot(data, aes(x=salary,color = sex, fill=sex)) + #określenie tabeli danych, a także jej konkretnej zmiennej, dla której rysujemy wykres, ustalamy, że kolor będzie różny w zależności od płci
+  geom_histogram(binwidth = 7500, alpha=0.5, position = 'identity') + #określamy typ wykresu, szerokość słupków, ustalamy aby był bardziej przezroczysty oraz aby mieć dwa nałożone na siebie histogramy, zamiast jednego z podziałem na części dotyczące płci
+  geom_vline(aes(xintercept=mean(salary)), linetype='dashed', color = 'plum3') +
+  labs(title='Zarobki w USA w roku 2000 w $ (n = 55899)', x='Roczne zarobki', y='Liczba osób', fill = 'Płeć', color = 'Płeć') + #tytuujemy histogram oraz jego osie, a także legendę
+  scale_x_continuous(labels=comma) +
+  scale_color_manual(values=c("#69b4ff", '#ff69b4')) + #Zmiana kolorów dla obu wykresów, aby kolory były bardziej intuicyjne - kobiety różowy, a mężczyźni niebieski
+  scale_fill_manual(values=c("#69b4ff", '#ff69b4')) #jak wyżej, tylko tym razem kolor wypełnienia obu słupków
+```
+
+Na powyższym wykresie można zauważyć, że więcej kobiet niż mężczyzn znajduje się w przedziale do około 25 tys. $ rocznie i od tego miejsca to słupki niebieskie są wyższe. Gdy spojrzymy na przerywaną linię wyznaczającą średnią wartość zarobków, można zauważyć, że więcej kobiet niż mężczyzn zarabia poniżej średniej wartości, podczas gdy raczej mężczyźni niż kobiety plasują się powyżej tej linii przerywanej. Zatem nie byłoby przesadą powiedzenie, że kobiety zarabiają dużo mniej niż mężczyźni.
+
+Aby dokładniej porównać te zarobki, sporządzę wykres pudełkowy zarobków kobiet i mężczyzn, najpierw ze wszystkimi wartościami odstającymi, aby zobaczyć ich zagęszczenie w zależności od płci
+
+```{r, echo=FALSE, warning=FALSE}
+#wykres posiada analogie do pozostałych wykresów pudełkowych oraz powyższego histogramu
+ggplot(data, aes(x=salary, y=sex, color = sex, fill = sex)) +
+  geom_boxplot(alpha = 0.5) + 
+  labs(title='Zarobki w USA w roku 2000 w $ w zależności od płci (n=55899)', x = "Roczne zarobki", y='Płeć', color = 'Płeć', fill='Płeć') +
+  geom_vline(aes(xintercept=mean(salary)), linetype='dashed', color = 'plum3') +
+  scale_x_continuous(labels=comma) +
+  scale_color_manual(values=c("#69b4ff", '#ff69b4')) +
+  scale_fill_manual(values=c("#69b4ff", '#ff69b4'))
+```
+
+Powyższy wykres pudełkowy przedstawia medianę zarobków kobiet i mężczyzn wraz z wartościami odstającymi, aby dobrze zobrazować ich ilość względem płci. Widać, że wśród kobiet największa wartość jest mniejsza niż największa wartość wśród mężczyzn. Wartości odstających jest również u kobiet mniej, biorąc pod uwagę ich rzadsze uplasowanie na wykresie. Zatem kobiety rzadziej mają naprawdę wysokie wynagrodzenia. W szczególności możemy to zauważyć, patrząc na wartość 100 tys. $, które u kobiet już jest wartością odstającą, natomiast u mężczyzn znajduje się ona jeszcze w wąsie faktycznego wykresu.
+
+Sporządzę teraz drugi wykres pudełkowy, aby poprawnie wnioskować na temat mediany i kwartyli, zarówno kobiet jak i mężczyzn. 
+
+```{r, echo=FALSE, warning=FALSE}
+#analogicznie
+ggplot(data, aes(x=salary, y=sex, color = sex, fill = sex)) +
+  geom_boxplot(outlier.shape=NA, alpha = 0.5) + 
+  labs(title='Zarobki w USA w roku 2000 w $ w zależności od płci bez wartości odstających (n=55899)', x='Roczne zarobki', y='Płeć', color='Płeć', fill = 'Płeć') +
+  geom_vline(aes(xintercept=mean(salary)), linetype='dashed', color = 'plum3') +
+  scale_x_continuous(labels=comma, limits=c(-30000, 100000)) +
+  scale_color_manual(values=c("#69b4ff", '#ff69b4')) +
+  scale_fill_manual(values=c("#69b4ff", '#ff69b4'))
+```
+
+Na tym wykresie można zobaczyć, że "pudełko" kobiet jest w całości za linią wyznaczającą średnią, podczas gdy u mężczyzn średnia jest niewiele większa od ich mediany. Co więcej, pierwszy kwartyl zarobków płci żeńskiej jest niewiele większy od mediany ich zarobków. Rozrzut międzykwartylowy jest również mniejszy u kobiet - oznacza to, że wartości są nieco bardziej zbliżone do siebie w ich przypadku. Mediana u kobiet wynosi `r format(quantile(women$salary)[3], science=FALSE)` $, a u mężczyzn `r format(quantile(men$salary)[3], science=FALSE)` $, co oznacza, że zarobki kobiet stanowiły około `r percent(quantile(women$salary)[3]/quantile(men$salary)[3], accuracy=.01)` zarobków mężczyzn. To oznacza, że zarobki płci żeńskiej są zdecydowanie mniejsze od tych płci męskiej, bez względu na to, jak na to patrzymy. Spróbujmy znaleźć przyczynę tego stanu rzeczy.
+
+## Analiza zarobków poszczególnych płci w zależności od wieku, wykształcenia oraz sektora zatrudnienia
+
+W tym celu sporządzę teraz trzy wykresy słupkowe, które zaprezentują średnie zarobki kobiet i mężczyzn w zależności od różnych czynników możliwych do odczytania z tabeli danych. Nie będę oddzielnie analizować takich samych wykresów prezentujących medianę tych zarobków, ponieważ prezentują się one bardzo podobnie.
+
+```{r, echo=FALSE}
+#wykresy analogiczne do pozostałych 
+a1 <- ggplot(data, aes(education, salary, fill = sex)) +
+  geom_bar(position = 'dodge', stat = 'summary', fun = 'mean') +
+  labs(title='Zarobki wzgl. wykształcenia dla płci', x='Wykształcenie', y='Średnie zarobki', fill='Płeć') +
+  scale_y_continuous(labels = comma) +
+  scale_fill_manual(values=c("#69b4ff", '#ff69b4'))
+
+a2 <- ggplot(data, aes(age_group, salary, fill = sex)) +
+  geom_bar(position = 'dodge', stat = 'summary', fun = 'mean') +
+  labs(title='Zarobki wzgl. wieku dla płci', x='Wiek', y='Średnie zarobki', fill='Płeć') +
+  scale_y_continuous(labels = comma) +
+  scale_fill_manual(values=c("#69b4ff", '#ff69b4'))
+
+a3 <- ggplot(data, aes(sector, salary, fill = sex)) + geom_bar(position = 'dodge', stat = 'summary', fun = 'mean') +
+  labs(title='Zarobki wzgl. sektora zatrudnienia dla płci', x='Sektor zatrudnienia', y='Średnie zarobki', fill='Płeć') +
+  scale_y_continuous(labels = comma) +
+  scale_fill_manual(values=c("#69b4ff", '#ff69b4'))
+
+ggarrange(a1, a2, a3, ncol = 1, nrow = 3) #tym razem jedna kolumna i trzy rzędy
+```
+
+Zacznę od wykresów przedstawających wykształcenie. Oba są asymetryczne skośne w lewo, jednak w przypadku kobiet każdy słupek jest znacznie niższy, stanowi on mniej więcej jedną trzecią słupka mężczyzn, w przypadku magisterium prawdopodobnie nawet mniej. Oznacza to, że bez względu na wykształcenie, kobiety zarabiają mniej niż mężczyźni. Kobiety posiadające tytuł magistra zarabiają podobnie jak mężczyźni, którzy posiadają niepełne wyższe wykształcenie, co jest bardzo pesymistycznym obrazem dla żeńskiej części społeczeństwa. Jednym z powodów, dla których może tak być, który nie wychodzi od decyzji pracodawcy, jest fakt, że kobiety nie wierzą w siebie i wykonują często prace poniżej ich kompetencji.
+
+W przypadku wieku, ciekawy jest fakt, że różnica między słupkami u kobiet jest niewielka, podczas gdy u mężczyzn wyraźnie wzrasta. Można z tego wnioskować, że będąc kobietą, trudniej jest dostać awans czy podwyżkę bądź też że kobiety mniej chętnie zmieniają pracę z wiekiem, kiedy nabierają doświadczenia.
+
+Jeśli chodzi o sektor, to poza faktem, że wszystkie słupki u kobiet są niższe niż u mężczyzn, warto się skupić na samozatrudnieniu. Średnia zarobków kobiet zatrudnionych w tym sektorze jest najniższa, podczas gdy u mężczyzn - najwyższa. Jest to spowodowane faktem, że o wiele mniej kobiet zakłada własne firmy, przez co jest mniejsza szansa na osiągnięcie dużego sukcesu i bardzo wysokich zarobków.
+
+# Przeciętne zarobki w Stanach Zjednoczonych w roku 2000
+
+Jako przeciętne zarobki w Stanach zjednoczonych w roku 2000 uznaję medianę zarobków bez wartości odstających pojawiających się na wykresie pudełkowym. W takim przypadku do ich wyznaczenia nie będą wykorzystywane szczególne przypadki, a będziemy patrzeć jedynie na większość zbliżonych do siebie wartości, więc mediana będzie możliwie najmniej narażona na odstawanie od często występujących wartości, co rozumiałabym jako "przeciętną" wartość - to te zarobki, w pobliżu których najpewniej będą nasze, gdybyśmy zdecydowali się na pracę. 
+
+```{r, include=FALSE}
+q1 <- quantile(data$salary)[2] #pierwszy kwartyl przypisany do pewnej zmiennej q1
+q3 <- quantile(data$salary)[4] #trzeci kwartyl przypisany do pewnej zmiennej q3
+m <- quantile(data$salary)[3] #mediana przypisana do pewnej zmiennej m
+iqn <- q3-q1 #rozrzut międzykwartylowy
+```
+
+Wykres pudełkowy bez wartości odstających ma swój początek w `r format(q1-iqn, science=FALSE)`, a koniec w `r format(q3+iqn, science=FALSE)`, zatem dla tego przedziału wyznaczymy medianę, która będzie wyznaczała przeciętne zarobki.
+
+```{r, echo=FALSE}
+data1 <- subset(data, salary>=-12503.5 & salary<=76007) #stworzenie podtablicy jedynie z danymi, które nas interesują
+summary(data1$salary) #tabela podsumowująca te dane
+```
+Patrząc na powyższą tabelę, widzimy, że mediana ta wynosi 27 tys. $, co możemy uznać za przeciętne zarobki w USA. 
+
+# Podsumowanie
+
+Podsumowując rozważania, zarobki w Stanach są bardzo zróżnicowane, jednak można zauważyć pewne ich własności. Osoby w Stanach w 2000 roku zarabiały przeciętnie 27 tys. $, jednak zdarzały się wśród nich również długi, jak i bardzo wysokie wartości, w szczególności wśród nich takie, wynoszące około 240 tys. $. Na te drugie szanse są bardzo niewielkie w momencie, gdy jest się kobietą. Ogólna sytuacja dla kobiet również jest pesymistyczna - w każdej kategorii zarabiały one mniej niż mężczyźni. 

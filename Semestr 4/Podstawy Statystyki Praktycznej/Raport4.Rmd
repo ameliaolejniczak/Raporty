@@ -1,0 +1,365 @@
+---
+title: "Raport4"
+author: "Amelia Olejniczak"
+date: "2024-04-19"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{=html}
+<style>
+body {
+text-align: justify} 
+</style> 
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Wprowadzenie
+
+Ten raport dotyczy badania średnich wyników na trzech różnych płaszczyznach (oceny, test IQ oraz test psychologiczny) uczniów klas siódmych. Została wylosowana próba 89 uczniów i na jej podstawie wyliczymy średnie wyniki oraz oszacujemy je dla wszystkich uczniów klas siódmych. Porównamy także, jak wyniki się prezentują dla chłopców, a jak dla dziewcząt w tym wieku. 
+
+```{r, echo=FALSE}
+library(stats) #pobieram bibliotekę, aby móc korzystać z rozkładu t-studenta
+data <- read.table('grades.txt') #zapisuję tablicę danych
+colnames(data) = c('id', 'grade_mean', 'iq', 'sex', 'psych_test') #zmieniam nazwy kolumn w tabeli
+data$sex <- as.factor(data$sex) #zapisuję płeć jako faktor
+data_women <- subset(data, sex == 'F') #zapisuję tablicę danych dla kobiet
+data_men <- subset(data, sex == 'M') #tak samo dla mężczyzn
+n <- length(data$id) #liczbe elementow proby zapisuje jako oddzielną zmienną, ponieważ będę się często do niej odwoływała
+t <- qt(1-0.025, n-1) #zapisuję kwantyl do określania przedziałów ufności dla konkretnych zmiennych w tej tabeli danych
+n_k <- length(data_women$id) #analogicznie robię dla kobiet i mężczyzn
+t_k <- qt(1-0.025, n_k-1)
+n_m <- length(data_men$id)
+t_m <- qt(1-0.025, n_m-1)
+```
+
+Warto jednak zauważyć, że zebrane dane są niekompletne. Brakuje m.in. numerów 23, 42 czy 75, co daje nam łączną wielkość próby `r length(data$id)`. Nie robi to wielkiej różnicy w badaniach, gdyż dalej może to być próba reprezentująca wszystkich uczniów. Jest również wystarczająco dużo przebadanych dziewcząt i chłopców (odpowiednio `r length(data_women$id)` oraz `r length(data_men$id)`, potrzebujemy co najmniej 30) aby móc wnioskować o wszystkich uczniach.
+
+# Analiza średniej ocen
+
+```{r, include=FALSE}
+probkowa_srednia_ocen <- mean(data$grade_mean) #zapisuję próbkową średnią ocen
+probkowe_odchylenie_ocen <- sd(data$grade_mean) #zapisuję próbkowe odchylenie standardowe
+
+lewa_strona_oceny_95 <- probkowa_srednia_ocen - t * probkowe_odchylenie_ocen/sqrt(n) #zapisuję lewy kraniec przedziału dla 95% przedziału ufności
+prawa_strona_oceny_95 <- probkowa_srednia_ocen + t * probkowe_odchylenie_ocen/sqrt(n) #zapisuję prawy kraniec przedziału dla 95% przedziału ufności
+```
+## Analiza próby
+
+Analizę średniej ocen rozpocznę od przebadania samej próby. Jej średnia wynosi około `r round(probkowa_srednia_ocen, 2)`, a odchylenie standardowe około `r round(probkowe_odchylenie_ocen, 2)`, więc nie jest to bardzo zróżnicowana próba, szczególnie patrząc na to, że mediana wynosi `r round(median(data$grade_mean), 2)`, zatem jest bardzo zbliżona do średniej. Największa średnia ocen w tej próbie wynosi `r max(data$grade_mean)`, a najmniejsza `r min(data$grade_mean)`, zatem jest dość duży rozrzut między tymi wartościami. 
+
+Na podstawie tych informacji, możemy oszacować, ile wynosi średnia dla całej populacji, korzystając z rozkładu t Studenta z 77 stopniami swobody. Dla próby mającej powyżej 30 elementów możemy przybliżyć średnią rozkładem normalnym. Jednak ponieważ nie znamy odchylenia standardowego dla całej populacji, przy wyznaczaniu przedziału ufności należy skorzystać z rozkładu t-Studenta.
+
+W takim przypadku 95% przedział ufności to [`r round(lewa_strona_oceny_95, 2)`, `r round(prawa_strona_oceny_95, 2)`], zatem najprawdopodobniej w tym przedziale znajduje się średnia wszystkich uczniów klas siódmych. Ma on długość `r abs(round(lewa_strona_oceny_95, 2)-round(prawa_strona_oceny_95, 2))`. Nie jest to więc duży przedział.
+
+Przyjrzymy się teraz histogramowi dla średniej ocen badanej losowej próby, zakładając, że może być reprezentatywna dla wszystkich uczniów klasy siódmej.
+
+```{r, echo=FALSE, warning=FALSE}
+library(ggplot2) #instaluje biblioteke ggplot2
+
+lewa = sort(seq(to = min(data$grade_mean) - prawa_strona_oceny_95 + lewa_strona_oceny_95, from = lewa_strona_oceny_95, by = - prawa_strona_oceny_95 + lewa_strona_oceny_95))
+prawa = seq(from = prawa_strona_oceny_95, to = max(data$grade_mean) + prawa_strona_oceny_95 - lewa_strona_oceny_95, by = prawa_strona_oceny_95 - lewa_strona_oceny_95)
+slupki = c(lewa, prawa) #ustalam przedział, na którym będę opierać szerokość słupków na histogramie, najpierw tworzę ciąg elementów na lewo od lewego końca przedziału ufności, później na prawo od prawego, a następnie robię z nich jeden wektor
+
+ggplot(data, aes(grade_mean)) + #tworzę histogram pokazujący zagęszczenie elementów w próbie o ustalonej wyzej szerokości słupków
+  geom_histogram(aes(y=..density..), breaks=slupki, color = 'wheat4', fill='wheat') +
+  geom_vline(aes(xintercept=probkowa_srednia_ocen), color = 'plum') + #dorysowuję także linie pionowe oznaczające średnią ocen oraz przedział ufności
+  geom_vline(aes(xintercept=lewa_strona_oceny_95), color = 'plum4') +
+  geom_vline(aes(xintercept=prawa_strona_oceny_95), color = 'plum4') +
+  scale_x_continuous(breaks=round(slupki, 3), labels=round(slupki, 3))  + #zmieniam skalę, tak, aby były podpisane wzdłuż podziału słupków (zaokrąglone do 3 miejsc po przecinku)
+  labs(title="Histogram zagęszczenia średnich ocen (n=78)", x="Średnie ocen", y="Zagęszczenie") #zmieniam tytuł wykresu i nazwy osi
+```
+
+Bazując na tym wykresie można stwierdzić, że znaczna większość wartości znajduje się wśród wyższych średnich, z kolei jedynie pojedyncze osoby znajdują się poniżej średniej 3. Może to być spowodowane "przepychaniem" przez nauczycieli słabszych uczniów do wyższych klas, aby na pewno ukończyli chociaż szkołę średnią lub zwyczajną ambicją uczniów, którym zależy na wysokich wynikach w nauce. Średnia wynosząca między 7 a 8 jest również dość wysoka w przypadku skali do 11, co również świadczy o tym, że uczniom (lub czasem ich rodzicom) może zależeć na dobrych wynikach w nauce.
+
+## Analiza ocen zależna od płci
+
+```{r, include=FALSE}
+probkowa_srednia_ocen_k <- mean(data_women$grade_mean) #liczę próbkową średnią ocen dla dziewczyn
+probkowe_odchylenie_ocen_k <- sd(data_women$grade_mean) #liczę próbkowe odchylenie standardowe średnich ocen dla dziewczyn
+
+lewa_strona_oceny_95_k <- probkowa_srednia_ocen_k - t_k * probkowe_odchylenie_ocen_k/sqrt(n_k) #liczę przedział ufności średnich ocen dla dziewczyn
+prawa_strona_oceny_95_k <- probkowa_srednia_ocen_k + t_k * probkowe_odchylenie_ocen_k/sqrt(n_k)
+
+probkowa_srednia_ocen_m <- mean(data_men$grade_mean) #analogicznie dla chłopdów
+probkowe_odchylenie_ocen_m <- sd(data_men$grade_mean)
+
+lewa_strona_oceny_95_m <- probkowa_srednia_ocen_m - t_m * probkowe_odchylenie_ocen_m/sqrt(n_m)
+prawa_strona_oceny_95_m <- probkowa_srednia_ocen_m + t_m * probkowe_odchylenie_ocen_m/sqrt(n_m)
+```
+
+Jeśli spojrzymy na chłopców i dziewczęta oddzielnie można zauważyć pewne zależności. Średnia ocen chłopców wynosi `r round(probkowa_srednia_ocen_m, 2)` (mediana - `r round(median(data_men$grade_mean), 2)`), a dziewcząt `r round(probkowa_srednia_ocen_k, 2)` (mediana - `r round(median(data_women$grade_mean), 2)`), zatem zarówno obie mediany są do siebie zbliżone, jak i obie średnie są do siebie podobne. Mimo wszystko jednak dziewczyny mają tę średnią wyższą, chociaż chłopcy mają wyższą medianę. Odchylenie standardowe dziewcząt wynosi `r round(probkowe_odchylenie_ocen_k, 2)`, a chłopców `r round(probkowe_odchylenie_ocen_m, 2)`. To odchylenie standardowe wskazuje na to, że dziewczęta mają bardziej zbliżone do siebie wyniki, a chłopcy mają wyniki bardziej zróżnicowane.
+
+Co ciekawe, zarówno największa, jak i najmniejsza wartość próby znajduje się wśród chłopców, ale różnica między najmniejszymi wartościami dziewczynek i chłopców jest dużo większa niż różnica między największymi wartościami w tych grupach. Najmniejsza wartość u dziewczynek to `r min(data_women$grade_mean)` (różnica `r min(data_women$grade_mean)-min(data$grade_mean)`), a największa `r max(data_women$grade_mean)` (różnica `r max(data$grade_mean)-max(data_women$grade_mean)`). Może to również wskazywać na fakt, że częściej dziewczynki mają wyższe średnie niż chłopcy i nawet gdy sobie nie radzą bardzo dobrze, bardziej się starają osiągać nieco lepsze wyniki. 
+
+onownie policzę przedziału ufności, tym razem z podziałem na płcie. 95% przedział ufności dla chłopców wynosi [`r round(lewa_strona_oceny_95_m, 2)`, `r round(prawa_strona_oceny_95_m, 2)`], a dla dziewczyn [`r round(lewa_strona_oceny_95_k, 2)`, `r round(prawa_strona_oceny_95_k, 2)`]. Długość tych przedziałów wynosi `r abs(round(lewa_strona_oceny_95_m, 2) - round(prawa_strona_oceny_95_m, 2))` dla chłopców i `r abs(round(lewa_strona_oceny_95_k, 2) - round(prawa_strona_oceny_95_k, 2))`. Bazując na tym można stwierdzić, że dziewczyny mają średnio nieco wyższe oceny niż chłopcy. Oba przedziały mają jednak część wspólną. Wynosi ona od `r round(lewa_strona_oceny_95_k, 2)` do `r round(prawa_strona_oceny_95_m, 2)`. Jest więc pewna szansa, że średnie ich ocen byłyby bardzo zbliżone do siebie.
+
+Przyjrzę się teraz histogramowi gęstości dla chłopców i dziewcząt, aby zobaczyć, w jaki sposób rozkładają się średnie dla konkretnych płci.
+
+```{r, echo=FALSE}
+ggplot(data, aes(grade_mean, color=sex, fill = sex)) + #tworzę histogram z podziałem kolorów względem płci
+  geom_histogram(aes(y=..density..), breaks=slupki, alpha=0.5, position = 'identity') + #zmieniam alpha aby był bardziej przezroczysty oraz position aby pokazywało wysokości tych konkretnych słupków, a nie jedynie zakolorowywało słupki w poprzednim histogramie
+  geom_vline(aes(xintercept=probkowa_srednia_ocen), color = 'plum') + #tworzę linie jak poprzednio, ale dorzucam do nich próbkową średnią ocen kobiet i mężczyzn. rezygnuję z ich przedziałów ufności aby zachować czytelność wykresu
+  geom_vline(aes(xintercept=lewa_strona_oceny_95), color = 'plum4') +
+  geom_vline(aes(xintercept=prawa_strona_oceny_95), color = 'plum4') +
+  geom_vline(aes(xintercept=probkowa_srednia_ocen_k), color = 'lightpink') +
+  geom_vline(aes(xintercept=probkowa_srednia_ocen_m), color = 'lightblue') +
+  scale_color_manual(values=c('#ff69b4', "#69b4ff"), labels=c("Dziewczynki", "Chłopcy")) + #ustalam kolory wypełnienia dla płci oraz nazwy w legendzie
+  scale_fill_manual(values=c('#ff69b4', "#69b4ff"), labels=c("Dziewczynki", "Chłopcy")) +
+  scale_x_continuous(breaks=round(slupki, 3), labels=round(slupki, 3)) + #zmieniam skalę i podpisy
+  labs(title = "Histogram zagęszczenia średnich ocen w zależności od płci (n=78)", x = "Średnie oceny", y="Zagęszczenie", fill = "Płeć", color = "Płeć") #zmieniam tytuły legendy, nazwy osi i tytuł histogramu
+```
+
+Na pierwszy rzut oka widać, że wszystkie wartości poniżej średniej 3 były średnimi ocen chłopców, z czego najpewniej wynika tak duże odchylenie standardowe próby. Mimo że większy procent dziewcząt jest wśród najwyższych wyników, to największy słupek chłopców jest dla wartości między 7.920, a 8.867, podczas gdy dziewcząt dla wartości między 6.973 i 7.920. Wyższe wyniki dziewcząt wynikają najpewniej z faktu, że częściej dziewczynki niż chłopcy mają wyniki wśród najwyższych wartości, ale to częściej chłopcy niż dziewczynki mają z kolei bardzo niskie średnie ocen. Ale to dziewczynki w tej próbie częściej były "przeciętne" - między 5.08, a 7.92.  
+
+Ciekawym jest fakt, że u chłopców wartości są bardziej rozrzucone, zatem równie często znajdują się jednostki uczące się bardzo dobrze, jak i te uczące się fatalnie. U dziewczyn te wyniki są o wiele bardziej "zbite".
+
+# Analiza testu IQ
+
+Przy analizie IQ uczniów sugeruję się pewnymi znanymi faktami. Wiadomo, że rozkład ilorazu inteligencji może być przybliżony rozkładem normalnym. Za przeciętne IQ uznaje się wtedy wynik między 85 a 115 punktów i to taką interpretacją będę się posługiwać przy analizie wyników.
+
+```{r, echo=FALSE}
+#poniższe kody, dla IQ i testu psychologicznego są analogiczne jak dla ocen, zatem nie będę ich komentować
+probkowe_srednie_iq <- mean(data$iq)
+probkowe_odchylenie_iq <- sd(data$iq)
+
+lewa_strona_iq_95 <- probkowe_srednie_iq - t * probkowe_odchylenie_iq/sqrt(n)
+prawa_strona_iq_95 <- probkowe_srednie_iq + t * probkowe_odchylenie_iq/sqrt(n)
+```
+
+## Analiza próby
+
+W przypadku testu IQ średnia wynosi około `r round(probkowe_srednie_iq, 0)`, a mediana `r median(data$iq)`, zatem jest to przeciętny wynik. Minimalny wynik wynosi `r min(data$iq)`, a maksymalny `r max(data$iq)` zatem w próbie mamy do czynienia zarówno z jednostkami z bardzo wysoką inteligencją, jak i takimi z niskim jej poziomem. Próbkowe odchylenie wyników tego testu wynosi `r round(probkowe_odchylenie_iq, 2)`. 
+
+Na podstawie tych informacji można podać przedział ufności. Średnie IQ wszystkich uczniów klas siódmych mieści się w przedziale [`r round(lewa_strona_iq_95, 2)`, `r round(prawa_strona_iq_95, 2)`] z 95% prawdopodobieństwem. Ma on długość `r abs(round(lewa_strona_iq_95, 2) - round(prawa_strona_iq_95, 2))`, zatem ponownie nie jest to duży przedział. 
+
+W następnej kolejności zajmę się analizą histogramu.
+
+```{r, echo=FALSE}
+lewa = sort(seq(to = min(data$iq) - prawa_strona_iq_95 + lewa_strona_iq_95, from = lewa_strona_iq_95, by = - prawa_strona_iq_95 + lewa_strona_iq_95))
+prawa = seq(from = prawa_strona_iq_95, to = max(data$iq) + prawa_strona_iq_95 - lewa_strona_iq_95, by = prawa_strona_iq_95 - lewa_strona_iq_95)
+slupki = c(lewa, prawa)
+
+
+ggplot(data, aes(iq)) +
+  geom_histogram(aes(y=..density..), breaks=slupki, color = 'wheat4', fill='wheat') +
+  geom_vline(aes(xintercept=probkowe_srednie_iq), color = 'plum') +
+  geom_vline(aes(xintercept=lewa_strona_iq_95), color = 'plum4') +
+  geom_vline(aes(xintercept=prawa_strona_iq_95), color = 'plum4') +
+  scale_x_continuous(breaks=round(slupki, 0), labels=round(slupki, 0)) +
+  labs(title = "Histogram wyników testu IQ (n=78)", x = "Wyniki testu", y = "Zagęszczenie")
+```
+
+Jest on dość symetryczny, widać, że największy słupek stanowi średni wynik IQ, a osób z bardzo wysokim, jak i bardzo niskim wynikiem testu jest niewiele. Wydaje się, jakby było więcej osób powyżej przeciętnej (>115), niż poniżej przeciętnej (<85), co może być spowodowane faktem, że jesteśmy w grupie osób uczących się. Osoby w siódmej klasie miały nieco czasu na wyuczenie umiejętności logicznego myślenia, zatem można założyć, że to może wpływać na widoczne wyniki. Gdybyśmy sprawdzili grupę osób z różnym wykształceniem, mogłyby być nieco bardziej różnorodne. Mimo wszystko, są to wyniki bardzo zbliżone do rozkładu normalnego, który, jak wiemy, jest rozkładem IQ w społeczeństwie.
+
+```{r, echo=FALSE}
+probkowe_srednie_iq_k <- mean(data_women$iq)
+probkowe_odchylenie_iq_k <- sd(data_women$iq)
+
+lewa_strona_iq_95_k <- probkowe_srednie_iq_k - t_k * probkowe_odchylenie_iq_k/sqrt(n_k)
+prawa_strona_iq_95_k <- probkowe_srednie_iq_k + t_k * probkowe_odchylenie_iq_k/sqrt(n_k)
+
+probkowe_srednie_iq_m <- mean(data_men$iq)
+probkowe_odchylenie_iq_m <- sd(data_men$iq)
+
+lewa_strona_iq_95_m <- probkowe_srednie_iq_m - t_m * probkowe_odchylenie_iq_m/sqrt(n_m)
+prawa_strona_iq_95_m <- probkowe_srednie_iq_m + t_m * probkowe_odchylenie_iq_m/sqrt(n_m)
+```
+
+## Analiza IQ zależna od płci
+
+Średnie IQ dziewczyn wynosi `r round(probkowe_srednie_iq_k, 2)` (mediana - `r median(data_women$iq)`), a chłopców `r round(probkowe_srednie_iq_m, 2)` (mediana - `r median(data_men$iq)`), zatem tym razem średnio chłopcy mają lepsze wyniki. Jednak odchylenie standardowe dziewcząt jest większe - wynosi `r round(probkowe_odchylenie_iq_k, 2)`, podczas gdy u chłopców jest to jedynie `r round(probkowe_odchylenie_iq, 2)`. Obie wartości nie są jednak duże. 
+
+Tutaj również największa wartość próby jest ilorazem inteligencji chłopca, jednak najmniejsza należy już do dziewczyny. Najwyższe IQ dziewcząt wynosi `r max(data_women$iq)` (różnica `r abs(max(data_women$iq) - max(data$iq))`), a najniższe IQ chłopaka `r min(data_men$iq)` (różnica `r abs(min(data$iq) - min(data_men$iq))`), zatem oba wyniki są bardzo do siebie zbliżone i należą do tej samej grupy w przypadku badania ilorazu inteligencji (bardzo wysokie lub niskie).
+
+95% przedział ufności dla dziewcząt wynosi [`r round(lewa_strona_iq_95_k, 2)`, `r round(prawa_strona_iq_95_k, 2)`] (długość - `r abs(round(lewa_strona_iq_95_k, 2) - round(prawa_strona_iq_95_k, 2))`), a dla chłopców [`r round(lewa_strona_iq_95_m, 2)`, `r round(prawa_strona_iq_95_m, 2)`] (długość - `r abs(round(lewa_strona_iq_95_m, 2) - round(prawa_strona_iq_95_m, 2))`). U dziewcząt jest to przedział przeciętny, natomiast u chłopców zbliża się do 115 z prawej strony, zatem jest o wiele bliżej ponadprzeciętnego IQ. Wciąż, jest jednak możliwość, że wśród wszystkich uczniów klasy siódmej średnie chłopców i dziewcząt są równe lub bardzo do siebie zbliżone. 
+
+Przejdę teraz do analizy histogramu.
+
+```{r, echo=FALSE}
+ggplot(data, aes(iq, color=sex, fill = sex)) +
+  geom_histogram(aes(y=..density..), breaks=slupki, alpha=0.5, position = 'identity') +
+  geom_vline(aes(xintercept=probkowe_srednie_iq), color = 'plum') +
+  geom_vline(aes(xintercept=lewa_strona_iq_95), color = 'plum4') +
+  geom_vline(aes(xintercept=prawa_strona_iq_95), color = 'plum4') +
+  geom_vline(aes(xintercept=probkowe_srednie_iq_k), color = 'lightpink') +
+  geom_vline(aes(xintercept=probkowe_srednie_iq_m), color = 'lightblue') +
+  scale_color_manual(values=c('#ff69b4', "#69b4ff"), labels = c("Dziewczynki", "Chłopcy")) + 
+  scale_fill_manual(values=c('#ff69b4', "#69b4ff"), labels = c("Dziewczynki", "Chłopcy")) +
+  scale_x_continuous(breaks=round(slupki, 0), labels=round(slupki, 0)) +
+  labs(title = "Histogram wyników testu IQ w zależności od płci (n=78)", x = "Wyniki testu IQ", y = "Zagęszczenie")
+```
+
+Słupek wyznaczający średnie IQ jest zdecydowanie wyższy dla chłopców niż dla dziewcząt, z kolei wykres dla dziewcząt jest mimo to o wiele bardziej symetryczny. Mimo dość niewielu dziewczynek wśród średnich wyników zarówno po lewej, jak i po prawej od średniej są dość wysokie. Jak można było przeczuważ po poprzedniej analizie, więcej chłopców ma wysokie IQ, w tym nieco powyżej przeciętnej, z kolei więcej dziewcząt ma to IQ niższe, jednak nie poniżej przeciętnej. Zatem mimo, że dziewczynki mają niższe IQ dostają wyższe oceny. Powodem takiej sytuacji może być fakt, że dziewczynki, nawet mimo mniejszych predyspozycji, bardziej mogą się starać o dobre wyniki w nauce, podczas gdy chłopcy bywają bardziej leniwi pod tym względem. Jest to jednak jedynie teoria, pownieważ nie wiemy, jakie osoby zdobywają takie a nie inne wyniki.
+
+# Analiza testu psychologicznego
+
+Test psychologiczny (Piers-Harris Children's Self-Concept Scale) bada uczniów w sześciu kategoriach (dopasowanie behawioralne, status intelektualny i szkolny, wygląd fizyczny, stan niepokoju oraz szczęście i satysfakcja). Test ma na celu wskazanie jak uczeń postrzega m.in. swoje możliwości do osiągnięcia akademickich sukcesów, a także przede wszystkim, jak dobrze postrzega samego siebie. Wyniki powyżej 70 są uznawane za bardzo wysokie, powyżej 60 za wysokie, przeciętne są w kategorii od 40 do 59, niski dla poniżej 39 i bardzo niski dla 29. Zarówno bardzo wysokie jak i bardzo niskie wyniki mogą być niepokojące.
+
+```{r, echo=FALSE}
+#analogicznie, znów nie będę komentować
+probkowy_sredni_test <- mean(data$psych_test)
+probkowe_odchylenie_test <- sd(data$psych_test)
+
+lewa_strona_test_95 <- probkowy_sredni_test - t * probkowe_odchylenie_test/sqrt(n)
+prawa_strona_test_95 <- probkowy_sredni_test + t * probkowe_odchylenie_test/sqrt(n)
+```
+
+## Analiza próby
+
+Średnia próby jeśli chodzi o wyniki testu wynosi `r round(probkowy_sredni_test, 2)`, zatem należy do przeciętnych wyników, ale w górnej granicy, bardzo zbliżając się do wyników wysokich. Świadczy to dobrze o uczniach, ponieważ wskazuje na fakt, że mają wysoką wiarę w siebie oraz swoje możliwości. Mają pozytywne podejście do siebie. Podobnie mediana wynosi `r median(data$psych_test)`, więc jest wyższa nawet od średniej. Odchylenie standardowe wynosi `r round(probkowe_odchylenie_test, 2)`. Najwyższy wynik testu wyniósł `r max(data$psych_test)`, a najmniejszy `r min(data$psych_test)`, zatem mamy zarówno jednostki z bardzo wysokimi wynikami, jak i bardzo niskimi. Może to być niepokojące i warto się tym jednostkom przyjrzeć bliżej.
+
+Bazując na powyższych informacjach można wyznaczyć 95% przedział ufności wynoszący [`r round(lewa_strona_test_95, 2)`, `r round(prawa_strona_test_95, 2)`]. Ma on długość `r abs(round(lewa_strona_test_95) - round(prawa_strona_test_95, 2))` i znajduje się w górnej części przeciętnych wyników. Znów, świadczy to całkiem dobrze o badanych uczniach. W siódmej klasie jednak warto wziąć pod uwagę, że uczniowie zazwyczaj mają jeszcze poczucie własnej wartości bliższe dziecięcemu, które zazwyczaj jest "nieskazane". Nie mamy również świadomości, kiedy były wykonywane badania i jeśli były przed erą powszechnego dostępu do social mediów to również może mieć wpływ na względnie wysokie wyniki.
+
+W następnej kolejności przyjrzę się histogramowi.
+
+```{r, echo=FALSE}
+lewa = rev(seq(to = min(data$psych_test) - prawa_strona_test_95 + lewa_strona_test_95, from = lewa_strona_test_95, by = - prawa_strona_test_95 + lewa_strona_test_95))
+prawa = seq(from = prawa_strona_test_95, to = max(data$psych_test) + prawa_strona_test_95 - lewa_strona_test_95, by = prawa_strona_test_95 - lewa_strona_test_95)
+slupki = c(lewa, prawa)
+
+ggplot(data, aes(psych_test)) +
+  geom_histogram(aes(y=..density..), breaks=slupki, color = 'wheat4', fill='wheat') +
+  geom_vline(aes(xintercept=probkowy_sredni_test), color = 'plum') +
+  geom_vline(aes(xintercept=lewa_strona_test_95), color = 'plum4') +
+  geom_vline(aes(xintercept=prawa_strona_test_95), color = 'plum4') +
+  scale_x_continuous(breaks=round(slupki, 0), labels=round(slupki, 0)) +
+  labs(title = "Histogram wyników testu psychologicznego (n=78)", x = "Wyniki testu", y = "Zagęszczenie")
+```
+
+Mimo, że średnia wynosi około 57 punktów to widać, że w słupku wyznaczonym przez przedział ufności znajduje się dość mało osób. Znacznie więcej jest w słupkach obok - między 49 i 54, jak i między 60 i 65. Prawdopodobnie równomierne ich rozłożenie w tych miejscach powoduje taką średnią. Dużo więcej uczniów daje bardzo wysokie oceny niż bardzo niskie (osób powyżej 70 punktów wydaje się być dużo więcej niż osób poniżej 29), zatem można założyć, że uczniowie klas siódmych mają raczej wysokie poczucie własnej wartości. Potwierdza to również fakt, że dwa najwyższe słupki wyznaczają wartości powyżej 60. Jest to dobry znak.
+
+```{r, echo=FALSE}
+probkowy_sredni_test_k <- mean(data_women$psych_test)
+probkowe_odchylenie_test_k <- sd(data_women$psych_test)
+
+lewa_strona_test_95_k <- probkowy_sredni_test_k - t_k * probkowe_odchylenie_test_k/sqrt(n_k)
+prawa_strona_test_95_k <- probkowy_sredni_test_k + t_k * probkowe_odchylenie_test_k/sqrt(n_k)
+
+probkowy_sredni_test_m <- mean(data_men$psych_test)
+probkowe_odchylenie_test_m <- sd(data_men$psych_test)
+
+lewa_strona_test_95_m <- probkowy_sredni_test_m - t_m * probkowe_odchylenie_test_m/sqrt(n_m)
+prawa_strona_test_95_m <- probkowy_sredni_test_m + t_m * probkowe_odchylenie_test_m/sqrt(n_m)
+```
+
+## Analiza testu psychologicznego dla płci
+
+W przypadku testu psychologicznego średni wynik dla dziewcząt w próbie wyniósł `r round(probkowy_sredni_test_k, 2)`, a dla chłopców `r round(probkowy_sredni_test_m, 2)`. Znów, podobnie jak w przypadku IQ, chłopcy mają średnie wyniki lepsze od dziewczyn. Odchylenie standardowe dziewczyn i chłopców wynosi kolejno `r round(probkowe_odchylenie_test_k, 2)` oraz `r round(probkowe_odchylenie_test_m, 2)`, zatem jest bardzo do sibeie zbliżone i tym razem to u chłopców dane są bardziej "zbite", jednak różnica jest bardzo niewielka.
+
+Podobnie, jak w przypadku ocen to u chłopców znajdują się wartość największa i najmniejsza całej próby. U dziewcząt najmniejsza wartość wynosi `r min(data_women$psych_test)` (różnica - `r abs(min(data_women$psych_test) - min(data$psych_test))`), a największa `r max(data_women$psych_test)` (różnica - `r abs(max(data_women$psych_test) - max(data$psych_test))`. Najmniejsze wartości są bardzo do siebie zbliżone, natomiast największe są bardziej od siebie oddalone.
+
+Na podstawie powyższych informacji można obliczyć 95% przedziały ufności. Dla dziewcząt wynosi on [`r round(lewa_strona_test_95_k, 2)`, `r round(prawa_strona_test_95_k, 2)`] (długość - `r abs(round(lewa_strona_test_95_k, 2) - round(prawa_strona_test_95_k, 2))`), a u chłopców [`r round(lewa_strona_test_95_m, 2)`, `r round(prawa_strona_test_95_m, 2)`] (długość - `r abs(round(lewa_strona_test_95_m, 2) - round(prawa_strona_test_95_m, 2))`). Ponownie, przedział chłopców kończy się nieco dalej, więc można założyć, że średni wynik testu u chłopców jest nieco większy. Przedziały mają jednak część wspólną, więc nie można wykluczyć sytuacji, w której średnie te są równe.
+
+Teraz przyjrzymy się histogramowi próby.
+
+```{r, echo=FALSE}
+ggplot(data, aes(psych_test, color=sex, fill = sex)) +
+  geom_histogram(aes(y=..density..), breaks=slupki, alpha=0.5, position = 'identity') +
+  geom_vline(aes(xintercept=probkowy_sredni_test), color = 'plum') +
+  geom_vline(aes(xintercept=lewa_strona_test_95), color = 'plum4') +
+  geom_vline(aes(xintercept=prawa_strona_test_95), color = 'plum4') +
+  geom_vline(aes(xintercept=probkowy_sredni_test_k), color = 'lightpink') +
+  geom_vline(aes(xintercept=probkowy_sredni_test_m), color = 'lightblue') +
+  scale_color_manual(values=c('#ff69b4', "#69b4ff"), labels = c("Dziewczynki", "Chłopcy")) + 
+  scale_fill_manual(values=c('#ff69b4', "#69b4ff"), labels = c("Dziewczynki", "Chłopcy")) +
+  scale_x_continuous(breaks=round(slupki, 0), labels=round(slupki, 0)) +
+  labs(title = "Histogram wyników testu psychologicznego w zależności od płci (n = 78)", x = "Wyniki testu", y = "Zagęszczenie")
+```
+
+Patrząc na ten wykres pierwszym co można zauważyć jest fakt, że znacznie więcej chłopców ma bardzo wysokie wyniki, wpadające do grupy wyników powyżej 70 punktów. Są to wyniki, które mogą być niepokojące, wskazując na pewne wyolbrzymianie swoich możliwości lub, w najgorszych przypadkach, świadczyć o kształceniu się pewnych narcystycznych tendencji. Tak wysokie wyniki u chłopców mogą wynikać z różnic w wychowaniu od młodego wieku. Z kolei nieco większy procent dziewczynek niż chłopców znajduje się wśród wartości poniżej 37, zatem można założyć, że mimo że raczej nie ma wielu uczniów, którzy mają na tyle niskie wyniki, to raczej częściej są to dziewczynki. Znaczna większość dziewczyn ma wyniki wysokie, między 60 a 65 punktów. To dobry znak i przeczy nieco stereotypowi niepewnej siebie dziewczynki. W przypadku chłopców największe słupki są równe dla przedziałów między 49 i 54 oraz między 65 i 71. Chłopcy mają więc najczęściej przeciętne lub wysokie wyniki. 
+
+# Analiza zależności między zmiennymi
+
+Sprawdzę teraz zależności między zmiennymi. Wykonam histogramy dla różnych zmiennych w zależności od innych zmiennych (np. jak dla średnich ocen w grupach 0-3, 3-6, 6-9 i 9-11 rozkłada się IQ). Wykonam wykresy jedynie w jedną stronę bo wnioski w drugą będą najpewniej takie same (np. jedynie wykres pokazujących jak rozkłada się IQ wśród średnich, a nie odwrotnie). 
+
+## Zależność IQ od średniej ocen
+
+```{r, echo = FALSE}
+library(ggpubr) #biblioteka umożliwiająca umieszczenie kilku wykresów w postaci macierzowej
+
+lewa = sort(seq(to = min(data$iq) - prawa_strona_iq_95 + lewa_strona_iq_95, from = lewa_strona_iq_95, by = - prawa_strona_iq_95 + lewa_strona_iq_95))
+prawa = seq(from = prawa_strona_iq_95, to = max(data$iq) + prawa_strona_iq_95 - lewa_strona_iq_95, by = prawa_strona_iq_95 - lewa_strona_iq_95)
+slupki = c(lewa, prawa) #ponownie zmieniam podział słupków
+
+#tworzę analogicznie cztery histogramy dla średnich, ustalając na początku nową ramkę danych z odpowiednimi wartościami. tym razem nie ustawiam podziałki, ani nie rysuję linii reprezentujących średnią i przedziały ufności, ponieważ zależy mi jedynie na zaobserwowaniu kształtu wykresu a nie jego konkretnych wartości
+h1 <- ggplot(subset(data, grade_mean >= 0 & grade_mean < 3), aes(iq)) +
+  geom_histogram(aes(y=..density..), breaks = slupki, color = 'wheat4', fill='wheat') +
+  labs(title = "Histogram IQ dla średnich [0, 3)", x = "IQ", y = "Zagęszczenie")
+h2 <- ggplot(subset(data, grade_mean >= 3 & grade_mean < 6), aes(iq)) +
+  geom_histogram(aes(y=..density..), breaks = slupki, color = 'wheat4', fill='wheat') +
+  labs(title = "Histogram IQ dla średnich [3, 6)", x = "IQ", y = "Zagęszczenie")
+h3 <- ggplot(subset(data, grade_mean >= 6 & grade_mean < 9), aes(iq)) +
+  geom_histogram(aes(y=..density..), breaks = slupki, color = 'wheat4', fill='wheat') +
+  labs(title = "Histogram IQ dla średnich [6, 9)", x = "IQ", y = "Zagęszczenie")
+h4 <- ggplot(subset(data, grade_mean >= 9 & grade_mean < 11), aes(iq)) +
+  geom_histogram(aes(y=..density..), breaks = slupki, color = 'wheat4', fill='wheat') +
+  labs(title = "Histogram IQ dla średnich [9, 11)", x = "IQ", y = "Zagęszczenie")
+ggarrange(h1, h2, h3, h4, ncol=2, nrow=2) #ustawienie wykresów macierzowo
+```
+
+Patrząc na te wykresy nie widać jednoznacznego powiązania. Można zauważyć jedynie, że wysokie oceny mają częściej osoby z wysokim IQ, jednak wysokie IQ występuje również dla grupy ze średnią 6-9, zatem nie jest to jednoznaczne. Można więc założyć, że nie ma związku między średnią ocen a IQ uczniów.
+
+## Zależność testu psychologicznego od średniej ocen
+
+```{r, echo=FALSE}
+#analogicznie
+lewa = rev(seq(to = min(data$psych_test) - prawa_strona_test_95 + lewa_strona_test_95, from = lewa_strona_test_95, by = - prawa_strona_test_95 + lewa_strona_test_95))
+prawa = seq(from = prawa_strona_test_95, to = max(data$psych_test) + prawa_strona_test_95 - lewa_strona_test_95, by = prawa_strona_test_95 - lewa_strona_test_95)
+slupki = c(lewa, prawa)
+
+h1 <- ggplot(subset(data, grade_mean >= 0 & grade_mean < 3), aes(psych_test)) +
+  geom_histogram(aes(y=..density..), breaks = slupki, color = 'wheat4', fill='wheat') +
+  labs(title = "Histogram testu dla średnich [0, 3)", x = "Wyniki testu", y = "Zagęszczenie")
+h2 <- ggplot(subset(data, grade_mean >= 3 & grade_mean < 6), aes(psych_test)) +
+  geom_histogram(aes(y=..density..), breaks=slupki, color='wheat4', fill='wheat') +
+  labs(title = "Histogram testu dla średnich [3, 6)", x = "Wyniki testu", y = "Zagęszczenie")
+h3 <- ggplot(subset(data, grade_mean >= 6 & grade_mean < 9), aes(psych_test)) +
+  geom_histogram(aes(y=..density..), breaks=slupki, color='wheat4', fill = 'wheat') +
+  labs(title = "Histogram testu dla średnich [6, 9)", x = "Wyniki testu", y = "Zagęszczenie")
+h4 <- ggplot(subset(data, grade_mean >= 9 & grade_mean < 11), aes(psych_test)) +
+  geom_histogram(aes(y=..density..), breaks=slupki, color = 'wheat4', fill = 'wheat') +
+  labs(title = "Histogram testu dla średnich [9, 11)", x = "Wyniki testu", y = "Zagęszczenie")
+ggarrange(h1, h2, h3, h4, ncol=2, nrow=2)
+```
+
+Tym razem na powyższych wykresach można zauważyć, że im wyższa średnia, tym wyższe wyniki testu psychologicznego. Wykres coraz bardziej przesuwa się w prawą stronę, chociaż najmniejsza próba jest na tyle niewielka, że trudno jest jednoznacznie stwierdzić, jak to wygląda dla większej liczby osób. Jednak na pozostałych trzech wykresach jest zdecydowanie widoczne, jak z każdą kolejną średnią ocen przesuwa się nieco w prawo. Można więc założyć, że oceny wpływają na wiarę w siebie wśród uczniów.
+
+## Zależność IQ od testu psychologicznego
+
+```{r, echo=FALSE}
+#analogicznie
+lewa = sort(seq(to = min(data$iq) - prawa_strona_iq_95 + lewa_strona_iq_95, from = lewa_strona_iq_95, by = - prawa_strona_iq_95 + lewa_strona_iq_95))
+prawa = seq(from = prawa_strona_iq_95, to = max(data$iq) + prawa_strona_iq_95 - lewa_strona_iq_95, by = prawa_strona_iq_95 - lewa_strona_iq_95)
+slupki = c(lewa, prawa)
+
+h1 <- ggplot(subset(data, psych_test < 40), aes(iq)) +
+  geom_histogram(aes(y=..density..), breaks = slupki, color = 'wheat4', fill='wheat') +
+  labs(title = "Histogram IQ dla testu <40", x = "IQ", y = "Zagęszczenie")
+h2 <- ggplot(subset(data, psych_test < 50 & psych_test >= 40), aes(iq)) +
+  geom_histogram(aes(y=..density..), breaks = slupki, color = 'wheat4', fill='wheat') +
+  labs(title = "Histogram IQ dla testu [40, 50)", x = "IQ", y = "Zagęszczenie")
+h3 <- ggplot(subset(data, psych_test < 60 & psych_test >= 50), aes(iq)) +
+  geom_histogram(aes(y=..density..), breaks = slupki, color = 'wheat4', fill='wheat') +
+  labs(title = "Histogram IQ dla testu [50, 60)", x = "IQ", y = "Zagęszczenie")
+h4 <- ggplot(subset(data, psych_test >= 60), aes(iq)) +
+  geom_histogram(aes(y=..density..), breaks = slupki, color = 'wheat4', fill='wheat') +
+  labs(title = "Histogram IQ dla testu >= 60", x = "IQ", y = "Zagęszczenie")
+ggarrange(h1, h2, h3, h4, ncol=2, nrow=2)
+```
+
+Osoby z niskim wynikiem testu niekoniecznie mają niskie IQ, podobnie osoby ze średnim wynikiem testu są bardzo rozproszone po całym przedziale (zarówno wysokie, jak i bardzo niski wynik testu IQ). Jednak osoby z bardzo wysokim IQ pojawiają się jedynie na ostatnim wykresie. Zatem mimo że w pozostałych przypadkach nie ma żadnych powiązań, to Jeśli osoba miała bardzo wysoki wynik testu IQ to miała również wysoki wynik testu psychologicznego.
+
+## Wnioski
+
+W większości zmienne te nie wpływają na siebie, poza niewielkimi przypadkami. Wysokie IQ sprawia, że uczniowie bardziej wierzą w siebie, podobnie oceny mają wpływ na polepszenie się wiary w siebie w uczniów. Nie można jednak stwierdzić, czy faktycznie oceny obrazują w jakikolwiek sposób faktyczny poziom inteligencji uczniów. Nie da się zauważyć między tymi zmiennymi żadnej zależności i nie wygląda na to, że jedna miałaby wpływać na drugą.
+
+# Podsumowanie
+
+Z badanej próby siódmoklasistów wynika, że uczniowie mają raczej dobre oceny i ich wyniki testów, zarówno psychologicznych, jak i IQ są wśród górnej granicy wyników przeciętnych. Warto zwrócić uwagę na fakt, że mimo że dziewczyny uczą się delikatnie lepiej, to chłopcy mają lepsze wyniki obu testów. Warto zwrócić uwagę na to, że mimo wszystko częściej chłopcy lądowali w skrajnych przypadkach, a dziewczęta miały bardziej zbliżone do siebie wyniki.

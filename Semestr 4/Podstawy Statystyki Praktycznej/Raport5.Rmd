@@ -1,0 +1,287 @@
+---
+title: "Raport 5"
+author: "Amelia Olejniczak"
+date: "2024-05-10"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{=html}
+<style>
+body {
+text-align: justify} 
+</style> 
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Wprowadzenie
+
+Ten raport dotyczy badania różnicy między klasyczną metodą tworzenia przedziałów ufności, a metodą Agrestiego-Couli. Porównania dokonam przy pomocy losowań 1000-elementowych prób z rozkładu Bernouliego o różnych parametrach. Sprawdzę w jakich sytuacjach każda z metod sprawdza się lepiej, a w jakich są porównywalne do siebie.
+
+# Przedstawienie metod
+
+## Metoda klasyczna
+
+Tworzenie przedziałów ufności dla prawdopodobieństwa metodą klasyczną składa się z kilku punktów. Mając próbę rozmiaru $n$, gdzie wartości każdego elementu próby można przypisać jako sukces i porażka (0 i 1), możemy ją oznaczyć jako rozkład Bernouliego z parametrami $n$ i $p$. Następnie przybliżamy ją rozkładem normalnym z parametrami $np$ oraz $\sqrt{np(1-p)}$. Nie znając parametru $p$ rozkładu Bernouliego, wyznaczamy estymator $\hat{p}$, który w przypadku motody klasycznej wynosi $$\hat{p} = \frac{Y}{n}$$ gdzie Y oznacza rozważany wyżej rozkład próby. Wtedy $$\hat{p} \sim N(p, \sqrt{\frac{p(1-p)}{n}})$$. Następnie jesteśmy w stanie stworzyć przybliżony metodą klasyczną przedział ufności o poziomie istotności $\alpha$, który wynosi $$\hat{p} \pm Z_{\alpha/2} \cdot SE_{\hat{p}} \approx \hat{p} \pm Z_{\alpha/2} \cdot \sqrt{\frac{\hat{p}(1-\hat{p})}{n}}$$
+
+## Metoda Agrestiego-Couli
+
+W przypadku metody Agrestiego-Couli środkiem przedziału ufności nie jest estymator $\hat{p}$, tylko $$\tilde{p} = \frac{Y + 0.5(Z_{\alpha/2})^2}{n + (Z_{\alpha/2})^2}$$. Błąd standardowy również przybliżamy. W tej metodzie wynosi on $$SE_{\tilde{p}} = \sqrt{\frac{\tilde{p}(1-\tilde{p})}{n + (Z_{\alpha/2})^2}}$$. Przybliżony przedział ufności zapisuje się w takim przypadku jako $$\tilde{p} \pm Z_{\alpha/2} \cdot SE_{\tilde{p}}$$
+
+Dla poziomu istotności $\alpha = 0.05$ dochodzi do przybliżenia do postaci $$\tilde{p} = \frac{Y+4}{n+4}$$, przez zaorkąglenie $Z_{0.025} = 1.96 \approx 2$. Podobnie $$SE_{\tilde{p}} = \sqrt{\frac{\tilde{p}(1-\tilde{p})}{n+4}}$$
+
+# Porównanie
+
+Aby dokonać porównania tych metod tworzenia przedziałów ufności wykonam 1000-krotne losowania liczby sukcesów w rozkładzie Bernouliego o parametrach n i p. Aby rozumowanie było pełne, wezmę pod uwagę wiele przypadków - n = 10, 50, 100, 500, 1000 oraz p = 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.95, 0.99. Wtedy mogę uznać, że sprawdziłam możliwe przypadki. Warto zaznaczyć, że biorę n = 10, mimo że dla n = 10 i p = 0.01 nie jest spełniony warunek dla którego mogę przybliżać rozkładem normalnym. Robię tak, ponieważ chcę sprawdzić, czy przedziały ufności działają wtedy jakkolwiek w przypadku metody Agrestiego-Couli. Aby określić dokładność tych metod, sprawdzę, jak często prawdopodobieństwo p trafia do powstałych podziałów ufności porównam, która z metod daje wyniki bliższe do oczekiwanych 95%.
+
+
+
+## Analiza wyników badania empirycznego
+
+```{r, include=FALSE}
+#funkcja do obliczania jaki ułamek przedziałów ufności zawiera faktyczne prawdopodobienstwo
+losowanie <- function(n, p, alfa) {
+  set.seed(378) #ustawienie stalego losowania
+  proba <- rbinom(1000, n, p) #losowanie 1000 razy liczby sukcesow z B(n, p)
+  frakcja <- proba/n #licze prawdopodobienstwo sukcesu w kazdej pojedynczej probie
+  szerokosc <- qnorm(1-0.025) * sqrt((frakcja*(1-frakcja))/n) #korzystam z wzoru na przedzial ufnosci
+  minimum <- frakcja - szerokosc
+  maksimum <- frakcja + szerokosc
+  prawdopodobienstwo <- sum(minimum < p & p < maksimum)/1000 #licze ułamek
+  
+  frakcja_ac <- (proba + 2)/(n + 4) #jak wyżej, jednak w przypadku Agrestiego-couli
+  szerokosc_ac <- qnorm(1-0.025) * sqrt((frakcja_ac*(1-frakcja_ac))/(n + 4))
+  minimum_ac <- frakcja_ac - szerokosc_ac
+  maksimum_ac <- frakcja_ac + szerokosc_ac
+  prawdopodobienstwo_ac <- sum(minimum_ac < p & p < maksimum_ac)/1000
+  
+  wyniki <- c(prawdopodobienstwo, prawdopodobienstwo_ac) #zapisuje te ułamki jako wektor
+  return(wyniki) #zwracam wektor
+}
+
+#licze wszystkie potrzebne prawdopodobienstwa
+p1 <- losowanie(10, 0.01, 0.05)
+p2 <- losowanie(50, 0.01, 0.05)
+p3 <- losowanie(100, 0.01, 0.05)
+p4 <- losowanie(500, 0.01, 0.05)
+p5 <- losowanie(1000, 0.01, 0.05)
+p6 <- losowanie(10, 0.05, 0.05)
+p7 <- losowanie(50, 0.05, 0.05)
+p8 <- losowanie(100, 0.05, 0.05)
+p9 <- losowanie(500, 0.05, 0.05)
+p10 <- losowanie(1000, 0.05, 0.05)
+p11 <- losowanie(10, 0.1, 0.05)
+p12 <- losowanie(50, 0.1, 0.05)
+p13 <- losowanie(100, 0.1, 0.05)
+p14 <- losowanie(500, 0.1, 0.05)
+p15 <- losowanie(1000, 0.1, 0.05)
+p16 <- losowanie(10, 0.25, 0.05)
+p17 <- losowanie(50, 0.25, 0.05)
+p18 <- losowanie(100, 0.25, 0.05)
+p19 <- losowanie(500, 0.25, 0.05)
+p20 <- losowanie(1000, 0.25, 0.05)
+p21 <- losowanie(10, 0.5, 0.05)
+p22 <- losowanie(50, 0.5, 0.05)
+p23 <- losowanie(100, 0.5, 0.05)
+p24 <- losowanie(500, 0.5, 0.05)
+p25 <- losowanie(1000, 0.5, 0.05)
+p26 <- losowanie(10, 0.75, 0.05)
+p27 <- losowanie(50, 0.75, 0.05)
+p28 <- losowanie(100, 0.75, 0.05)
+p29 <- losowanie(500, 0.75, 0.05)
+p30 <- losowanie(1000, 0.75, 0.05)
+p31 <- losowanie(10, 0.9, 0.05)
+p32 <- losowanie(50, 0.9, 0.05)
+p33 <- losowanie(100, 0.9, 0.05)
+p34 <- losowanie(500, 0.9, 0.05)
+p35 <- losowanie(1000, 0.9, 0.05)
+p36 <- losowanie(10, 0.95, 0.05)
+p37 <- losowanie(50, 0.95, 0.05)
+p38 <- losowanie(100, 0.95, 0.05)
+p39 <- losowanie(500, 0.95, 0.05)
+p40 <- losowanie(1000, 0.95, 0.05)
+p41 <- losowanie(10, 0.99, 0.05)
+p42 <- losowanie(50, 0.99, 0.05)
+p43 <- losowanie(100, 0.99, 0.05)
+p44 <- losowanie(500, 0.99, 0.05)
+p45 <- losowanie(1000, 0.99, 0.05)
+```
+
+|||||||||||||||||||||
+|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+||**p**|**0.01**||**0.05**||**0.1**||**0.25**||**0.5**||**0.75**||**0.9**||**0.95**||**0.99**||
+|||**klasyczna**|**AC**|**klasyczna**|**AC**|**klasyczna**|**AC**|**klasyczna**|**AC**|**klasyczna**|**AC**|**klasyczna**|**AC**|**klasyczna**|**AC**|**klasyczna**|**AC**|**klasyczna**|**AC**|
+|**n**||||||||||||||||||||
+|**10**||`r round(p1[1], 3)`|`r round(p1[2], 3)`|`r round(p6[1], 3)`|`r round(p6[2], 3)`|`r round(p11[1], 3)`|`r round(p11[2], 3)`|`r round(p16[1], 3)`|`r round(p16[2], 3)`|`r round(p21[1], 3)`|`r round(p21[2], 3)`|`r round(p26[1], 3)`|`r round(p26[2], 3)`|`r round(p31[1], 3)`|`r round(p31[2], 3)`|`r round(p36[1], 3)`|`r round(p36[2], 3)`|`r round(p41[1], 3)`|`r round(p41[2], 3)`|
+|**50**||`r round(p2[1], 3)`|`r round(p2[2], 3)`|`r round(p7[1], 3)`|`r round(p7[2], 3)`|`r round(p12[1], 3)`|`r round(p12[2], 3)`|`r round(p17[1], 3)`|`r round(p17[2], 3)`|`r round(p22[1], 3)`|`r round(p22[2], 3)`|`r round(p27[1], 3)`|`r round(p27[2], 3)`|`r round(p32[1], 3)`|`r round(p32[2], 3)`|`r round(p37[1], 3)`|`r round(p37[2], 3)`|`r round(p42[1], 3)`|`r round(p42[2], 3)`|
+|**100**||`r round(p3[1], 3)`|`r round(p3[2], 3)`|`r round(p8[1], 3)`|`r round(p8[2], 3)`|`r round(p13[1], 3)`|`r round(p13[2], 3)`|`r round(p18[1], 3)`|`r round(p18[2], 3)`|`r round(p23[1], 3)`|`r round(p23[2], 3)`|`r round(p28[1], 3)`|`r round(p28[2], 3)`|`r round(p33[1], 3)`|`r round(p33[2], 3)`|`r round(p38[1], 3)`|`r round(p38[2], 3)`|`r round(p43[1], 3)`|`r round(p43[2], 3)`|
+|**500**||`r round(p4[1], 3)`|`r round(p4[2], 3)`|`r round(p9[1], 3)`|`r round(p9[2], 3)`|`r round(p14[1], 3)`|`r round(p14[2], 3)`|`r round(p19[1], 3)`|`r round(p19[2], 3)`|`r round(p24[1], 3)`|`r round(p24[2], 3)`|`r round(p29[1], 3)`|`r round(p29[2], 3)`|`r round(p34[1], 3)`|`r round(p34[2], 3)`|`r round(p39[1], 3)`|`r round(p39[2], 3)`|`r round(p44[1], 3)`|`r round(p44[2], 3)`|
+|**1000**||`r round(p5[1], 3)`|`r round(p5[2], 3)`|`r round(p10[1], 3)`|`r round(p10[2], 3)`|`r round(p15[1], 3)`|`r round(p15[2], 3)`|`r round(p20[1], 3)`|`r round(p20[2], 3)`|`r round(p25[1], 3)`|`r round(p25[2], 3)`|`r round(p30[1], 3)`|`r round(p30[2], 3)`|`r round(p35[1], 3)`|`r round(p35[2], 3)`|`r round(p40[1], 3)`|`r round(p40[2], 3)`|`r round(p45[1], 3)`|`r round(p45[2], 3)`|
+
+Przechodząc do analizy tabeli, można z łatwością zauważyć, że dla najmniejszej próby, a także najmniejszego i największego prawdopodobieństwa z wybranych przeze mnie przedziały ufności wyznaczone metodą klasyczną dają bardzo błędne wyniki. Dla n = 10 dla metody klasycznej najbliższe wyniki do oczekiwanego przez nas 95% są dla 25% i 75%. Można się było jednak spodziewać, że w przypadku tak małej próby, razem z małym prawdopodobieństwem, ta metoda może się okazać nieskuteczna. 
+
+Patrząc na przypadek najmniejszego i największego prawdopodobieństwa, przy dużych próbach zdecydowanie lepiej radzi sobie przedział Agrestiego-Couli. Dla n = 500 oraz n = 1000 wyniki są bardzo zbliżone, z pewnością dużo bardziej niż dla metody klasycznej. Patrząc na mniejsze próby, procent przypadków, gdy prawdopodobieństwo wpada do przedziału ufności jest bardzo duży - oscyluje bliżej 99% niż 95%. Nie jest to sytuacja, w której powinniśmy wykluczać całkowicie użycie tego testu. Wynika to prawdopodobnie z faktu, że przedziały ufności są dla tych wartości dużo szersze, zatem dużo większa jest szansa na to, że punkty faktycznie wpadną do przedziału ufności. Sprawdzę to ponownie w późniejszej części raportu.
+
+W przypadku p = 0.5 można zauważyć, że metody radzą sobie identycznie. Podobnie dla dużych n, zarówno dla n = 500, jak i n = 1000, badania obu metod dają podobne wyniki. Dla wartości n = 100 oraz n = 50, gdy prawdopodobieństwo wynosi 0.25, 0.5 lub 0.75 wyniki są również bardzo so siebie podobne dla obu metod.
+
+Dla wartości n = 50 można zauważyć, że znacznie lepiej radzi sobie metoda Agrestiego-Couli. Wartości są zazwyczaj większe niż 95%, jednak nie tak niepokojąco jak wyżej. Na pierwszy rzut oka wydaje się, że wszystko działa w porządku. Podobnie jest w przypadku n = 100 oraz p = 0.05/p=0.95 oraz p = 0.1/p=0.1.
+
+Przejdźmy teraz do ponownej analizy dla niepokojących nas wyników przy p = 0.01 oraz n = 10. Przyjrzę się pojedynczemu losowaniu, żeby sprawdzić, skąd biorą się takie wyniki.
+
+## Analiza dla p = 0.01
+
+```{r, include = FALSE}
+losowanie1 <- function(n, p) {
+  set.seed(674) #ustawienie stalego losowania
+  proba <- rbinom(1, n, p) #losowanie pojedynczej liczby sukcesow z B(n, p)
+  frakcja <- proba/n #licze prawdopodobienstwo sukcesu w probie
+  szerokosc <- qnorm(1-0.025) * sqrt((frakcja*(1-frakcja))/n) #korzystam z wzoru na przedzial ufnosci
+  minimum <- frakcja - szerokosc
+  maksimum <- frakcja + szerokosc
+  prawdopodobienstwo <- pnorm(maksimum, p,  sqrt((p*(1-p))/n)) - pnorm(minimum, p,  sqrt((p*(1-p))/n)) #licze rzeczywisty poziom ufności przedziału korzystając z rozkładu normalnego
+  
+  frakcja_ac <- (proba + 2)/(n + 4) #jak wyżej, jednak w przypadku Agrestiego-couli
+  szerokosc_ac <- qnorm(1-0.025) * sqrt((frakcja_ac*(1-frakcja_ac))/(n + 4))
+  minimum_ac <- frakcja_ac - szerokosc_ac
+  maksimum_ac <- frakcja_ac + szerokosc_ac
+  prawdopodobienstwo_ac <- pnorm(maksimum_ac, p,  sqrt((p*(1-p))/n)) - pnorm(minimum_ac, p,  sqrt((p*(1-p))/n))
+  
+  wyniki <- c(frakcja, minimum, maksimum, prawdopodobienstwo, frakcja_ac, maksimum_ac, minimum_ac, prawdopodobienstwo_ac) #zapisuje te ułamki jako wektor
+  return(wyniki) #zwracam wektor
+}
+
+#dokonuję pięciu losowań, wyniki sprawdzam z prawej strony ekranu
+pr1 <- losowanie1(10, 0.01)
+pr2 <- losowanie1(50, 0.01)
+pr3 <- losowanie1(100, 0.01)
+
+```
+
+### n = 10
+
+Zacznijmy od próby dla n = 10 oraz p = 0.01. 
+
+W tym przypadku przedziały ufności prezentują się następująco:
+
+- ***metoda klasyczna*** $[0, 0]$, zatem można zauważyć, że w naszej próbie nie trafiliśmy ani razu na sukces. Nie jest to zaskakujące, biorąc pod uwagę, jak niewielka jest próba i jak niewielkie prawdopodobieństwo sukcesu
+- ***metoda Agrestiego-Couli*** $[-0.04, 0.32]$, więc tak jak się spodziewałam, nawet w przypadku, gdy estymator prawdopodobieństwa jest równy zero, przedział jest bardzo szeroki, zajmuje prawie 1/3 wartości możliwych do zdobycia. Trudno powiedzieć, żeby ten przedział ufności był pomocny.
+
+Spójrzmy teraz na realny poziom ufności
+
+- ***metoda klasyczna*** ponownie wynik to 0, czego można się spodziewać, gdy wyliczony estymator jest równy 0.
+- ***metoda Agrestiego-Couli*** wynikiem działania w tym przypadku jest $0.946$, co jest spodziewane przy tak szerokim przedziale. Jest on zatem dokładny, jeśli chodzi o procentowość.
+
+Można stwierdzić, że w tym przypadku żadna z metod nie nadała się do użycia, gdyż w przypadku metody klasycznej nie trafiliśmy na wystarczającą liczbę danych, a dla Agrestiego-Couli przedział jest zbyt szeroki, aby dało się z niego cokolwiek wyczytać.
+
+### n = 50
+
+Przedziały ufności:
+
+- ***metoda klasyczna*** jak wyżej, wynik to $[0, 0]$, zatem niewiele można wyczytać z tego przedziału
+- ***metoda Agrestiego-Coula*** tym razem przedział ufności to $[-0.013, 0.087]$. Jest to przedział dużo węższy niż wyżej, dający dość konkretne wyniki, nie będące bardzo oddalone od rzeczywistości
+
+Korzystając z dystrybuanty licząc poziom ufności wyniki prezentują się następująco:
+
+- ***metoda klasyczna*** oczywiście ponownie wynosi 0, przez to, że nie otrzymaliśmy sukcesu
+- ***metoda Agrestiego-Coula*** otrzymaliśmy $0.951$, zatem jest to znów bardzo zbliżona do faktycznej wartość.
+
+Świadczy to o tym, że mając małą próbę i brak jakichkolwiek sukcesów metoda Agrestiego-Coula sprawdza się dość porządnie.
+
+### n = 100
+
+Weźmy teraz pod uwagę n = 100.
+
+Przedziały ufności wyglądają tutaj w ten sposób:
+
+- ***metoda klasyczna*** $[-0.1, 0.3]$, co podobnie jak wyżej w przypadku metody Agrestiego-Couli dało bardzo szeroki przedział, trudny do interpretacji.
+- ***metoda Agrestiego-Couli*** $[-0.003, 0.006]$ tutaj z kolei, przedział wydaje się bardzo przejrzysty i daje wystarczające wartości do poprawnego oszacowania wyników. Wydaje się więc, że już tutaj ta metoda jest dobra do zastosowania.
+
+Licząc poziom ufności korzystając z dystrybuanty otrzymujemy:
+
+- ***metoda klasyczna*** $0.95$, zatem idealny przedział ufności
+- ***metoda Agrestiego-Coula*** $0.91$, jest to wynik nieco gorszy, ale biorąc pod uwagę jak wąski jest to przedział, to mimo wszystko lepszy.
+
+Zatem można stwierdzić, że dla n = 100 metoda Agrestiego-Coula daje dużo lepsze wyniki niż metoda klasyczna.
+
+Dla n = 500 oraz n = 1000 wyniki nie były niepokojące, zatem można bazować na danych z tabeli wnioskując o tym, która metoda radzi sobie lepiej, a raczej, że obie metody radzą sobie porównywalnie dobrze.
+
+## Analiza dla n = 10
+
+Tutaj dokonam analizy jedynie dla $p \leq \frac{1}{2}$, gdyż większe dawały te same wyniki. Pominę analizę dla $p = 0.01$, gdyż ona pojawiła się już wyżej
+
+```{r, include = FALSE}
+#jak wyżej
+
+pr1 <- losowanie1(10, 0.05)
+pr2 <- losowanie1(10, 0.1)
+pr3 <- losowanie1(10, 0.25)
+pr4 <- losowanie1(10, 0.5)
+
+pr4[4]
+pr4[8]
+```
+
+### p = 0.05
+
+Zacznijmy od małego prawdopodobieństwa, $p = 0.05$.
+
+Przedziały ufności prezentują się dla tego losowania następująco:
+
+- ***metoda klasyczna*** tutaj ponownie otrzymujemy przedział $[0,0]$ i nie jest to zaskakujące przez wzgląd na małe prawdopodobieństwo i małą próbę, które dają szansę na brak jakiegokolwiek sukcesu
+- ***metoda Agrestiego-Couli*** $[-0.04, 0.326]$, czyli jak w pierwszym przypadku. Ponieważ sytuacja jest identyczna jak w przypadku losowania n = 10, p = 0.01, wnioski również są identyczne.
+
+### p = 0.1
+
+Kolejne prawdopodobieństwo jest już większe. 
+
+Przedziały ufności dla $p = 0.1$ wyglądają tak:
+
+- ***metoda klasyczna*** $[-0.086, 0.286]$, zatem jest to ogromny przedział, który nie mówi wiele o prawdopodobieństwie, którego szukam.
+- ***metoda Agrestiego-Couli*** $[-0.001, 0.429]$, również ogrnomny przedział, większy niż poprzedni
+
+Widać już bazując na szerokości przedziałów, że żadna z tych metod nie nadaje się do takiej sytuacji.
+
+Jeśli spojrzymy na poziomy ufności liczone z dystrybuanty:
+
+- ***metoda klasyczna*** tutaj mamy ponownie oczekiwane $0.95$, zatem jest idealnie określony
+- ***metoda Agrestiego-Couli*** poziom ufności w tym przypadku wynosi $0.86$, zatem jest dużo gorzej określony.
+
+Bazując na tych obserwacjach również można stwierdzić, że jest to bardzo źle określony przedział ufności dla obu metod. W obu przypadkach ma przede wszystkim zbyt dużą szerokość, aby móc stwierdzić, jaka jest prawdziwa wartość prawdopodobieństwa.
+
+### p = 0.25
+
+Tym razem przedziały ufności wynoszą:
+
+- ***metoda klasyczna*** $[-0.048, 0.448]$, więc przedział jest bardzo duży.
+- ***metoda Agrestego-Couli*** $[0.049, 0.522]$, ponownie przedział bardzo szeroki.
+
+Poziomy ufności:
+
+- ***metoda klasyczna*** poziom ufności wynosi $0.91$ zatem nie jest to najlepsza wartość, ale nie jest również bardzo zła.
+- ***metoda Agrestego-Couli*** tutaj z kolei mamy $0.905$, więc nieco gorzej, ale również można ją uznać za akceptowalną.
+
+Kolejne prawdopodobieństwo pokazuje, że w przypadku n = 10, żadna z metod nie nadaje się do określania przedziałów ufności
+
+### p = 0.5
+
+Dla prawdopodobieństwa równego pół przedziały ufności wyglądają następująco:
+
+- ***metoda klasyczna*** $[0.19, 0.81]$, co daje nam ponownie przedział, z którego niemożliwym jest wyczytanie czegokolwiek.
+- ***metoda Agrestego-Couli*** $[0.24, 0.76]$. Ten przedział jest nieco lepszy od przedziału, który mamy wyżej, ale również nie jest najlepszy.
+
+Z kolei poziomy ufności wyglądają tak:
+
+- ***metoda klasyczna*** $0.95$ zatem określa on idealnie 95%
+- ***metoda Agrestiego-Couli*** $0.902$, tutaj mamy gorzej procentowo, natomiast ponownie, akceptowalny wynik
+
+Wynika z tego, że ten przedział, podobnie jak poprzednie, w przypadku żadnej z metod nie daje dobrego przybliżenia wartości.
+
+# Podsumowanie
+
+Bazując na powyższej analizie można stwierdzić, że żadna z metod tworzenia przedziałów ufności nie nadaje się do użycia dla bardzo małej próby (na przykład n = 10), ponieważ powstałe w ten sposób przedziały są bardzo szerokie, zatem nie dają nam dużo więcej informacji niż powiedzenie "prawdopodobieństwo jest dodatnie". Obie metody są porównywalne, gdy mamy do czynienia z dużą próbą lub $p = \frac{1}{2}$, czy okolice $0.25$ lub $0.75$. Z kolei metoda Agrestiego-Couli wydaje się dużo lepsza, gdy prawdopodobieństwo jest mniejsze lub w próbie trafiła się mała liczba elementów, bliska 0 lub 1. W tym wypadku ta metoda daje lepsze oszacowania niż metoda klasyczna.

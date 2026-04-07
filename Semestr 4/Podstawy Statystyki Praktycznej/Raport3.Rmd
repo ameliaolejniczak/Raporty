@@ -1,0 +1,204 @@
+---
+title: "Raport 3"
+author: "Amelia Olejniczak"
+date: "2024-04-05"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{=html}
+<style>
+body {
+text-align: justify} 
+</style> 
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Wprowadzenie
+
+Ten raport dotyczy badania normalności zmiennej losowej $D$, która oznacza dochód dla populacji z konkretnego zbioru danych, badanego poprzednio. Będę również badać jak zmienia się normalność w przypadku, gdy zmienna losowa to $U = \sqrt{D}$. Na koniec, znając rozkład zmiennej losowej $U$ wyznaczę $P(|D-{\mu}_D| {\leq} k{\sigma}_D)$.
+
+```{r, echo = FALSE}
+data <- read.table('income.txt') #odczytanie pliku z folderu
+colnames(data) = c('id', 'age', 'education', 'sex', 'salary', 'sector') #zmiana nazw kolumn dla większej czytelności
+D = data$salary #zapisuję dochody jako zmienną D
+MiD <- mean(D) #obliczam średnią, która jest również wartością oczekiwaną
+SDD <- sd(D) #obliczam odchylenie standardowe
+```
+
+# Badanie normalności zmiennej losowej $D$
+
+Zmienna losowa $D$ jest to dochód dla populacji ze znanego nam zbioru danych. Aby zbadać jej normalność przeprowadzę trzy analizy. W pierwszej kolejności przyjrzę się porównaniu histogramu z krzywą normalną, następnie sporządzę tabelę, sprawdzającą regułę 68%/95%/99,7%, a na koniec sprawdzę, jak układa się wykres kwantylowy. Te trzy analizy powinny wystarczyć do stwierdzenia, czy zmienna losowa $D$ może być przybliżona rozkładem normalnym.
+
+## Histogram zmiennej losowej $D$ wraz z krzywą normalną
+
+Aby histogram wraz z krzywą były czytelne, wykonam histogram zagęszczenia, a nie taki, pokazujący ile elementów znajduje się w danym słupku. Sprawi to, że w przypadku rozkładu zbliżonego do rozkładu normalnego, oczekujemy, że wykres będzie się układał w sposób podobny do krzywej normalnej, pokazującej zagęszczenie rozkładu normalnego. Jesli kształt histogramu nie będzie podobny do krzywej normalnej będę mogła założyć z kolei, że nie jest to rozkład normalny.
+
+```{r, echo=FALSE, warning=FALSE}
+library(ggplot2) #biblioteka do tworzenia wykresów
+library(scales) #biblioteka aby nie używać naukowego oznaczenia osi
+library(ggpubr) #biblioteka do umieszczania kilku wykresów w sposób macierzowy
+
+ggplot(data, aes(x=salary)) + #tworzę wykres, określam tabelę danych oraz oś x
+  geom_histogram(aes(y=..density..), binwidth = 7500, color='wheat4', fill='wheat') + #wybieram szerokość słupków i kolor, a także zaznaczam, że chcę, żeby to był histogram gęstości
+  stat_function(fun = dnorm, args = list(mean = mean(D), sd = sd(D)), col = "wheat4") + #dodaję krzywą normalną
+  labs(title='Histogram zmiennej losowej D z krzywą normalną', x = 'D = dochód', y = '') + #nadaję tytuły osi oraz wykresu
+  scale_x_continuous(labels=comma) + #usuwam notację naukową
+  scale_y_continuous(labels=comma) #usuwam notację naukową również na osi y
+```
+
+Patrząc na ten histogram można wysnuć hipotezę, że zmienna losowa $D$ nie ma rozkładu normalnego. W pierwszej kolejności widać, że histogram w żadnym stopniu nie przypomina kształtu dzwonu, który oczekiwalibyśmy od rozkładu normalnego. Zagęszczenie w najwyższych słupkach jest dużo wyższe od maksymalnego punktu osiąganego przez krzywą normalną, co również może świadczyć o tym, że nie jest to rozkład normalny. Patrząc "na oko" histogram w żadnym stopniu nie przypomina tego, co oczekiwalibyśmy po rozkładzie normalnym.
+
+## Reguła 68%/95%/99,7% dla zmiennej losowej $D$
+
+```{r, echo=FALSE}
+D1 <- round(sum(D>=MiD - SDD & D<= MiD+SDD)/55899 * 100, digits=3) #wyznaczam procent elementów należących do zbioru dla k = 1
+D2 <- round(sum(D>=MiD - 2 * SDD & D<= MiD+2*SDD)/55899 * 100, digits=3) #analogicznie dla k = 2
+D3 <- round(sum(D>=MiD - 3*SDD & D<= MiD+3*SDD)/55899 * 100, digits=3) #oraz k = 3
+```
+
+Aby ocenić, czy zostaje spełniona reguła 68%/95%/99.7% wykonam tabelę, gdzie z prawej strony podam wartość k, a z lewej kolejno procent elementów, które spełniają $P(|D-{\mu}_D| {\leq} k{\sigma}_D)$, następnie wartości 68%/95%/99.7%, które są naszymi wartościami oczekiwanymi dla rozkładu normalnego oraz różnica między oczekiwanym procentem wartości, a tym, który zostaje wyliczony dla zmiennej losowej.
+
+|k|% elementów spełniających $P(|D-{\mu}_D| {\leq} k{\sigma}_D)$|Oczekiwany % elementów|Różnica|
+|:-:|:-:|:-:|:-:|
+|**1**|`r D1`|`r 68`|`r D1 - 68`|
+|**2**|`r D2`|`r 95`|`r D2 - 95`|
+|**3**|`r D3`|`r 99.7`|`r D3 - 99.7`|
+
+W przypadku tego sposobu badania normalności, dla $k = 2$ oraz $k = 3$ różnica jest na tyle niewielka, że nie zbliża nas do określenia, czy zmienną losową $D$ można przybliżać rozkładem normalnym. Patrząc jednak na wartości dla $k = 1$ można zdecydowanie stwierdzić, że różnica między oczekiwanymi 68%, a wartością otrzymaną z wyliczeń jest zbyt duża, żeby móc mówić o rozkładzie normalnym w tym przypadku. W szczególności jeśli weźmie się pod uwagę histogram tej zmiennej losowej. 
+
+## Wykres kwantylowy zmiennej losowej $D$
+
+Wykres kwantylowy, inaczej QQplot, to kolejny sposób badania normalności zmiennej. Sprawdzę na nim, jak bardzo wykres przedstawiający kwantyle zmiennej losowej $D$ jest zbliżony do prostej $z = \frac{x-\mu_D}{\sigma_D}$.
+
+```{r, echo=FALSE}
+ggplot(data.frame(y=D), aes(sample=y)) + #zapisuję zmienną losową D jako tabela danych oraz wybieram, że to z tej zmiennej losowej ma wyznaczać kwantyle
+  geom_qq() + #tworzę qqplot
+  labs(title = "Wykres kwantylowy zmiennej losowej D", y = "Wartość z próby", x = "Wartość teoretyczna") + #zmieniam nazwy osi
+  scale_y_continuous(labels = comma) + #zmieniam skalę osi aby nie było notacji naukowej
+  geom_abline(intercept = MiD, slope = SDD, color='blue') + #dodaję linię
+  coord_flip() #zamieniam osie miejscami
+```
+
+Bazując na powyższym wykresie można już stwierdzić z pewnością, że zmienna losowa $D$ nie przybliża w żadnym stopniu rozkładu normalnego. Czarny wykres punktowy, przedstawiający kwantyle tej funkcji, ma kształt łuku, zupełnie różny od prostej $z = \frac{x-\mu_D}{\sigma_D}$ zaznaczony na wykresie na niebiesko. Wykres punktowy jedynie w dwóch miejscach "przecina" prostą, zatem nie można zauważyć własności, aby zmienna losowa $D$ miała rozkład zbliżony do normalnego.
+
+## Podsumowanie
+
+Bazując na powyższym rozumowaniu można założyć, że rozkład zmiennej losowej $D$ nie jest zbliżony do rozkładu normalnego i nie może być nim przybliżany. Histogram nie ma kształtu dzwonowego, procent elementów spełniających $P(|D-{\mu}_D| {\leq} {\sigma}_D)$ jest aż o 20 punktów procentowych większy niż oczekiwane od rozkładu normalnego 68%, a kwantyle na wykresie kwantylowym nie są zbliżone do linii prostej. Zatem zmienna $D$ nie ma rozkładu normalnego.
+
+# Badanie normalności zmiennej losowej $U = \sqrt{D}$
+
+W tej części raportu, przebadam normalność zmiennej losowej $U$, która jest definiowana jako $U = \sqrt{D}$. Zmienna $D$ posiada jednak pewne wartości ujemne, a chcemy, aby zmienna losowa $U$ posiadała wartości jedynie zawarte w liczbach rzeczywistych. Zatem aby poprawnie zdefiniować zmienną $U$, aby wartości mniejsze od 0 nie występowały pod pierwiastkiem, dla $D \geq 0$ $U = \sqrt{D}$, tymczasem dla $D < 0$ $U = -\sqrt{|D|}$. W ten sposób, wartości ujemne nie zostaną zniwelowane i dalej będą brane pod uwagę w analizie.
+
+Przeprowadzę rozumowanie w zbliżony sposób do poprzedniego, zatem w pierwszej kolejności przeanalizuję histogram wraz z krzywą normalną. Następnie sporządzę tabelę, dzięki której będę mogła stwierdzić, czy ta zmienna losowa spełnia regułę 68%/95%/99.7%. Na koniec, sprawdzę, jak wygląda wykres kwantylowy zmiennej losowej $U$ i również bazując na nim przebadam jej normalność,
+
+```{r, echo=FALSE}
+U = ifelse(D<0, -sqrt(abs(D)), sqrt(abs(D))) #zapisuję zmienną losową U
+MiU <- mean(U) #liczę średnią U jako jej wartość oczekiwaną
+SDU <- sd(U) #liczę odchylenie standardowe U
+```
+
+## Histogram zmiennej losowej $U$ wraz z krzywą normalną
+
+```{r, echo=FALSE}
+ggplot() + #tworzę wykres
+  aes(U) + #wybieram wektor z którego będą brane dane
+  geom_histogram(aes(y=..density..), color='wheat4', fill='wheat', binwidth = 25) + #zaznaczam, że histogram ma być gęstości, zmieniam kolor i szerokość słupków
+  stat_function(fun=dnorm, args = list(mean = MiU, sd = SDU), aes(x = ..x..), col = 'wheat4') + #dodaję krzywą normalną
+  labs(title = "Histogram zmiennej losowej U z krzywą normalną", x = "U", y = ' ') + #zmieniam nazwy osi
+  scale_x_continuous(labels = comma) + #ustalam aby żadna z osi nie pokazywała notacji naukowej
+  scale_y_continuous(labels = comma)
+```
+
+W przypadku zmiennej losowej $U$ histogram jest dużo bardziej podobny do krzywej normalnej niż w poprzednim przypadku. Nie ustwaia się idealnie, między innymi przez pewien wzrost zagęszczenia wartości w okolicach 500, czy fakt, że największa gęstość zmiennej losowej $U$ jest większa niż największa gęstość zaznaczona na krzywej normalnej. Są to jednak dużo mniejsze i mniej znaczące różnice niż w przypadku poprzednio badanej przez nas zmiennej losowej. Dla rozkładu $U$ można założyć, że dość dobrym dla niego przybliżeniem jest rozkład normalny. Sprawdzę jednak to dokładniej, dokonując pozostałych dwóch analiz.
+
+## Reguła 68%/95%/99.7% dla zmiennej losowej $U$
+
+```{r, echo=FALSE}
+U1 <-round(sum(U>=MiU - SDU & U<= MiU+SDU)/55899 * 100, digits=3) #analogicznie do zmiennej D
+U2 <- round(sum(U>=MiU - 2 * SDU & U<= MiU+2*SDU)/55899 * 100, digits=3)
+U3 <- round(sum(U>=MiU - 3*SDU & U<= MiU+3*SDU)/55899 * 100, digits=3)
+```
+
+|k|% elementów spełniających $P(|U-{\mu}_U| {\leq} k{\sigma}_U)$|Oczekiwany % elementów|Różnica|
+|:-:|:-:|:-:|:-:|
+|**1**|`r U1`|`r 68`|`r U1 - 68`|
+|**2**|`r U2`|`r 95`|`r U2 - 95`|
+|**3**|`r U3`|`r 99.7`|`r U3 - 99.7`|
+
+Patrząc na tabelę można zauważyć, że ponownie wartości dla $k = 2$ oraz $k = 3$ różnią się od siebie naprawdę niewiele, w szczegolności dla $k = 2$, gdzie różnica nie jest równa nawet 1 punkt procentowy. Z kolei dla $k = 1$ znów możemy zauważyć, że różnica jest największa. Wynosi nieco ponad 7 punktów procentowych, zatem nie jest ona tak znacząca, żeby kompletnie uniemożliwić, z pewnym błędem, przybliżenie rozkładu zmiennej losowej $U$ rozkładem normalnym. 
+
+## Wykres kwantylowy zmiennej losowej $U$
+
+```{r, echo=FALSE}
+ggplot(data.frame(y=U), aes(sample=y)) + #analogicznie do zmiennej D
+  geom_qq() +
+  geom_abline(intercept = MiU, slope = SDU, color='blue') +
+  labs(title = "Wykres kwantylowy zmiennej losowej U", y = "Wartość z próby", x = "Wartość teoretyczna") +
+  scale_y_continuous(labels = comma) +
+  coord_flip()
+```
+
+Ostatnia analiza dla zmiennej losowej $U$ także wskazuje na to, że może być przybliżona rozkładem normalnym. W znacznej większości kwantyle układają się tak samo, jak na prostej $z = \frac{x-\mu_U}{\sigma_U}$. Jedyne znaczne oddalenie się od prostej następuje dla wysokich wartości, które są tymi samymi wartościami, które powodowały nagły wzrost w histogramie. Nawet tam było widać, że stanową niewielką część wszystkich wartości. Nie sprawiają one zatem, że nie można przybliżyć rozkładu zmiennej $U$ rozkładem normalnym.
+
+## Podsumowanie
+
+Zmienna losowa $U$ ma rozkład zbliżony do rozkładu normalnego. Świadczy o tym zarówno kształt histogramu, jak i wykresu kwantylowego, jeśli uznamy pewien błąd dla dużych wartości $U$. Również patrząc na tabelę z procentami elementów spełniających $P(|U-{\mu}_U| {\leq} k{\sigma}_U)$ można stwierdzić, że były bardzo zbliżone do rozkładu normalnego. Zatem $U \sim N(178.69, 77.17)$.
+
+# Porównanie ${\mu}_D$ z $({\mu}_U)^2$
+
+Przy powyższych obliczeniach wykorzystywałam wartość oczekiwaną zmiennej losowej $D$ ${\mu}_D$ oraz wartość oczekiwaną zmiennej losowej $U$ ${\mu}_U$, które są równe średniej każdej z tych zmiennych. Zatem ${\mu}_D = 37864.61$ oraz ${\mu}_U = 178.69$. To są wartości, które były wykorzystywane w powyższych obliczeniach. 
+
+```{r, include=FALSE}
+MiUkw <- MiU ^ 2 #kwadrat wartości oczekiwanej zmiennej losowej U
+MiU2 <- MiU ^ 2 + SDU ^ 2 #wartość oczekiwana kwadratu zmiennej losowej U
+SDUkw <- SDU ^ 2 #kwadrat odchylenia standardowego
+SDU2 <- sqrt(mean((U^2 - MiU2)^2)) #odchylenie standardowe kwadratu
+```
+
+Chcemy porównać kwadrat wartości oczekiwanej zmiennej losowej $U$ z wartością oczekiwaną $D$. Ta pierwsza wynosi $({\mu}_U)^2 = 31928.46$ co nie jest tak bardzo zbliżone do wartości oczekiwanej zmiennej losowej $D$. Różnią się one od siebie aż o `r 37864.60 - 31928.46`. Mimo że bazując na intuicji moglibyśmy się spodziewać, że kwadrat wartości oczekiwanej $U$ jest taki sam jak wartość oczekiwana $D$, to wcale tak nie jest.
+
+Aby dobrze zaokrąglić ${\mu}_D$ za pomocą zmiennej losowej $U$, nie powinniśmy wyliczać $({\mu}_U)^2$. Zamiast tego ${\mu}_{U^2}$. Wyprowadźmy na nie wzór. Wiemy, że $$Var(U) = E(U^2) - (EU)^2$$ Poza tym, wiemy, że $EU = {\mu}_U$ oraz możemy wyliczyć $Var(U) = {\sigma}_U^2$, ponieważ znamy odchylenie standardowe zmiennej losowej $U$. Zatem $${\mu}_{U^2} = E(U^2) = Var(U) + (EU)^2$$ jest już możliwe dla nas do wyliczenia. i wynosi $${\mu}_{U^2} = 37891.66$$ To jest już bardzo dobre zaokrąglenie wartości oczekiwanej.
+
+Odchylenie standartowe również możemy zaokrąglić używając zmiennej losowej $U$, a w zasadzie jej kwadratu $U^2$. Podobnie jak wcześniej $({\sigma}_U)^2 = 5963.20$ jest bardzo złym zaokrągleniem odchylenia standardowego zmiennej losowej $D$. Aby obliczyć odchylenie standardowe $U^2$ musimy wykorzystać wzór $$Var(U^2) = E((U^2 - E(U^2))^2)$$ gdzie wyznaczyliśmy już $E(U^2)$, a znając zmienną losową U możemy policzyć kwadrat każdego elementu oraz ich średnią właśnie z wzoru powyżej. Wtedy odchylenie standadowe ${\sigma}_{U^2} = 36129.47$, podczas gdy dla zmiennej losowej $D$ ${\sigma}_D = 36158.03$, co znów jest bardzo dobrym zaokrągleniem. 
+
+# Wykorzystanie rozkładu zmiennej losowej $U$ do wyliczenia $P(|D-{\mu}_D| {\leq} k{\sigma}_D)$
+
+```{r, include=FALSE}
+A1 <- MiD - SDD #liczę krańce przedziału
+A2 <- MiD + SDD
+A3 <- sqrt(MiD - SDD) #pierwiastek tych krańców przedziału
+A4 <- sqrt(MiD + SDD)
+A5 <- (A3 - MiU)/SDU #standaryzacja
+A6 <- (A4 - MiU)/SDU
+B1 <- MiD - 2 *SDD #analogicznie
+B2 <- MiD + 2 *SDD
+B3 <- - sqrt(abs(B1))
+B4 <- sqrt(B2)
+B5 <- (B3 - MiU)/SDU
+B6 <- (B4 - MiU)/SDU
+C1 <- MiD - 3 *SDD
+C2 <- MiD + 3 *SDD
+C3 <- -sqrt(abs(C1))
+C4 <- sqrt(C2)
+C5 <- (C3 - MiU)/SDU
+C6 <- (C4 - MiU)/SDU
+```
+
+Wiedząc, że $U$ można zaokrąglić rozkładem normalnym jesteśmy w stanie wyliczyć $P(|D-{\mu}_D| {\leq} k{\sigma}_D)$. Weźmy za przykład $k = 1$. Znamy ${\mu}_D$ oraz ${\sigma}_D$, zatem nasze szukane liczby spełniają warunek $$P(|D-37864.61| {\leq} 36158.02)$$ czyli tym samym $$P(1706.58 \, {\leq} \, D \,  {\leq} \, 74022.64)$$ Aby móc wykorzystać zmienną losową $U$ oraz jej rozkład musimy nałożyć pierwiastek na obie liczby. Wtedy otrzymujemy $$P(\sqrt{1706.58} \, {\leq} \, U \, {\leq} \, \sqrt{74022.64}) = P(41.31 \, {\leq} \, U \, {\leq} \, 272.07)$$ Następnie standaryzujemy zmienną $U$ $$P(\frac{41.31 - {\mu}_U}{\sigma_U} \, {\leq} \, Z \, {\leq} \, \frac{272.07 - {\mu}_U}{\sigma_U}) = P(-1.78 \, {\leq} \, Z \, {\leq} 1.21)$$ Teraz pozostaje jedynie odczytać wartości z tablic statystycznych. $$P(-1.78 \, {\leq} \, Z \, {\leq} 1.21) = 0.8494$$ zatem jest to wartość bardzo zbliżona do znanej nam wartości wynoszącej 0.8873.
+
+Wykonam teraz tabelę dla k = 1, 2, 3
+
+|k|Wartość wyliczona (%)|Wartość z tablic (%)|Różnica (p.p)|
+|:-:|:-:|:-:|:-:|
+|**1**|`r D1`|`r 84.94`|`r D1 - 84.94`|
+|**2**|`r D2`|`r 97.61`|`r U2 - 95`|
+|**3**|`r U3`|`r 99.57`|`r U3 - 99.7`|
+
+Jak widać po powyższej tabeli, jest to bardzo dobre przybliżenie, jeśli chcemy zaokrąglić korzystając z tego, że zmienna losowa $U$ ma rozkład, który można zaokrąglić rozkładem normalnym.

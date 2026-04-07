@@ -1,0 +1,903 @@
+---
+title: "Raport 2"
+author: "Amelia Olejniczak"
+date: "2024-03-14"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+
+```{=html}
+<style>
+body {
+text-align: justify} 
+</style> 
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Wprowadzenie
+
+Ten raport dotyczy badania doświadczalnego Prawa wielkich liczb, bazując na danych zarobkowych. W tym celu wykonam kilka doświadczeń, porównujących próby różnych rozmiarów z informacjami o całej populacji umieszczonych w tabeli danych. Próby będą rozmiarów kolejno - 10, 100, 1000, 10000 i będą wybierane w sposób losowy z całej populacji, zatem pojawiać się tam będą jedynie kwoty z tabeli danych. Losowanie odbędzie się bez zwracania, aby uniknąc duplikatów i uzyskać iluzję wyboru konkretnych osób zarabiających dane kwoty. 
+
+``` {r, echo=FALSE}
+data <- read.table('income.txt') #odczytanie pliku z folderu
+colnames(data) = c('id', 'age', 'education', 'sex', 'salary', 'sector') #zmiana nazw kolumn dla większej czytelności
+```
+
+# Czym jest Prawo wielkich liczb
+
+Prawo wielkich liczb mówi o tym, że wartości średnich dla prób rozmiaru n będą dążyły do średniej całej populacji dla n, dążącego do nieskończoności. W naszym przypadku jednak, kiedy losowanie odbywa się bez zwracania, nie jest możliwym wybranie nieskończonej próby, a wszystkie będą miały średnią równej średniej całej populacji dla n = 55899, czyli wielkości całej populacji. 
+
+# Porównanie średnich
+
+W pierwszej kolejności zajmę się analizą średnich zarobków dla konkretnych prób wyżej wymienionych rozmiarów. Przypuszczam, że w przypadku niewielkich wartości średnia może być zbliżona do faktycznej ze względu na przypadkowy wybór, zatem dokonam losowania pięć razy, aby uniknąć takiej sytuacji i zobaczyć, w którym przypadku pięciokrotnie wylosowane średnie są najbliżej siebie, a także faktycznej średniej zarobków całej populacji, wynoszącej `r format(mean(data$salary), science=FALSE)` $.
+
+## Średnie dla próby wielkości 10
+
+```{r, echo=FALSE}
+zarobki <- data$salary #tworzę wektor jedynie z wartościami zarobków z całej tabeli danych i to na niej będę pracować
+set.seed(438) #ustawiam seed, aby za każdym razem pojawiały się te same wyniki losowań
+pr1a <- sample(zarobki, 10) #przypisuję losowania do pięciu różnych zmiennych
+pr1b <- sample(zarobki, 10)
+pr1c <- sample(zarobki, 10)
+pr1d <- sample(zarobki, 10)
+pr1e <- sample(zarobki, 10)
+```
+
+| Numer próby | Średnia |
+|:-----------:|:-------:|
+|1|`r format(mean(pr1a), science=FALSE)`|
+|2|`r format(mean(pr1b), science=FALSE)`|
+|3|`r format(mean(pr1c), science=FALSE)`|
+|4|`r format(mean(pr1d), science=FALSE)`|
+|5|`r format(mean(pr1e), science=FALSE)`|
+
+Patrząc na powyższą tabelę, która przedstawia średnie dla najmniejszej próby można zauważyć duży rozrzut wartości, zarówno między sobą jak i w stosunku do faktycznej średniej. Pojawiają się zarówno bardzo duże wyniki (65530.1 $) jak i bardzo małe (28203 $). Stoi to w zgodzie z Prawem wielkich liczb, ponieważ dla niewielkich wartości może się zdarzyć, że będziemy daleko od faktycznej znanej nam średniej. 
+
+
+## Średnie dla próby wielkości 100
+
+```{r, echo=FALSE}
+set.seed(400) #jw
+pr2a <- sample(zarobki, 100)
+pr2b <- sample(zarobki, 100)
+pr2c <- sample(zarobki, 100)
+pr2d <- sample(zarobki, 100)
+pr2e <- sample(zarobki, 100)
+```
+
+| Numer próby | Średnia |
+|:-----------:|:-------:|
+|1|`r format(mean(pr2a), science=FALSE)`|
+|2|`r format(mean(pr2b), science=FALSE)`|
+|3|`r format(mean(pr2c), science=FALSE)`|
+|4|`r format(mean(pr2d), science=FALSE)`|
+|5|`r format(mean(pr2e), science=FALSE)`|
+
+W tym przypadku patrząc na średnie warto zwrócić uwagę, że nie ma wartości odstających aż tak bardzo jak w pierwszym przypadku. Jedyna wartość, która może się wydać niepokojąca jest wartość 44942.13, która odstaje dość mocno od interesującej nas średniej. Jednak w tym momencie już widać, że powoli zbliżamy się do wartości, która nas interesuje. 
+
+
+## Średnie dla próby wielkości 1000
+
+```{r, echo=FALSE}
+set.seed(645) #jw
+pr3a <- sample(zarobki, 1000)
+pr3b <- sample(zarobki, 1000)
+pr3c <- sample(zarobki, 1000)
+pr3d <- sample(zarobki, 1000)
+pr3e <- sample(zarobki, 1000)
+```
+
+| Numer próby | Średnia |
+|:-----------:|:-------:|
+|1|`r format(mean(pr3a), science=FALSE)`|
+|2|`r format(mean(pr3b), science=FALSE)`|
+|3|`r format(mean(pr3c), science=FALSE)`|
+|4|`r format(mean(pr3d), science=FALSE)`|
+|5|`r format(mean(pr3e), science=FALSE)`|
+
+Patrząc na tabelę dla próby wielkości 1000 można zauważyć, że coraz bliżej jesteśmy faktycznej wartości. Nie pojawiły się tutaj liczby powyżej 40 000 $ (chociaż trzeba wziąć pod uwagę, że mogło to wynikać z pewnego przypadku), a także, że te średnie nie różnią się tak mocno ani od faktycznej średniej ani od siebie nawzajem, zatem Jest to zgodne z Prawem wielkich liczb.
+
+## Średnie dla próby wielkości 10000
+
+```{r, echo=FALSE}
+set.seed(983) #jw
+pr4a <- sample(zarobki, 10000)
+pr4b <- sample(zarobki, 10000)
+pr4c <- sample(zarobki, 10000)
+pr4d <- sample(zarobki, 10000)
+pr4e <- sample(zarobki, 10000)
+```
+
+| Numer próby | Średnia |
+|:-----------:|:-------:|
+|1|`r format(mean(pr4a), science=FALSE)`|
+|2|`r format(mean(pr4b), science=FALSE)`|
+|3|`r format(mean(pr4c), science=FALSE)`|
+|4|`r format(mean(pr4d), science=FALSE)`|
+|5|`r format(mean(pr4e), science=FALSE)`|
+
+W ostatniej grupie, gdzie jedno losowanie obejmuje 17.89% całej populacji, wartości średnich zarobków dla jednej próby są bardzo blisko wartości, którą chcemy otrzymać. Różnice między znaną nam średnią populacji, a wartościami widocznymi tutaj są nie większe niż 1 000 $, a dla takich wartości, jakie możemy tam znaleźć, można uznać za znikome.
+
+## Podsumowanie
+
+Powyższe wnioskowania pokazują, że dla takich wielkości prób, jakie wybrałam można zauważyć, że wartości zbliżają się do siebie, a także tym samym do wartości średniej, którą chcemy otrzymać. Wnioskuję z tego, że dla prób jeszcze większych - takich, które zbliżają się do wielkości całej populacji dla losowania bez zwracania lub takich, które dążą do nieskończoności dla losowania ze zwracaniem, średnia będzie coraz bardziej nieodróżnialna od średniej populacji.
+
+
+# Histogramy losowych prób
+
+Powyższa analiza nie jest wystarczająca do stwierdzenia prawidłowości Prawa wielkich liczb. Losowań dla każdej mocy prób było zbyt niewiele, a także zabrakło analizy wartości wylosowanych w danej grupie, czy układają się one podobnie, jak w przypadku całej populacji. W poniższej części przedstawię histogramy powyższych losowań i przeanalizuję je porównując do histogramu przedstawiającego całą populację. Przedstawię go poniżej. 
+
+```{r, echo=FALSE, warning=FALSE}
+library(ggplot2) #biblioteka do tworzenia wykresów
+library(scales) #biblioteka aby nie używać naukowego oznaczenia osi
+ggplot(data, aes(x=salary)) + #tworzę wykres, określam tabelę danych oraz oś x
+  geom_histogram(binwidth = 7500, color='wheat4', fill='wheat') + #wybieram szerokość słupków i kolor
+  geom_vline(aes(xintercept=mean(salary)), linetype='dashed', color = 'wheat4') + #dodaję linię wskazującą średnią
+  labs(title='Rozkład zarobków w USA w roku 2000 w $ (n = 55899)', x = 'Roczne zarobki', y = 'Liczba osób') + #nadaję tytuły osi oraz wykresu
+  scale_x_continuous(labels=comma) #usuwam notację naukową
+```
+
+Widać, że histogram ten jest asymetryczny ukośny w prawo, zatem oczekujemy, że pozostałe histogramy będą miały podobny kształt do niego.
+
+## Histogramy dla próby 10
+
+```{r, echo=FALSE, warning=FALSE}
+library(ggpubr) #biblioteka aby móc kilka wykresów w jednym miejscu mieć
+#wszystkie wykresy, również w dalszej części kodu analogicznie
+
+a1 <- ggplot() + #tworzę wykres
+  aes(pr1a) + #określam wektor, który będzie osią x
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) + #tworzę histogram, jego szerokość słupków i kolor
+  labs(title="Próba 1 (n=10)", x="Elementy próby", y="Ilość elementów") + #nadaję tytuły
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') + #linia pionowa wyznaczająca średnią
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki))) #usuwam notację naukową oraz ustawiam limit osi x na minimalną i maksymalną wartość wszystkich zarobków
+
+b1 <- ggplot() +
+  aes(pr1b) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 2 (n=10)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+c1 <- ggplot() +
+  aes(pr1c) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 3 (n=10)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+d1 <- ggplot() +
+  aes(pr1d) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 4 (n=10)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+e1 <- ggplot() +
+  aes(pr1e) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 5 (n=10)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+ggarrange(a1, b1, c1, d1, e1, ncol=2, nrow=3) #ustawiam wykresy na mniejszej powierzchni
+```
+
+Histogramy dla najmniejszej próby nie mają zbyt wiele danych, jednak można zauważyć pojedyncze prawidłowości. Po pierwsze, histogramy są nieco chaotyczne i nieczytelne, natomiast jest to związane z niewielką grupą badaną. Jednocześnie można jednak spostrzec, że większość wartości znajduje się po lewej stronie - czyli tam, gdzie na wykresie populacji jest tych wartości najwięcej. Można również stwierdzić, oczywiście w dużym uproszczeniu, że wykres przedstawiający średnią najbardziej zbliżoną do średniej waktycznej (wykres trzeci ze średnią 35686.1 $) jest również najbardziej zbliżony do wykresu narysowanego na początku. Jest jednak oczywiście bardzo uproszczony.
+
+## Histogramy dla próby 100
+
+```{r, echo=FALSE, warning=FALSE}
+#jw
+a2 <- ggplot() +
+  aes(pr2a) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 1 (n=100)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+b2 <- ggplot() +
+  aes(pr2b) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 2 (n=100)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+c2 <- ggplot() +
+  aes(pr2c) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 3 (n=100)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+d2 <- ggplot() +
+  aes(pr2d) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 4 (n=100)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+e2 <- ggplot() +
+  aes(pr2e) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 5 (n=100)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+ggarrange(a2, b2, c2, d2, e2, ncol=2, nrow=3)
+```
+
+Wśród prób wielkości 100 histogramy są nieco bardziej podobne do wykresu całej populacji, ale dalej nie oddają zbyt dobrze wielu aspektów. Wykres numer trzy (średnia 35138.19 $) oraz jeden (średnia 36147.71 $) wydają się na pierwszy rzut oka najbadrdziej podobny do oryginalnego histogramu, jednak średnie wartości próby zdają się dość oddalone od wartości średniej dla całej populacji, szczególnie w przypadku wykresu numer trzy. Na czwartym widzimy sporo dużych kwot, co może być powodem tak bardzo oddalonej średniej (44942.13 $), natomiast wykres ostatni, którego średnia jest najbliżej średniej prawidłowej wydaje się dość prawidłowy, jednak brakuje na nim jakichkolwiek dużych wartości, co miało na pewno wpływ na to, że sama średnia nie jest znacząco większa od średniej całej populacji, ponieważ próba była na tyle mała, że mogłoby to mieć wpływ.
+
+## Histogramy dla próby 1000
+
+```{r, echo=FALSE, warning=FALSE}
+#jw
+a3 <- ggplot() +
+  aes(pr3a) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 1 (n=1000)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+b3 <- ggplot() +
+  aes(pr3b) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 2 (n=1000)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+c3 <- ggplot() +
+  aes(pr3c) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 3 (n=1000)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+d3 <- ggplot() +
+  aes(pr3d) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 4 (n=1000)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+e3 <- ggplot() +
+  aes(pr3e) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=7500) +
+  labs(title="Próba 5 (n=1000)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+ggarrange(a3, b3, c3, d3, e3, ncol=2, nrow=3)
+```
+
+Histogramy dla grupy 1000 wszystkie są już dużo bardziej podobne do wykresu populacji. Oczywiście nie pokazują wszystkich własności, jednak najważniejsze już tak - zarówno największe słupki są w podobnych miejscach, jak i nagły wzrost przy 230 000 $ jest również na nich widoczny. Są one zdecydowanie bardziej podobne. Pierwsza średnia jest najbliższa średniej całej populacji i pierwszy wykres również najbardziej przypomina wykres całej populacji, jednak pozostałe również są bardzo podobne.
+
+## Histogramy dla próby 10000
+
+```{r, echo=FALSE, warning=FALSE}
+#jw
+a4 <- ggplot() +
+  aes(pr4a) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 7500) +
+  labs(title="Próba 1 (n=10000)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+b4 <- ggplot() +
+  aes(pr4b) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 7500) +
+  labs(title="Próba 2 (n=10000)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+c4 <- ggplot() +
+  aes(pr4c) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 7500) +
+  labs(title="Próba 3 (n=10000)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+d4 <- ggplot() +
+  aes(pr4d) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 7500) +
+  labs(title="Próba 4 (n=10000)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+e4 <- ggplot() +
+  aes(pr4e) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 7500) +
+  labs(title="Próba 5 (n=10000)", x="Elementy próby", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(min(zarobki), max(zarobki)))
+
+ggarrange(a4, b4, c4, d4, e4, ncol=2, nrow=3)
+```
+
+Dla największej i ostatniej badanej próby wszystkie wykresy są podobne zarówno do siebie, jak i do wykresu populacuji. Róznice między nimi są niewielkie, tak samo różnice między średnimi, zatem wykresy wyglądają tak, jak byśmy oczekiwali bazując na Prawie wielkich liczb.
+
+## Podsumowanie
+
+Bazując na wszystkich powyższych histogramach można zobaczyć, że ich kształty potwierdzają Prawo wielkich liczb. Im większą próbę braliśmy pod uwagę, tym bardziej podobne były histogramy do dużego histogramu, a także do siebie nawzajem, a wielkość średniej nie miała aż takiego znaczenia. Zawsze większość elementów próby znajdowała się po lewej stronie wykresu, tak jak na histogramie całej populacji. Zatem została tylko analiza losowych średnich dla każdej z prób.
+
+# Wielokrotne próbkowanie średnich
+
+
+Dokonałam już analizy niewielkiej ilości średnich, jednak aby dokładnie zobaczyć, w jaki sposób średnie się rozkładają dla wielokrotnego próbkowania średnich wykonam histogramy dla wielokrotnego (10, 100, 1000, 10000) losowania prób powyższych wielkości. Porównam także odchylenia standardowe dla średnich każdej próby, które będę obliczać dla już wylosowanych prób, do odchylenia standardowego, które jest teoretycznym odchyleniem standardowym dla średniej wartości danej próby. Można je obliczyć dzieląc odchylenie standardowe populacji przez pierwiastek z wielkości próby. Sprawdzę również jaki procent elementów należy do zbioru $({\mu}-k{\sigma}, {\mu}+k{\sigma})$ dla różnych wartości k i obu obliczonych $\sigma$.
+
+## Wielokrotne próbkowanie prób wielkości 10
+
+```{r, echo=FALSE}
+set.seed(576) #ustawiam seed do losowania
+ah1 <- replicate(10, sample(zarobki, 10)) #tworzę macierz, każda kolumna to jedno losowanie
+ah1 <- apply(ah1, 2, mean) #liczę średnią kolumn
+bh1 <- replicate(100, sample(zarobki, 10)) #jw
+bh1 <- apply(bh1, 2, mean) #jw
+ch1 <- replicate(1000, sample(zarobki, 10)) #jw
+ch1 <- apply(ch1, 2, mean) #jw
+dh1 <- replicate(10000, sample(zarobki, 10)) #jw
+dh1 <- apply(dh1, 2, mean) #jw
+```
+
+```{r, echo=FALSE}
+minimum_10 <- min(ah1, bh1, ch1, dh1) #zapisuję minimalną i maksymalną wartość ze wszystkich średnich i wykorzystuję ję później do określenia skali osi x
+maximum_10 <- max(ah1, bh1, ch1, dh1)
+sda1 <- sd(ah1) #obliczam odchylenie standardowe każdej próbki, a także odchylenie standardowe populacji i to odchylenie z wzoru
+sdb1 <- sd(bh1)
+sdc1 <- sd(ch1)
+sdd1 <- sd(dh1)
+sd <- sd(zarobki)
+sd1 <- sd/sqrt(10)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+#histogramy analogiczne do poprzenich, ze zmienioną szerokością słupków oraz limits, a takze tytułami
+aw1 <- ggplot() +
+  aes(ah1) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=10)", x="Średnie próby (n=10)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+bw1 <- ggplot() +
+  aes(bh1) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=100)", x="Średnie próby (n=10)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10)) 
+
+cw1 <- ggplot() +
+  aes(ch1) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=1000)", x="Średnie próby (n=10)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+dw1 <- ggplot() +
+  aes(dh1) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=10000)", x="Średnie próby (n=10)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+ggarrange(aw1, bw1, cw1, dw1, ncol=2, nrow=2)
+```
+
+Jako przedział osi na powyższych histogramach wybrałam przedział między maksymalną a minimalną wartością wylosowanych prób. Bazując na wykresach można zauważyć, że wraz ze zwiększeniem przedziałów, wykres był coraz bardziej "zbity", z najwyższym słupkiem gdzieś w pobliżu średniej całej populacji, co jest naszą wartością oczekiwaną. Na wykresie dla 1000 średnich linia przedstawiająca średnią przechodzi nawet przez najwyższy słupek. Sporządzę teraz wykres słupkowy porównujący każde odchylenie standardowe do tego teoretycznego
+
+```{r, echo=FALSE, warning=FALSE}
+ggplot() + 
+  aes(x=c("ogólne", 10, 100, 1000, 10000), y=c(sd1, sda1, sdb1, sdc1, sdd1)) + #ustalam oś x i y dla danych odchyleń standardowych, aby wysokość słubka była wyznaczona przez wartość odchylenia
+  geom_bar(color='wheat4', fill='wheat', stat="identity") + #do tego służy w tym miejscu stat=identity
+  labs(title="Wykres słupkowy odchyleń standardowych", x="Odchylenia standardowe", y="Wartość")
+```
+
+Jak widać na powyższym wykresie, odchylenie standardowe dla wartości 10 jest największe, jednak tam wartości są bardzo różne. Pozostałe są porównywalne wielkością do ogólnego wykresu. Sprawdzę teraz ile razy dane wartości mieszczą się w przedzialach $({\mu}-k{\sigma}, {\mu}+k{\sigma})$ dla k=1,2,3.
+
+```{r, echo=FALSE}
+#wykonuję obliczenie jaki procent elementów znajduje się w powyższych zbiorach i wpisuję do zmiennej dla konkretnych próbek
+ga1.1.1 <- sum(abs(ah1-mean(zarobki))<sd1)/10 *100
+ga1.2.1 <- sum(abs(ah1-mean(zarobki))<sda1)/10 * 100
+ga1.1.2 <- sum(abs(ah1-mean(zarobki))<2 * sd1)/10 *100
+ga1.2.2 <- sum(abs(ah1-mean(zarobki))<2 * sda1)/10 *100
+ga1.1.3 <- sum(abs(ah1-mean(zarobki))<3 * sd1)/10 *100
+ga1.2.3 <- sum(abs(ah1-mean(zarobki))<3 * sda1)/10 *100
+gb1.1.1 <- sum(abs(bh1-mean(zarobki))<sd1)/100 * 100
+gb1.2.1 <- sum(abs(bh1-mean(zarobki))<sdb1)/100 * 100
+gb1.1.2 <- sum(abs(bh1-mean(zarobki))<2 * sd1)/100 *100
+gb1.2.2 <- sum(abs(bh1-mean(zarobki))<2 * sdb1)/100 *100
+gb1.1.3 <- sum(abs(bh1-mean(zarobki))<3 * sd1)/100 *100
+gb1.2.3 <- sum(abs(bh1-mean(zarobki))<3 * sdb1)/100 *100
+gc1.1.1 <- sum(abs(ch1-mean(zarobki))<sd1)/1000 * 100
+gc1.2.1 <- sum(abs(ch1-mean(zarobki))<sdc1)/1000 * 100
+gc1.1.2 <- sum(abs(ch1-mean(zarobki))<2 * sd1)/1000 *100
+gc1.2.2 <- sum(abs(ch1-mean(zarobki))<2 *sdc1)/1000 *100
+gc1.1.3 <- sum(abs(ch1-mean(zarobki))<3 * sd1)/1000 *100
+gc1.2.3 <- sum(abs(ch1-mean(zarobki))<3 * sdc1)/1000 *100
+gd1.1.1 <- sum(abs(dh1-mean(zarobki))<sd1)/10000 * 100
+gd1.2.1 <- sum(abs(dh1-mean(zarobki))<sdd1)/10000 * 100
+gd1.1.2 <- sum(abs(dh1-mean(zarobki))<2 * sd1)/10000 *100
+gd1.2.2 <- sum(abs(dh1-mean(zarobki))<2 * sdd1)/10000 *100
+gd1.1.3 <- sum(abs(dh1-mean(zarobki))<3 * sd1)/10000 *100
+gd1.2.3 <- sum(abs(dh1-mean(zarobki))<3 * sdd1)/10000 *100
+```
+
+|Liczba losowań oraz k|% dla Odchylenia 1 rodz.|% dla Odchylenia 2 rodz.|
+|:-------------------:|:----------------------:|:---------------------:|
+|n=10, k=1|`r ga1.1.1`|`r ga1.2.1`|
+|n=10, k=2|`r ga1.1.2`|`r ga1.2.2`|
+|n=10, k=3|`r ga1.1.3`|`r ga1.2.3`|
+|n=100, k=1|`r gb1.1.1`|`r gb1.2.1`|
+|n=100, k=2|`r gb1.1.2`|`r gb1.2.2`|
+|n=100, k=3|`r gb1.1.3`|`r gb1.2.3`|
+|n=1000, k=1|`r gc1.1.1`|`r gc1.2.1`|
+|n=1000, k=2|`r gc1.1.2`|`r gc1.2.2`|
+|n=1000, k=3|`r gc1.1.3`|`r gc1.2.3`|
+|n=10000, k=1|`r gd1.1.1`|`r gd1.2.1`|
+|n=10000, k=2|`r gd1.1.2`|`r gd1.2.2`|
+|n=10000, k=3|`r gd1.1.3`|`r gd1.2.3`|
+
+Odchylenie standardowe 1 rodzaju rozumiem jako teoretyczne odchylenie standardowe, obliczone ze wzoru, natomiast drugie, jako odchylenie standardowe wyliczone dla konkretnej, wylosowanej już próby.
+
+Jak widać w tabeli wartości nie mają między sobą zbyt znaczących różnic, co jest spowodowane prawdopodobnie faktem, jak bardzo podobne do siebie były same te odchylenia standardowe. Próbka, gdzie wystąpiło 10000 losowań jest prawdopodobnie najbardziej dokładna. Bazując na niej można wyjść z pewnego, na razie bardzo luźnego spostrzeżenia, że te wartości nie różnią się zbytnio od wartości dla rozkładu normalnego (68%/95%/99.7%). W dalszej części postaram się zwrócić na to uwagę dla następnych wielkości.
+
+## Wielokrotne próbkowanie dla prób wielkości 100
+
+```{r, echo=FALSE}
+#jw
+ah2 <- replicate(10, sample(zarobki, 100))
+ah2 <- apply(ah2, 2, mean)
+bh2 <- replicate(100, sample(zarobki, 100))
+bh2 <- apply(bh2, 2, mean)
+ch2 <- replicate(1000, sample(zarobki, 100))
+ch2 <- apply(ch2, 2, mean)
+dh2 <- replicate(10000, sample(zarobki, 100))
+dh2 <- apply(dh2, 2, mean)
+```
+
+```{r echo=FALSE}
+#jw
+minimum_100 = min(ah2, bh2, ch2, dh2)
+maximum_100 = max(ah2, bh2, ch2, dh2)
+sda2 <- sd(ah2)
+sdb2 <- sd(bh2)
+sdc2 <- sd(ch2)
+sdd2 <- sd(dh2)
+sd2 <- sd/sqrt(100)
+```
+
+```{r echo=FALSE, warning=FALSE}
+#jw
+aw2.1 <- ggplot() +
+  aes(ah2) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=10)", x="Średnie próby (n=100)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+bw2.1 <- ggplot() +
+  aes(bh2) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=100)", x="Średnie próby (n=100)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+cw2.1 <- ggplot() +
+  aes(ch2) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=1000)", x="Średnie próby (n=100)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+dw2.1 <- ggplot() +
+  aes(dh2) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=10000)", x="Średnie próby (n=100)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+ggarrange(aw2.1, bw2.1, cw2.1, dw2.1, ncol=2, nrow=2)
+```
+
+Powyższe histogramy są zrobione dla tej samej skali osi x co histogramy dla prób wielkości 10, czyli między minimalną wartością tych losowań a maksymalną. W tym przypadku są pomocne, żeby pokazać, że te wykresy są coraz bardziej zbite i wartości coraz bardziej oscylują wokół średniej. Przez mniejszy rozmiar histogramów, oraz tak duży rozrzut osi wykresy nie są zbyt czytelne, więc wykonam je jeszcze raz, tym razem dla przedziału między wartością minimalną a maksymalną dla wszystkich prób wielkości 100.
+
+```{r echo=FALSE, warning=FALSE}
+#jw
+aw2 <- ggplot() +
+  aes(ah2) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1000) +
+  labs(title="Rozkład średnich (n=10)", x="Średnie próby (n=100)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_100, maximum_100))
+
+bw2 <- ggplot() +
+  aes(bh2) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1000) +
+  labs(title="Rozkład średnich (n=100)", x="Średnie próby (n=100)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_100, maximum_100))
+
+cw2 <- ggplot() +
+  aes(ch2) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1000) +
+  labs(title="Rozkład średnich (n=1000)", x="Średnie próby (n=100)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_100, maximum_100))
+
+dw2 <- ggplot() +
+  aes(dh2) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1000) +
+  labs(title="Rozkład średnich (n=10000)", x="Średnie próby (n=100)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_100, maximum_100))
+
+ggarrange(aw2, bw2, cw2, dw2, ncol=2, nrow=2)
+```
+
+Tutaj już o wiele lepiej widać rozkład tych wartości. Jak można zauważyć, dalej wartości wraz z wykresem coraz bardziej się zbijają i można zauważyć coraz wyraźniejsze formowanie się pewnej "górki" lub "dzwonu" jako kształt wykresu. Ostatni z nich, ten dla 10000 losowań, jest najbardziej do takiego kształtu podobny, a także coraz bardziej zbliża się do centrum wykresu. Jest dość logicznym, że wykres jest nieco po lewej stronie, gdyż tych mniejszych wartości jest dużo większej niż tych większych, które potrafią bardzo mocno wpłynąć na średnią. Poza tym, warto również zwrócić uwagę na fakt, że skala na osi x po zmianie jej zmieniła się około czterokrotnie, co oznacza, że dla tej próby wartości losowania znacząco zbliżają się do próby. Przyjrzyjmy się teraz jednak odchyleniom standardowym. 
+
+```{r, echo=FALSE, warning=FALSE}
+#jw
+ggplot() + 
+  aes(x=c("ogólne", 10, 100, 1000, 10000), y=c(sd2, sda2, sdb2, sdc2, sdd2)) + 
+  geom_bar(color='wheat4', fill='wheat', stat="identity") + 
+  labs(title="Wykres słupkowy odchyleń standardowych", x="Odchylenia standardowe", y="Wartość")
+```
+
+Tutaj z kolei, dla dziesięciokrotnego powtórzenia próby odchylenie standardowe jest około dwa razy mniejsze od faktycznego. To o wiele mniej, zatem można stwierdzić, że dziesięciokrotne powtórzenie losowania próby niewiele nam daje. Kolejnym krokiem jest sprawdzenie procentowego rozłożenia elementów losowania w zbiorze $({\mu}-k{\sigma}, {\mu}+k{\sigma})$ dla k=1,2,3.
+
+```{r, echo=FALSE}
+#jw
+ga2.1.1 <- sum(abs(ah2-mean(zarobki))<sd2)/10 *100
+ga2.2.1 <- sum(abs(ah2-mean(zarobki))<sda2)/10 * 100
+ga2.1.2 <- sum(abs(ah2-mean(zarobki))<2 * sd2)/10 *100
+ga2.2.2 <- sum(abs(ah2-mean(zarobki))<2 * sda2)/10 *100
+ga2.1.3 <- sum(abs(ah2-mean(zarobki))<3 * sd2)/10 *100
+ga2.2.3 <- sum(abs(ah2-mean(zarobki))<3 * sda2)/10 *100
+gb2.1.1 <- sum(abs(bh2-mean(zarobki))<sd2)/100 * 100
+gb2.2.1 <- sum(abs(bh2-mean(zarobki))<sdb2)/100 * 100
+gb2.1.2 <- sum(abs(bh2-mean(zarobki))<2 * sd2)/100 *100
+gb2.2.2 <- sum(abs(bh2-mean(zarobki))<2 * sdb2)/100 *100
+gb2.1.3 <- sum(abs(bh2-mean(zarobki))<3 * sd2)/100 *100
+gb2.2.3 <- sum(abs(bh2-mean(zarobki))<3 * sdb2)/100 *100
+gc2.1.1 <- sum(abs(ch2-mean(zarobki))<sd2)/1000 * 100
+gc2.2.1 <- sum(abs(ch2-mean(zarobki))<sdc2)/1000 * 100
+gc2.1.2 <- sum(abs(ch2-mean(zarobki))<2 * sd2)/1000 *100
+gc2.2.2 <- sum(abs(ch2-mean(zarobki))<2 *sdc2)/1000 *100
+gc2.1.3 <- sum(abs(ch2-mean(zarobki))<3 * sd2)/1000 *100
+gc2.2.3 <- sum(abs(ch2-mean(zarobki))<3 * sdc2)/1000 *100
+gd2.1.1 <- sum(abs(dh2-mean(zarobki))<sd2)/10000 * 100
+gd2.2.1 <- sum(abs(dh2-mean(zarobki))<sdd2)/10000 * 100
+gd2.1.2 <- sum(abs(dh2-mean(zarobki))<2 * sd2)/10000 *100
+gd2.2.2 <- sum(abs(dh2-mean(zarobki))<2 * sdd2)/10000 *100
+gd2.1.3 <- sum(abs(dh2-mean(zarobki))<3 * sd2)/10000 *100
+gd2.2.3 <- sum(abs(dh2-mean(zarobki))<3 * sdd2)/10000 *100
+```
+
+|Liczba losowań oraz k|% dla Odchylenia 1 rodz.|% dla Odchylenia 2 rodz.|
+|:-------------------:|:----------------------:|:---------------------:|
+|n=10, k=1|`r ga2.1.1`|`r ga2.2.1`|
+|n=10, k=2|`r ga2.1.2`|`r ga2.2.2`|
+|n=10, k=3|`r ga2.1.3`|`r ga2.2.3`|
+|n=100, k=1|`r gb2.1.1`|`r gb2.2.1`|
+|n=100, k=2|`r gb2.1.2`|`r gb2.2.2`|
+|n=100, k=3|`r gb2.1.3`|`r gb2.2.3`|
+|n=1000, k=1|`r gc2.1.1`|`r gc2.2.1`|
+|n=1000, k=2|`r gc2.1.2`|`r gc2.2.2`|
+|n=1000, k=3|`r gc2.1.3`|`r gc2.2.3`|
+|n=10000, k=1|`r gd2.1.1`|`r gd2.2.1`|
+|n=10000, k=2|`r gd2.1.2`|`r gd2.2.2`|
+|n=10000, k=3|`r gd2.1.3`|`r gd2.2.3`|
+
+Patrząd dla tych wartości również można stwierdzić, że są zbliżone do siebie, ale także można z łatwością zobaczyć, szczególnie dla prób 1000 oraz 10000 losowań, że mamy do czynienia z rozkładem normalnym, dzięki temu, że występuje tutaj reguła 68%/95%/99%. Sprawdzimy to też dla pozostałych przykładów. Poza tym oczywiście dla coraz większego k jest coraz więcej elementów w przedziale, a także dla coraz większej liczby losowań jest coraz dokładniejszy wynik.
+
+## Wielokrotne próbkowanie dla prób wielkości 1000
+
+```{r, echo=FALSE}
+#jw
+ah3 <- replicate(10, sample(zarobki, 1000))
+ah3 <- apply(ah3, 2, mean)
+bh3 <- replicate(100, sample(zarobki, 1000))
+bh3 <- apply(bh3, 2, mean)
+ch3 <- replicate(1000, sample(zarobki, 1000))
+ch3 <- apply(ch3, 2, mean)
+dh3 <- replicate(10000, sample(zarobki, 1000))
+dh3 <- apply(dh3, 2, mean)
+```
+
+```{r, echo=FALSE}
+#jw
+minimum_1000 <- min(ah3, bh3, ch3, dh3)
+maximum_1000 <- max(ah3, bh3, ch3, dh3)
+sda3 <- sd(ah3)
+sdb3 <- sd(bh3)
+sdc3 <- sd(ch3)
+sdd3 <- sd(dh3)
+sd3 <- sd/sqrt(1000)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+#jw
+aw3.1 <- ggplot() +
+  aes(ah3) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=10)", x="Średnie próby (n=1000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+bw3.1 <- ggplot() +
+  aes(bh3) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=100)", x="Średnie próby (n=1000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+cw3.1 <- ggplot() +
+  aes(ch3) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=1000)", x="Średnie próby (n=1000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+dw3.1 <- ggplot() +
+  aes(dh3) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=10000)", x="Średnie próby (n=1000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+ggarrange(aw3.1, bw3.1, cw3.1, dw3.1, ncol=2, nrow=2)
+```
+
+W tym przypadku również w pierwszej kolejności wykonałam wykresu pokazujące rozkład na tym samym przedziale, co dla najmniejszych prób. W tym momencie, rozkład średnich jest jeszcze bardziej zbity, a w zasadzie już prawie zupełnie niewidoczny, ponieważ ich rozrzut jest tak niewielki. To dobry znak pod względem tego, że coraz bardziej zbliżamy się do wartości średniej całej populacji. Sprawdźmy jednak jak wygląda wykres z przedziałami minimalna - maksymalna wartość dla średnich dla prób rozmiaru 1000.
+
+```{r, echo=FALSE, warning=FALSE}
+#jw
+aw3 <- ggplot() +
+  aes(ah3) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 500) +
+  labs(title="Rozkład średnich próbkowych (n=10)", x="Średnie próby (n=1000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_1000, maximum_1000))
+
+bw3 <- ggplot() +
+  aes(bh3) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 500) +
+  labs(title="Rozkład średnich próbkowych (n=100)", x="Średnie próby (n=1000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_1000, maximum_1000))
+
+cw3 <- ggplot() +
+  aes(ch3) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 500) +
+  labs(title="Rozkład średnich próbkowych (n=1000)", x="Średnie próby (n=1000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_1000, maximum_1000))
+
+dw3 <- ggplot() +
+  aes(dh3) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=500) +
+  labs(title="Rozkład średnich próbkowych (n=10000)", x="Średnie próby (n=1000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_1000, maximum_1000))
+
+ggarrange(aw3, bw3, cw3, dw3, ncol=2, nrow=2)
+```
+
+Przy zmianie limitu dla osi x, widać znów znaczne zmniejszenie się podziałki - teraz wynosi zaledwie około 10 000, a zatem znów czterokrotnie mniej niż poprzednio. Nawet przy dziesięciu wartościach, wszystkie wydają się bliżej siebie, jednak może to być jedynie przypadek. Znów można zwrócić uwagę, że dla największej liczby losowań wytworzyła się dość równa górka, na której mamy wartości rozkładającę się względnie symetrycznie wobec średniej. Prawdopodobnie dla jeszcze większych prób byłoby to bardziej widoczne. Spójrzmy teraz na wykres słupkowy odchyleń standardowych.
+
+```{r, echo=FALSE, warning=FALSE}
+#jw
+ggplot() + 
+  aes(x=c("ogólne", 10, 100, 1000, 10000), y=c(sd3, sda3, sdb3, sdc3, sdd3)) + 
+  geom_bar(color='wheat4', fill='wheat', stat="identity") + 
+  labs(title="Wykres słupkowy odchyleń standardowych", x="Odchylenia standardowe", y="Wartość")
+```
+
+Znów, odchylenia są bardzo do siebie zbliżone, poza najmniejszym losowaniem, natomiast w tym przypadku nawet tutaj różnica jest niewielka. Wartości tego odchylenia również oscylują wśród wartości między 900 a 1200, zatem potwierdza to, że próbki te nie są aż tak zróżnicowane, jeśli chodzi o te średnie. Oczywiście jest to również kolejne potwierdzenie Prawa wielkich liczb. Jako następną sporządzę tabelę dla takich samych przedziałów jak poprzednie
+
+```{r, echo=FALSE}
+#jw
+ga3.1.1 <- sum(abs(ah3-mean(zarobki))<sd3)/10 *100
+ga3.2.1 <- sum(abs(ah3-mean(zarobki))<sda3)/10 * 100
+ga3.1.2 <- sum(abs(ah3-mean(zarobki))<2 * sd3)/10 *100
+ga3.2.2 <- sum(abs(ah3-mean(zarobki))<2 * sda3)/10 *100
+ga3.1.3 <- sum(abs(ah3-mean(zarobki))<3 * sd3)/10 *100
+ga3.2.3 <- sum(abs(ah3-mean(zarobki))<3 * sda3)/10 *100
+gb3.1.1 <- sum(abs(bh3-mean(zarobki))<sd3)/100 * 100
+gb3.2.1 <- sum(abs(bh3-mean(zarobki))<sdb3)/100 * 100
+gb3.1.2 <- sum(abs(bh3-mean(zarobki))<2 * sd3)/100 *100
+gb3.2.2 <- sum(abs(bh3-mean(zarobki))<2 * sdb3)/100 *100
+gb3.1.3 <- sum(abs(bh3-mean(zarobki))<3 * sd3)/100 *100
+gb3.2.3 <- sum(abs(bh3-mean(zarobki))<3 * sdb3)/100 *100
+gc3.1.1 <- sum(abs(ch3-mean(zarobki))<sd3)/1000 * 100
+gc3.2.1 <- sum(abs(ch3-mean(zarobki))<sdc3)/1000 * 100
+gc3.1.2 <- sum(abs(ch3-mean(zarobki))<2 * sd3)/1000 *100
+gc3.2.2 <- sum(abs(ch3-mean(zarobki))<2 *sdc3)/1000 *100
+gc3.1.3 <- sum(abs(ch3-mean(zarobki))<3 * sd3)/1000 *100
+gc3.2.3 <- sum(abs(ch3-mean(zarobki))<3 * sdc3)/1000 *100
+gd3.1.1 <- sum(abs(dh3-mean(zarobki))<sd3)/10000 * 100
+gd3.2.1 <- sum(abs(dh3-mean(zarobki))<sdd3)/10000 * 100
+gd3.1.2 <- sum(abs(dh3-mean(zarobki))<2 * sd3)/10000 *100
+gd3.2.2 <- sum(abs(dh3-mean(zarobki))<2 * sdd3)/10000 *100
+gd3.1.3 <- sum(abs(dh3-mean(zarobki))<3 * sd3)/10000 *100
+gd3.2.3 <- sum(abs(dh3-mean(zarobki))<3 * sdd3)/10000 *100
+```
+
+|Liczba losowań oraz k|% dla Odchylenia 1 rodz.|% dla Odchylenia 2 rodz.|
+|:-------------------:|:----------------------:|:---------------------:|
+|n=10, k=1|`r ga3.1.1`|`r ga3.2.1`|
+|n=10, k=2|`r ga3.1.2`|`r ga3.2.2`|
+|n=10, k=3|`r ga3.1.3`|`r ga3.2.3`|
+|n=100, k=1|`r gb3.1.1`|`r gb3.2.1`|
+|n=100, k=2|`r gb3.1.2`|`r gb3.2.2`|
+|n=100, k=3|`r gb3.1.3`|`r gb3.2.3`|
+|n=1000, k=1|`r gc3.1.1`|`r gc3.2.1`|
+|n=1000, k=2|`r gc3.1.2`|`r gc3.2.2`|
+|n=1000, k=3|`r gc3.1.3`|`r gc3.2.3`|
+|n=10000, k=1|`r gd3.1.1`|`r gd3.2.1`|
+|n=10000, k=2|`r gd3.1.2`|`r gd3.2.2`|
+|n=10000, k=3|`r gd3.1.3`|`r gd3.2.3`|
+
+Tutaj również, jak w poprzednich, widać, jak rozkładają się wartości procentowo w podanych wyżej zbiorach. Tutaj również widać wartości zbliżone do tych pojawiających się w rozkładzie normalnym. W przypadku najmniejszej liczbie losowań warto zwrócić uwagę, że aż dwa zbiory mają w sobie 100% elementów. Wskazuje to na to, że taka mała liczba losowań jest niemiarodajna. Podobnie jak w poprzednich przypadkach nie wydaje się, aby była zbyt duża róznica w tym, jakie weźmiemy do badania odchylenie standardowe przy losowaniu próbki, zatem nie trzeba na to zwracać uwagi przy badaniu.
+
+## Wielokrotne próbkowanie dla prób wielkości 10000
+
+```{r, echo=FALSE}
+#jw
+ah4 <- replicate(10, sample(zarobki, 10000))
+ah4 <- apply(ah4, 2, mean)
+bh4 <- replicate(100, sample(zarobki, 10000))
+bh4 <- apply(bh4, 2, mean)
+ch4 <- replicate(1000, sample(zarobki, 10000))
+ch4 <- apply(ch4, 2, mean)
+dh4 <- replicate(10000, sample(zarobki, 10000))
+dh4 <- apply(dh4, 2, mean)
+```
+
+```{r, echo=FALSE}
+#jw
+minimum_10000 <- min(ah4, bh4, ch4, dh4)
+maximum_10000 <- max(ah4, bh4, ch4, dh4)
+sda4 <- sd(ah4)
+sdb4 <- sd(bh4)
+sdc4 <- sd(ch4)
+sdd4 <- sd(dh4)
+sd4 <- sd/sqrt(10000)
+```
+
+```{r, echo=FALSE, warning=FALSE}
+#jw
+aw4.1 <- ggplot() +
+  aes(ah4) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=10)", x="Średnie próby (n=10000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+bw4.1 <- ggplot() +
+  aes(bh4) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=100)", x="Średnie próby (n=10000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+cw4.1 <- ggplot() +
+  aes(ch4) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=1000)", x="Średnie próby (n=10000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+dw4.1 <- ggplot() +
+  aes(dh4) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 1500) +
+  labs(title="Rozkład średnich (n=10000)", x="Średnie próby (n=10000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10, maximum_10))
+
+ggarrange(aw4.1, bw4.1, cw4.1, dw4.1, ncol=2, nrow=2)
+```
+
+Ostatnia próba, największa i ostatnie losowania. Wykres porównujący z przedziałem dla średnich najmniejszej próby jest bardzo nieczytelny jeśli chodzi o wartość średnich, ale doskonale obrazuje, jak bardzo się już zbliżyliśmy losowanymi wartościami do średniej całej populacji. Pojawiają się tu jedynie dwa słupki, a przez ten wyższy przechodzi linia pokazująca średnią. Na każdym wykresie, zatem bez względu na liczbę losowań. Jest to już kolejne potwierdzenie Prawa wielkich liczb. Zmienię jednak przedziały, aby bardziej się przyjrzeć samym wartościom.
+
+```{r, echo=FALSE, warning=FALSE}
+#jw
+aw4 <- ggplot() +
+  aes(ah4) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=100) +
+  labs(title="Rozkład średnich (n=10)", x="Średnie próby (n=10000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10000, maximum_10000))
+
+bw4 <- ggplot() +
+  aes(bh4) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth = 100) +
+  labs(title="Rozkład średnich (n=100)", x="Średnie próby (n=10000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10000, maximum_10000))
+
+cw4 <- ggplot() +
+  aes(ch4) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=100) +
+  labs(title="Rozkład średnich (n=1000)", x="Średnie próby (n=10000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10000, maximum_10000))
+
+dw4 <- ggplot() +
+  aes(dh4) +
+  geom_histogram(color='wheat4', fill='wheat', binwidth=100) +
+  labs(title="Rozkład średnich (n=10000)", x="Średnie próby (n=10000)", y="Ilość elementów") +
+  geom_vline(aes(xintercept=mean(zarobki)), linetype='dashed', color = 'wheat4') +
+  scale_x_continuous(labels=comma, limits=c(minimum_10000, maximum_10000))
+
+ggarrange(aw4, bw4, cw4, dw4, ncol=2, nrow=2)
+```
+
+Na tym wykresie z kolei pierwszym co rzuca się w oczy jest ostatni wykres, który jest w miarę symetryczny, nie jest w żaden sposób przesunięty w lewą stronę, wynika to z tego, że mniejsze wartości już nie mają tak dużej przewagi nad większymi i dużo łatwiej jest "trafić" w losowaniu na większą wartość. Trzeci wykres, dla 1000 losowań jest również ciekawy, ponieważ jest przesunięty delikatnie w prawo, co nie występowało na innych wykresach wyżej. Może to być kwestia przypadku, jeśli chodzi o niewielkie wylosowanie mniejszych wartości i z tego względu histogram wydaje się "kłaniać" w prawą stronę. Także przedział osi jest naprawdę niewielki, porównując do poprzednich, jedynie około 2000, zatem to również może mieć wpływ na przechylenie w prawo.
+
+```{r, echo=FALSE, warning=FALSE}
+#jw
+ggplot() + 
+  aes(x=c("ogólne", 10, 100, 1000, 10000), y=c(sd4, sda4, sdb4, sdc4, sdd4)) + 
+  geom_bar(color='wheat4', fill='wheat', stat="identity") + 
+  labs(title="Wykres słupkowy odchyleń standardowych", x="Odchylenia standardowe", y="Wartość")
+```
+
+Odchylenia standardowe tych losowań są znów do siebie dość podobne. Dla wartości 1000 oraz 10000 są trochę mniejsze od ogólnej wartości, a dla 10 losowań jest mniej więcej tyle samo większe. Mimo to, grupa dalej nie jest bardzo zróżnicowana, jednak losowanie 1000 oraz 10000 może być mniej prawidłowe w stosunku do poprzednich wartości, gdy będę analizować tabelę, więc wezmę to w tym przypadku pod uwagę.
+
+```{r, echo=FALSE}
+#jw
+ga4.1.1 <- sum(abs(ah4-mean(zarobki))<sd4)/10 *100
+ga4.2.1 <- sum(abs(ah4-mean(zarobki))<sda4)/10 * 100
+ga4.1.2 <- sum(abs(ah4-mean(zarobki))<2 * sd4)/10 *100
+ga4.2.2 <- sum(abs(ah4-mean(zarobki))<2 * sda4)/10 *100
+ga4.1.3 <- sum(abs(ah4-mean(zarobki))<3 * sd4)/10 *100
+ga4.2.3 <- sum(abs(ah4-mean(zarobki))<3 * sda4)/10 *100
+gb4.1.1 <- sum(abs(bh4-mean(zarobki))<sd4)/100 * 100
+gb4.2.1 <- sum(abs(bh4-mean(zarobki))<sdb4)/100 * 100
+gb4.1.2 <- sum(abs(bh4-mean(zarobki))<2 * sd4)/100 *100
+gb4.2.2 <- sum(abs(bh4-mean(zarobki))<2 * sdb4)/100 *100
+gb4.1.3 <- sum(abs(bh4-mean(zarobki))<3 * sd4)/100 *100
+gb4.2.3 <- sum(abs(bh4-mean(zarobki))<3 * sdb4)/100 *100
+gc4.1.1 <- sum(abs(ch4-mean(zarobki))<sd4)/1000 * 100
+gc4.2.1 <- sum(abs(ch4-mean(zarobki))<sdc4)/1000 * 100
+gc4.1.2 <- sum(abs(ch4-mean(zarobki))<2 * sd4)/1000 *100
+gc4.2.2 <- sum(abs(ch4-mean(zarobki))<2 *sdc4)/1000 *100
+gc4.1.3 <- sum(abs(ch4-mean(zarobki))<3 * sd4)/1000 *100
+gc4.2.3 <- sum(abs(ch4-mean(zarobki))<3 * sdc4)/1000 *100
+gd4.1.1 <- sum(abs(dh4-mean(zarobki))<sd4)/10000 * 100
+gd4.2.1 <- sum(abs(dh4-mean(zarobki))<sdd4)/10000 * 100
+gd4.1.2 <- sum(abs(dh4-mean(zarobki))<2 * sd4)/10000 *100
+gd4.2.2 <- sum(abs(dh4-mean(zarobki))<2 * sdd4)/10000 *100
+gd4.1.3 <- sum(abs(dh4-mean(zarobki))<3 * sd4)/10000 *100
+gd4.2.3 <- sum(abs(dh4-mean(zarobki))<3 * sdd4)/10000 *100
+```
+
+|Liczba losowań oraz k|% dla Odchylenia 1 rodz.|% dla Odchylenia 2 rodz.|
+|:-------------------:|:----------------------:|:---------------------:|
+|n=10, k=1|`r ga4.1.1`|`r ga4.2.1`|
+|n=10, k=2|`r ga4.1.2`|`r ga4.2.2`|
+|n=10, k=3|`r ga4.1.3`|`r ga4.2.3`|
+|n=100, k=1|`r gb4.1.1`|`r gb4.2.1`|
+|n=100, k=2|`r gb4.1.2`|`r gb4.2.2`|
+|n=100, k=3|`r gb4.1.3`|`r gb4.2.3`|
+|n=1000, k=1|`r gc4.1.1`|`r gc4.2.1`|
+|n=1000, k=2|`r gc4.1.2`|`r gc4.2.2`|
+|n=1000, k=3|`r gc4.1.3`|`r gc4.2.3`|
+|n=10000, k=1|`r gd4.1.1`|`r gd4.2.1`|
+|n=10000, k=2|`r gd4.1.2`|`r gd4.2.2`|
+|n=10000, k=3|`r gd4.1.3`|`r gd4.2.3`|
+
+Patrząc na tę tabelę pierwsze co widać to fakt, że dla 1000 i 10000 losowań wyniki dla k = 1 są od siebie bardzo różne. Teraz badając te zbiory dla odchylenia teoretycznego wyniki nie pokazują dla dużych losowań tak dokładnie rozkładu normalnego, jednak dla konkretnej próby jest to dokładnie widoczne, więc można wysnuć takie wnioski. Poza tym aspektem tym razem dla mniejszych wartości są bardziej zbliżone do rozkładu 68%/95%/99.7%. Zatem wysnuwam wniosek, że rozkład losowy tych średnich jest rozkładem normalnym. 
+
+# Podsumowanie
+
+Podsumowując, Prawo wielkich liczb działa dla powyższego przykładu. W momencie zwiększania się mocy próby, wartości średnich wyników zbliżają się do wartości oczekiwanej, czyli w naszym przypadku średniej całej populacji. Patrząc na histogramy średnich wielokrotnie losowanych prób również widać, że histogramy są coraz bardziej w jednym miejscu, więc ich rozrzut jest również coraz mniejszy. Tym samym Prawo wielkich liczb w tym doświadczeniu okazało się prawidłowe. Co więcej, można było również zauważyć tutaj, że losowe średnie układają się w rozkład normalny, co potwierdza reguła 68%/95%/99.7%.

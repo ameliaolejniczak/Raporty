@@ -1,0 +1,436 @@
+---
+title: "Raport 2"
+author: "Amelia Olejniczak"
+date: "2024-03-14"
+output:
+  html_document:
+    number_sections: true
+    toc: true
+    toc_depth: 2
+---
+```{=html}
+<style>
+body {
+text-align: justify} 
+</style>
+```
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Wprowadzenie
+
+Ten raport dotyczy badania doświadczalnego Prawa wielkich liczb, bazując na danych zarobkowych. W tym celu wykonam kilka doświadczeń, porównujących próby różnych rozmiarów z informacjami o całej populacji umieszczonych w tabeli danych. Próby będą rozmiarów kolejno - 10, 50, 100, 500, 1000, 5000, 10000, 50000 i będą wybierane w sposób losowy z całej populacji, zatem pojawiać się tam będą jedynie kwoty z tabeli danych. Losowanie odbędzie się bez zwracania, aby uniknąc duplikatów i uzyskać iluzję wyboru konkretnych osób zarabiających dane kwoty. 
+
+``` {r, echo=FALSE}
+data <- read.table('income.txt')
+colnames(data) = c('id', 'age', 'education', 'sex', 'salary', 'sector')
+```
+
+# Porównanie średnich
+
+W pierwszej kolejności zajmę się analizą średnich zarobków dla konkretnych prób wyżej wymienionych rozmiarów. Przypuszczam, że w przypadku niewielkich wartości średnia może być zbliżona do faktycznej ze względu na przypadkowy wybór, zatem dokonam losowania pięć razy, aby uniknąć takiej sytuacji i zobaczyć, w którym przypadku średnie są najbliżej siebie, a także faktycznej średniej zarobków całej populacji, wynoszącej `r format(mean(data$salary), science=FALSE)` $.
+
+## Średnie dla próby wielkości 10
+
+```{r, echo=FALSE}
+zarobki <- data$salary
+set.seed(2137)
+pr1a <- sample(zarobki, 10)
+pr1b <- sample(zarobki, 10)
+pr1c <- sample(zarobki, 10)
+pr1d <- sample(zarobki, 10)
+pr1e <- sample(zarobki, 10)
+```
+
+| Numer próby | Średnia |
+|:-----------:|:-------:|
+|1|`r format(mean(pr1a), science=FALSE)`|
+|2|`r format(mean(pr1b), science=FALSE)`|
+|3|`r format(mean(pr1c), science=FALSE)`|
+|4|`r format(mean(pr1d), science=FALSE)`|
+|5|`r format(mean(pr1e), science=FALSE)`|
+
+Zaczynając analizę od najmniej licznych prób można zauważyć, że średnie te bardzo się od siebie różnią. Wynoszą kolejno `r format(mean(pr1a), science=FALSE)` $, `r format(mean(pr1b), science=FALSE)` $, `r format(mean(pr1c), science=FALSE)` $, `r format(mean(pr1d), science=FALSE)` $ oraz `r format(mean(pr1e), science=FALSE)` $. Próby są jendak bardzo niewielkie, wynoszą zaledwie 0.02% całej populacji. Widać, że te średnie potrafią być aż o `r format(mean(pr1c) - mean(zarobki), science=FALSE)` $, zatem wartości średniej mogą być bardzo oddalone od faktycznego stanu rzeczy.
+
+## Średnie dla próby wielkości 50
+
+```{r, echo=FALSE}
+set.seed(69)
+pr2a <- sample(zarobki, 50)
+pr2b <- sample(zarobki, 50)
+pr2c <- sample(zarobki, 50)
+pr2d <- sample(zarobki, 50)
+pr2e <- sample(zarobki, 50)
+```
+
+| Numer próby | Średnia |
+|:-----------:|:-------:|
+|1|`r format(mean(pr2a), science=FALSE)`|
+|2|`r format(mean(pr2b), science=FALSE)`|
+|3|`r format(mean(pr2c), science=FALSE)`|
+|4|`r format(mean(pr2d), science=FALSE)`|
+|5|`r format(mean(pr2e), science=FALSE)`|
+
+W tym przypadku średnie wynoszą `r format(mean(pr2a), science=FALSE)` $, `r format(mean(pr2b), science=FALSE)` $, `r format(mean(pr2c), science=FALSE)` $, `r format(mean(pr2d), science=FALSE)` $ oraz `r format(mean(pr2e), science=FALSE)` $. Już tutaj można zauważyć jak wartości zbliżają się do siebie w porównaniu do poprzednich wartości. 
+
+## Średnie dla próby wielkości 100
+
+```{r, echo=FALSE}
+set.seed(400)
+pr3a <- sample(zarobki, 100)
+pr3b <- sample(zarobki, 100)
+pr3c <- sample(zarobki, 100)
+pr3d <- sample(zarobki, 100)
+pr3e <- sample(zarobki, 100)
+```
+
+| Numer próby | Średnia |
+|:-----------:|:-------:|
+|1|`r format(mean(pr3a), science=FALSE)`|
+|2|`r format(mean(pr3b), science=FALSE)`|
+|3|`r format(mean(pr3c), science=FALSE)`|
+|4|`r format(mean(pr3d), science=FALSE)`|
+|5|`r format(mean(pr3e), science=FALSE)`|
+
+Tutaj z kolei średnie mają wartości `r format(mean(pr3a), science=FALSE)` $, `r format(mean(pr3b), science=FALSE)` $, `r format(mean(pr3c), science=FALSE)` $, `r format(mean(pr3d), science=FALSE)` $ oraz `r format(mean(pr3e), science=FALSE)` $.Tutaj z kolei zdecydowanie widać, że wartości są do siebie zbliżone, jedynie jedna, ostatnia odstaje od reszty. 
+
+## Średnie dla próby wielkości 500
+
+```{r, echo=FALSE}
+set.seed(645)
+pr4a <- sample(zarobki, 500)
+pr4b <- sample(zarobki, 500)
+pr4c <- sample(zarobki, 500)
+pr4d <- sample(zarobki, 500)
+pr4e <- sample(zarobki, 500)
+```
+
+| Numer próby | Średnia |
+|:-----------:|:-------:|
+|1|`r format(mean(pr4a), science=FALSE)`|
+|2|`r format(mean(pr4b), science=FALSE)`|
+|3|`r format(mean(pr4c), science=FALSE)`|
+|4|`r format(mean(pr4d), science=FALSE)`|
+|5|`r format(mean(pr4e), science=FALSE)`|
+
+Dla następnej grupy wartości średniej wynoszą `r format(mean(pr4a), science=FALSE)` $, `r format(mean(pr4b), science=FALSE)` $, `r format(mean(pr4c), science=FALSE)` $, `r format(mean(pr4d), science=FALSE)`  $ oraz `r format(mean(pr4e), science=FALSE)` $. Możemy zauważyć, że wartości średnich coraz bardziej zbliżają się do średniej całej populacji wraz ze zwiększaniem się grupy.
+
+## Średnie dla próby wielkości 1000
+
+```{r, echo=FALSE}
+set.seed(645)
+pr5a <- sample(zarobki, 1000)
+pr5b <- sample(zarobki, 1000)
+pr5c <- sample(zarobki, 1000)
+pr5d <- sample(zarobki, 1000)
+pr5e <- sample(zarobki, 1000)
+```
+
+| Numer próby | Średnia |
+|:-----------:|:-------:|
+|1|`r format(mean(pr5a), science=FALSE)`|
+|2|`r format(mean(pr5b), science=FALSE)`|
+|3|`r format(mean(pr5c), science=FALSE)`|
+|4|`r format(mean(pr5d), science=FALSE)`|
+|5|`r format(mean(pr5e), science=FALSE)`|
+
+Biorąc na tapet większą próbę średnie wynoszą `r format(mean(pr5a), science=FALSE)` $, `r format(mean(pr5b), science=FALSE)` $, `r format(mean(pr5c), science=FALSE)`, `r format(mean(pr5d), science=FALSE)` $ oraz `r format(mean(pr5e), science=FALSE)` $. Tutaj nie pojawia się żadna wartość powyżej 40 000 $, zatem jesteśmy coraz bliżej faktycznej wartości.
+
+## Średnie dla próby wielkości 5000
+
+```{r, echo=FALSE}
+set.seed(467)
+pr6a <- sample(zarobki, 5000)
+pr6b <- sample(zarobki, 5000)
+pr6c <- sample(zarobki, 5000)
+pr6d <- sample(zarobki, 5000)
+pr6e <- sample(zarobki, 5000)
+```
+
+| Numer próby | Średnia |
+|:-----------:|:-------:|
+|1|`r format(mean(pr6a), science=FALSE)`|
+|2|`r format(mean(pr6b), science=FALSE)`|
+|3|`r format(mean(pr6c), science=FALSE)`|
+|4|`r format(mean(pr6d), science=FALSE)`|
+|5|`r format(mean(pr6e), science=FALSE)`|
+
+Próba, którą teraz się zajmiemy ma średnie równe `r format(mean(pr6a), science=FALSE)` $, `r format(mean(pr6b), science=FALSE)` $, `r format(mean(pr6c), science=FALSE)`, `r format(mean(pr6d), science=FALSE)` $ oraz `r format(mean(pr6e), science=FALSE)` $. Już w tej grupie, stanowiącej jedynie około 8.94% całej populacji, możemy zauważyć znaczne zbliżenie się do wartości średnich, można więc uznać, że już ta wylosowana próba może być reprezentatywna całemu społeczeństwu.
+
+## Średnie dla próby wielkości 10000
+
+```{r, echo=FALSE}
+set.seed(983)
+pr7a <- sample(zarobki, 10000)
+pr7b <- sample(zarobki, 10000)
+pr7c <- sample(zarobki, 10000)
+pr7d <- sample(zarobki, 10000)
+pr7e <- sample(zarobki, 10000)
+```
+
+| Numer próby | Średnia |
+|:-----------:|:-------:|
+|1|`r format(mean(pr7a), science=FALSE)`|
+|2|`r format(mean(pr7b), science=FALSE)`|
+|3|`r format(mean(pr7c), science=FALSE)`|
+|4|`r format(mean(pr7d), science=FALSE)`|
+|5|`r format(mean(pr7e), science=FALSE)`|
+
+Przedostatnie grupy, aż 17.89% całej populacji każda, ma średnie wynoszące `r format(mean(pr7a), science=FALSE)` $, `r format(mean(pr7b), science=FALSE)` $, `r format(mean(pr7c), science=FALSE)`, `r format(mean(pr7d), science=FALSE)` $ oraz `r format(mean(pr7e), science=FALSE)` $. W tym przypadku wszystkie wartości różnią się od średniej faktycznej o nie więcej niż 1000$.
+
+## Średnie dla próby wielkości 50000
+
+```{r, echo=FALSE}
+set.seed(983)
+pr8a <- sample(zarobki, 50000)
+pr8b <- sample(zarobki, 50000)
+pr8c <- sample(zarobki, 50000)
+pr8d <- sample(zarobki, 50000)
+pr8e <- sample(zarobki, 50000)
+```
+
+| Numer próby | Średnia |
+|:-----------:|:-------:|
+|1|`r format(mean(pr8a), science=FALSE)`|
+|2|`r format(mean(pr8b), science=FALSE)`|
+|3|`r format(mean(pr8c), science=FALSE)`|
+|4|`r format(mean(pr8d), science=FALSE)`|
+|5|`r format(mean(pr8e), science=FALSE)`|
+
+Ostatnia grupa, prawie 90% populacji posiada średnie o wartościach `r format(mean(pr8a), science=FALSE)` $, `r format(mean(pr8b), science=FALSE)` $, `r format(mean(pr8c), science=FALSE)`, `r format(mean(pr8d), science=FALSE)` $ oraz `r format(mean(pr8e), science=FALSE)` $. Nie jest niczym zaskakującym, że te średnie wszystkie oscylują wokól faktycznej średniej zarobkowej populacji.
+
+## Podsumowanie
+
+Wartości średnich dla konkretnych prób mają pewne wartości odstające, jednak od próby około 5000 są już w miarę reprezentatywne dla całej populacji - nie pojawiają się takie powyżej 40tys. $. Oczywiście w przypadku mniejszych grup również mogą się pojawić wartości zbliżone do faktycznych, jednak mogą się również zdarzyć wartości znacznie odstające od tej, którą chcemy dostać.
+
+
+# Histogramy losowych prób
+
+W poniższej części przedstawię histogramy powyższych losowań i przeanalizuję je porównując do histogramu przedstawiającego całą populację. Przedstawię go poniżej. 
+
+```{r, echo=FALSE}
+library(ggplot2)
+library(scales)
+zarobki <- data$salary
+ggplot(data, aes(x=salary)) + 
+  geom_histogram(binwidth = 7500, color='wheat4', fill='wheat') + 
+  geom_vline(aes(xintercept=mean(salary)), linetype='dashed', color = 'wheat4') + 
+  labs(title='Rozkład zarobków w USA w roku 2000 w $ (n = 55899)', x = 'Roczne zarobki', y = 'Liczba osób') + 
+  scale_x_continuous(labels=comma)
+```
+
+Widać, że histogram ten jest asymetryczny ukośny w prawo, zatem oczekujemy, że pozostałe histogramy będą miały podobny kształt do niego.
+
+## Histogramy dla próby 10
+
+```{r, echo=FALSE}
+library(ggpubr)
+
+a1 <- ggplot() +
+  aes(pr1a) +
+  geom_histogram(color='wheat4', fill='wheat')
+b1 <- ggplot() +
+  aes(pr1b) +
+  geom_histogram(color='wheat4', fill='wheat')
+c1 <- ggplot() +
+  aes(pr1c) +
+  geom_histogram(color='wheat4', fill='wheat')
+d1 <- ggplot() +
+  aes(pr1d) +
+  geom_histogram(color='wheat4', fill='wheat')
+e1 <- ggplot() +
+  aes(pr1e) +
+  geom_histogram(color='wheat4', fill='wheat')
+
+ggarrange(a1, b1, c1, d1, e1, ncol=2, nrow=3)
+```
+
+Histogramy dla najmniejszej próby są 
+
+```{r, echo=FALSE}
+a2 <- ggplot() +
+  aes(pr2a) +
+  geom_histogram(color='wheat4', fill='wheat')
+b2 <- ggplot() +
+  aes(pr2b) +
+  geom_histogram(color='wheat4', fill='wheat')
+c2 <- ggplot() +
+  aes(pr2c) +
+  geom_histogram(color='wheat4', fill='wheat')
+d2 <- ggplot() +
+  aes(pr2d) +
+  geom_histogram(color='wheat4', fill='wheat')
+e2 <- ggplot() +
+  aes(pr2e) +
+  geom_histogram(color='wheat4', fill='wheat')
+
+ggarrange(a2, b2, c2, d2, e2, ncol=2, nrow=3)
+```
+
+```{r, echo=FALSE}
+a3 <- ggplot() +
+  aes(pr3a) +
+  geom_histogram(color='wheat4', fill='wheat')
+b3 <- ggplot() +
+  aes(pr3b) +
+  geom_histogram(color='wheat4', fill='wheat')
+c3 <- ggplot() +
+  aes(pr3c) +
+  geom_histogram(color='wheat4', fill='wheat')
+d3 <- ggplot() +
+  aes(pr3d) +
+  geom_histogram(color='wheat4', fill='wheat')
+e3 <- ggplot() +
+  aes(pr3e) +
+  geom_histogram(color='wheat4', fill='wheat')
+
+ggarrange(a3, b3, c3, d3, e3, ncol=2, nrow=3)
+```
+
+```{r, echo=FALSE}
+a4 <- ggplot() +
+  aes(pr4a) +
+  geom_histogram(color='wheat4', fill='wheat')
+b4 <- ggplot() +
+  aes(pr4b) +
+  geom_histogram(color='wheat4', fill='wheat')
+c4 <- ggplot() +
+  aes(pr4c) +
+  geom_histogram(color='wheat4', fill='wheat')
+d4 <- ggplot() +
+  aes(pr4d) +
+  geom_histogram(color='wheat4', fill='wheat')
+e4 <- ggplot() +
+  aes(pr4e) +
+  geom_histogram(color='wheat4', fill='wheat')
+
+ggarrange(a4, b4, c4, d4, e4, ncol=2, nrow=3)
+```
+
+```{r, echo=FALSE}
+a5 <- ggplot() +
+  aes(pr5a) +
+  geom_histogram(color='wheat4', fill='wheat')
+b5 <- ggplot() +
+  aes(pr5b) +
+  geom_histogram(color='wheat4', fill='wheat')
+c5 <- ggplot() +
+  aes(pr5c) +
+  geom_histogram(color='wheat4', fill='wheat')
+d5 <- ggplot() +
+  aes(pr5d) +
+  geom_histogram(color='wheat4', fill='wheat')
+e5 <- ggplot() +
+  aes(pr5e) +
+  geom_histogram(color='wheat4', fill='wheat')
+
+ggarrange(a5, b5, c5, d5, e5, ncol=2, nrow=3)
+```
+
+```{r, echo=FALSE}
+a6 <- ggplot() +
+  aes(pr6a) +
+  geom_histogram(color='wheat4', fill='wheat')
+b6 <- ggplot() +
+  aes(pr6b) +
+  geom_histogram(color='wheat4', fill='wheat')
+c6 <- ggplot() +
+  aes(pr6c) +
+  geom_histogram(color='wheat4', fill='wheat')
+d6 <- ggplot() +
+  aes(pr6d) +
+  geom_histogram(color='wheat4', fill='wheat')
+e6 <- ggplot() +
+  aes(pr6e) +
+  geom_histogram(color='wheat4', fill='wheat')
+
+ggarrange(a6, b6, c6, d6, e6, ncol=2, nrow=3)
+```
+
+```{r, echo=FALSE}
+a7 <- ggplot() +
+  aes(pr7a) +
+  geom_histogram(color='wheat4', fill='wheat')
+b7 <- ggplot() +
+  aes(pr7b) +
+  geom_histogram(color='wheat4', fill='wheat')
+c7 <- ggplot() +
+  aes(pr7c) +
+  geom_histogram(color='wheat4', fill='wheat')
+d7 <- ggplot() +
+  aes(pr7d) +
+  geom_histogram(color='wheat4', fill='wheat')
+e7 <- ggplot() +
+  aes(pr7e) +
+  geom_histogram(color='wheat4', fill='wheat')
+
+ggarrange(a7, b7, c7, d7, e7, ncol=2, nrow=3)
+```
+
+```{r, echo=FALSE}
+a8 <- ggplot() +
+  aes(pr8a) +
+  geom_histogram(color='wheat4', fill='wheat')
+b8 <- ggplot() +
+  aes(pr8b) +
+  geom_histogram(color='wheat4', fill='wheat')
+c8 <- ggplot() +
+  aes(pr8c) +
+  geom_histogram(color='wheat4', fill='wheat')
+d8 <- ggplot() +
+  aes(pr8d) +
+  geom_histogram(color='wheat4', fill='wheat')
+e8 <- ggplot() +
+  aes(pr8e) +
+  geom_histogram(color='wheat4', fill='wheat')
+
+ggarrange(a8, b8, c8, d8, e8, ncol=2, nrow=3)
+```
+
+```{r, echo=FALSE}
+ah1 <- c(mean(sample(zarobki, 10, replace=TRUE)))
+for (i in 1:9) {
+  ah1 <- c(ah1, mean(sample(zarobki, 10, replace=TRUE)))
+}
+bh1 <- c(mean(sample(zarobki, 10, replace=TRUE)))
+for (i in 1:99) {
+  bh1 <- c(bh1, mean(sample(zarobki, 10, replace=TRUE)))
+}
+ch1 <- c(mean(sample(zarobki, 10, replace=TRUE)))
+for (i in 1:999) {
+  ch1 <- c(ch1, mean(sample(zarobki, 10, replace=TRUE)))
+}
+dh1 <- c(mean(sample(zarobki, 10, replace=TRUE)))
+for (i in 1:9999) {
+  dh1 <- c(dh1, mean(sample(zarobki, 10, replace=TRUE)))
+}
+eh1 <- c(mean(sample(zarobki, 10, replace=TRUE)))
+for (i in 1:99999) {
+  eh1 <- c(eh1, mean(sample(zarobki, 10, replace=TRUE)))
+}
+
+aw1 <- ggplot() +
+  aes(ah1) +
+  geom_histogram(color='wheat4', fill='wheat')
+
+bw1 <- ggplot() +
+  aes(bh1) +
+  geom_histogram(color='wheat4', fill='wheat')
+
+cw1 <- ggplot() +
+  aes(ch1) +
+  geom_histogram(color='wheat4', fill='wheat')
+
+dw1 <- ggplot() +
+  aes(dh1) +
+  geom_histogram(color='wheat4', fill='wheat')
+
+ew1 <- ggplot() +
+  aes(eh1) +
+  geom_histogram(color='wheat4', fill='wheat')
+
+
+ggarrange(aw1, bw1, cw1, ew1, ncol=3, nrow=2)
+```
